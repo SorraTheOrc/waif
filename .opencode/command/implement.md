@@ -66,8 +66,8 @@ Process:
 6. Push and open a PR
 
    - Commit your code changes on the branch (include the Beads id in the commit message).
-    - Push the branch to `origin` and set upstream.
-       - If `origin` is missing, ask the user for the correct remote URL and add it with `git remote add origin <url>` before pushing.
+   - Push the branch to `origin` and set upstream.
+     - If `origin` is missing, ask the user for the correct remote URL and add it with `git remote add origin <url>` before pushing.
    - Open a PR.
      - Prefer `gh pr create` if `gh` is installed and authenticated.
      - Otherwise, provide the exact branch name and ask the user to open a PR in the hosting UI.
