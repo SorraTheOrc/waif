@@ -1,0 +1,7 @@
+node_modules/
+dist/
+# Python legacy scaffold (removed)
+src/pm/
+*.egg-info
+__pycache__/
+*.pyc
