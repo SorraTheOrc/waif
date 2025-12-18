@@ -1,6 +1,7 @@
 ---
 description: Implement a beads issue by id
 agent: build
+model: GPT5.1-Codex-Max
 ---
 
 You are implementing a Beads issue in this repository.
@@ -34,6 +35,17 @@ Live context (do not guess; use this output):
 - Default origin branch (best effort): !`git symbolic-ref refs/remotes/origin/HEAD 2>/dev/null || true`
 
 Process:
+
+0. Safety gate: handle dirty working tree
+
+   - Before making any changes, check whether the working tree is clean (`git status --porcelain=v1 -b`).
+   - If there are _any_ uncommitted changes (modified, staged, or untracked files), **stop and ask the user what to do**. Do not assume changes are irrelevant.
+   - Offer clear options and wait for an explicit choice:
+     - A) Carry changes into this issue branch (continue as-is).
+     - B) Commit current changes first (either on current branch or a separate "prep" branch).
+     - C) Stash changes (and confirm whether to pop later).
+     - D) Revert/discard changes (only with explicit confirmation).
+     - E) Abort implementation so the user can inspect.
 
 1. Understand the issue
 
