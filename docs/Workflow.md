@@ -154,9 +154,86 @@ bd ready --json
 
 Summary: the PRD is now expressed as milestone-labeled issues with explicit dependencies, ready for parallel human/agent execution.
 
+### 4.1) Select the next most important issue (PM agent)
+
+The PM agent should treat `bd` as the source of truth for _state_ (open/in-progress/closed, priority, labels, assignee) and use `bv` for _impact-aware ranking_ (dependency graph analysis).
+
+Recommended policy:
+
+- Eligibility gate (must be true):
+  - The issue is actionable now: `bd ready --json` includes it.
+  - The issue is not already claimed by someone else.
+- Ranking (use `bv` to decide among eligible items):
+  - Prefer the top recommendation from `bv --robot-next`.
+  - If you want a short ranked list with reasoning, use `bv --robot-triage` or `bv --robot-priority --robot-max-results 5`.
+
+Why `bv` is better than `bd` for “what next”:
+
+- `bd` can tell you what is unblocked; it cannot tell you what is most _structurally valuable_.
+- `bv` scores issues using graph metrics like:
+  - **PageRank** ("blocking power" / centrality): picks keystone dependencies.
+  - **Betweenness** (bottleneck score): picks issues that sit on critical routes.
+  - **Critical path depth**: picks issues that shorten a long chain of work.
+  - **Unblocks (direct + transitive)**: picks issues that unlock the most work.
+  - **Articulation points**: picks issues that disconnect the graph (high leverage).
+
+Concrete selection loop (agent-friendly):
+
+```bash
+# 1) Confirm what is actionable right now
+bd ready --json
+
+# 2) Ask bv for the single best next pick
+bv --robot-next
+
+# 3) If you need context or alternatives
+bv --robot-triage
+
+# 4) (Optional) If you are maintaining priority hygiene
+bv --robot-priority --robot-max-results 5
+
+# 5) Claim the chosen issue (copy the claim_command from bv output)
+# bd update <id> --status=in_progress
+```
+
+Handling common edge cases:
+
+- If `bv --robot-next` returns an **epic**:
+  - Prefer to work a ready **leaf task/bug** under that epic (epics are often just containers).
+  - If there are no ready leaf issues, the epic work item is usually “decompose more” or “resolve blockers”; use `bv --robot-triage` → `blockers_to_clear` to pick the best unblocker.
+- If `bd ready` is empty:
+  - Use `bv --robot-triage` to identify the best blocker to clear, then create/adjust dependencies to make progress.
+- If priorities disagree (e.g., high-impact issue is low explicit priority):
+  - Treat `bv --robot-priority` as a recommendation for _updating priority_, not automatically overriding product intent.
+
+Summary: choose from `bd ready`, rank with `bv`, then claim via `bd update`.
+
+### 4.2) Create or improve the issue design (design agent)
+
+Before implementation, turn the selected issue into an actionable design via an interview. The resulting design is stored directly on the issue (as `design` notes) so it remains the single source of truth alongside the issue description and acceptance criteria.
+
+In this repo, agents should not hand-roll the design workflow. Instead, use:
+
+`/design` (defined in `.opencode/command/design.md`)
+
 ### 5) Implement in small, releasable increments
 
 Implementation should keep `main` always releasable.
+
+#### 5.0) Working tree safety (do not assume)
+
+Before starting any implementation work, always check for uncommitted changes.
+
+- If `git status` is not clean (including untracked files), **stop and ask** how to handle them.
+- Never assume local changes are irrelevant.
+- Valid dispositions (user must choose):
+  - Carry changes forward into the working branch.
+  - Commit changes first (on current branch or a separate prep branch).
+  - Stash changes.
+  - Revert/discard changes (explicit confirmation required).
+  - Abort so the user can inspect.
+
+Only proceed once the disposition is explicit.
 
 - Human responsibilities:
   - Review design choices that affect UX, safety, and maintainability.
@@ -179,7 +256,7 @@ Quality and releaseability rules (recommended):
 
 In this repo, agents should not hand-roll the implementation workflow. Instead, use:
 
-`/implement` (defined in `.opencode/command/implementation.md`)
+`/implement` (defined in `.opencode/command/implement.md`)
 
 Summary: work progresses issue-by-issue while preserving a stable `main`.
 
