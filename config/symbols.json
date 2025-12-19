@@ -1,0 +1,20 @@
+{
+  "issueType": {
+    "bug": "B",
+    "feature": "F",
+    "task": "T",
+    "epic": "E",
+    "chore": "C"
+  },
+  "status": {
+    "open": "O",
+    "in_progress": "P",
+    "done": "D",
+    "closed": "X",
+    "tombstone": "T"
+  },
+  "fallback": {
+    "issueType": "?",
+    "status": "?"
+  }
+}
