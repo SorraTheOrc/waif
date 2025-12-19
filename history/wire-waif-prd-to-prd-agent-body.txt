@@ -1,0 +1,25 @@
+- Problem
+  - `waif prd` now supports prompt ingestion and can seed from issues, but it is not yet explicitly wired to the OpenCode PRD Agent workflow (`/prd`) described in `.opencode/command/prd.md`.
+  - Cross-linking expectations currently differ:
+    - PRD Agent spec suggests using `bd comment <id> "Linked PRD: <path>"` plus `bd update <id> --external-ref "PRD: <path>"`.
+    - CLI currently updates the issue description with a `Linked PRD: <path>` line.
+
+- Users
+  - Primary: PM/agent who wants one consistent PRD authoring workflow (CLI + agent) with reliable traceability.
+  - Secondary: automation/TUI that depends on stable link surfaces.
+
+- Success criteria
+  - Decide and document the canonical cross-link mechanism (description vs comment vs external-ref).
+  - Ensure `waif prd` and `/prd` workflow produce the same links by default.
+  - Ensure idempotence: re-running does not create duplicate links/comments.
+
+- Constraints
+  - Must remain non-interactive and deterministic.
+  - Must not break existing `waif prd --issue` behavior.
+
+- Related docs
+  - `.opencode/command/prd.md`
+  - `docs/Workflow.md`
+
+- Proposed next step
+  - Align the PRD Agent spec and CLI implementation, then implement the missing behavior and add tests.
