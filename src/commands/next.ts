@@ -213,8 +213,20 @@ export function createNextCommand() {
         const payload = { ...top.issue, waif };
         emitJson(payload);
       } else {
-        const title = top.issue.title ?? '(no title)';
-        logStdout(`${top.issue.id}: ${title} — ${top.rationale}`);
+        let rendered: string | null = null;
+        if (isCliAvailable('bd')) {
+          try {
+            const shown = runBd(['show', top.issue.id]);
+            rendered = `${top.rationale}\n${shown.trim()}`;
+          } catch (e) {
+            if (verbose) process.stderr.write(`[debug] bd show failed: ${(e as Error).message}\n`);
+          }
+        }
+        if (!rendered) {
+          const title = top.issue.title ?? '(no title)';
+          rendered = `${top.issue.id}: ${title} — ${top.rationale}`;
+        }
+        logStdout(rendered);
       }
     });
 
