@@ -4,6 +4,36 @@ import { spawnSync } from 'child_process';
 import { Command } from 'commander';
 import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
+import { renderIssuesTable } from '../lib/table.js';
+
+const ANSI = {
+  blue: '\u001b[34m',
+  red: '\u001b[31m',
+  reset: '\u001b[0m',
+} as const;
+
+function isColorEnabled(): boolean {
+  if (!process.stdout.isTTY) return false;
+  if (process.env.NO_COLOR) return false;
+  if (process.env.WAIF_NO_COLOR) return false;
+  return true;
+}
+
+function heading(text: string): string {
+  const line = `# ${text}`;
+  if (!isColorEnabled()) return line;
+  return `${ANSI.blue}${line}${ANSI.reset}`;
+}
+
+function issuesTable(issues: Issue[]): string {
+  return renderIssuesTable(issues, {
+    color: {
+      enabled: isColorEnabled(),
+      blockedRow: ANSI.red,
+      reset: ANSI.reset,
+    },
+  });
+}
 
 interface Issue {
   id: string;
@@ -12,6 +42,9 @@ interface Issue {
   status?: string;
   priority?: number;
   created_at?: string;
+  assignee?: string;
+  dependency_count?: number;
+  dependent_count?: number;
   dependencies?: Array<{ type?: string; depends_on_id?: string }>; // best-effort shape
   [key: string]: unknown;
 }
@@ -47,17 +80,38 @@ function runBd(args: string[], timeout = 30000): string {
   return runSpawn('bd', args, timeout).stdout;
 }
 
+function loadInProgressIssues(verbose: boolean): Issue[] {
+  const envJson = process.env.WAIF_IN_PROGRESS_JSON;
+  if (envJson) {
+    try {
+      const parsed = JSON.parse(envJson);
+      if (Array.isArray(parsed)) return parsed as Issue[];
+    } catch (e) {
+      if (verbose) process.stderr.write(`[debug] failed to parse WAIF_IN_PROGRESS_JSON: ${(e as Error).message}\n`);
+    }
+    return [];
+  }
+
+  if (!isCliAvailable('bd')) return [];
+  try {
+    const out = runBd(['list', '--status', 'in_progress', '--json']);
+    const parsed = JSON.parse(out);
+    if (Array.isArray(parsed)) return parsed as Issue[];
+  } catch (e) {
+    if (verbose) process.stderr.write(`[debug] bd list in_progress failed: ${(e as Error).message}\n`);
+  }
+  return [];
+}
+
 function runBv(args: string[], timeout = 30000): string {
   return runSpawn('bv', args, timeout).stdout;
 }
 
 function isCliAvailable(cmd: string): boolean {
-  try {
-    spawnSync(cmd, ['--version'], { encoding: 'utf8', timeout: 2000 });
-    return true;
-  } catch (e) {
-    return false;
-  }
+  const res = spawnSync(cmd, ['--version'], { encoding: 'utf8', timeout: 2000 });
+  if (res.error) return false;
+  if (typeof res.status === 'number' && res.status !== 0) return false;
+  return true;
 }
 
 function parseIssuesFromJsonl(path: string, verbose: boolean): Issue[] {
@@ -213,21 +267,37 @@ export function createNextCommand() {
         const payload = { ...top.issue, waif };
         emitJson(payload);
       } else {
-        let rendered: string | null = null;
+        const inProgress = loadInProgressIssues(verbose);
+        if (inProgress.length) {
+          logStdout(heading('In Progress'));
+          logStdout('');
+          logStdout(issuesTable(inProgress));
+          logStdout('');
+        }
+
+        const recommended = [top.issue];
+
+        logStdout(heading('Recommended Summary'));
+        logStdout('');
+        logStdout(issuesTable(recommended));
+        logStdout('');
+
+        logStdout(heading('Recommended Detail'));
+        logStdout('');
         if (isCliAvailable('bd')) {
           try {
             const shown = runBd(['show', top.issue.id]);
-            rendered = `${top.rationale}\n${shown.trim()}`;
+            logStdout(shown.trim());
+            return;
           } catch (e) {
             if (verbose) process.stderr.write(`[debug] bd show failed: ${(e as Error).message}\n`);
           }
         }
-        if (!rendered) {
-          const title = top.issue.title ?? '(no title)';
-          rendered = `${top.issue.id}: ${title} — ${top.rationale}`;
-        }
-        logStdout(rendered);
+
+        const title = top.issue.title ?? '(no title)';
+        logStdout(`${top.issue.id}: ${title}`);
       }
+
     });
 
   return cmd;
