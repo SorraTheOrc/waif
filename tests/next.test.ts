@@ -31,11 +31,23 @@ describe('waif next', () => {
     });
 
     expect(exitCode).toBe(0);
-    const idxInProgress = stdout.indexOf('In Progress');
-    const idxRecommendation = stdout.indexOf('wf-2');
+
+    const idxInProgress = stdout.indexOf('== In Progress ==');
+    const idxSummary = stdout.indexOf('== Recommended Summary ==');
+    const idxDetail = stdout.indexOf('== Recommended Detail ==');
+
     expect(idxInProgress).toBeGreaterThanOrEqual(0);
-    expect(idxRecommendation).toBeGreaterThan(idxInProgress);
+    expect(idxSummary).toBeGreaterThan(idxInProgress);
+    expect(idxDetail).toBeGreaterThan(idxSummary);
+
+    // in-progress table
     expect(stdout).toContain('wf-ip1');
+
+    // summary table contains the chosen issue
+    expect(stdout).toContain('wf-2');
+
+    // rationale line should not be printed in human output anymore
+    expect(stdout).not.toContain('priority 1');
   });
 
   it('omits in-progress section when none exist', async () => {
@@ -51,7 +63,9 @@ describe('waif next', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout).not.toContain('In Progress');
+    expect(stdout).not.toContain('== In Progress ==');
+    expect(stdout).toContain('== Recommended Summary ==');
+    expect(stdout).toContain('== Recommended Detail ==');
   });
 
   it('picks highest bv score when provided', async () => {
@@ -81,6 +95,9 @@ describe('waif next', () => {
     expect(payload.id).toBe('wf-2');
     expect(payload.waif.score).toBe(20);
     expect(payload.waif.metadata.bvSource).toBe('env');
+
+    // JSON output should not include human sections
+    expect(stdout).not.toContain('== Recommended Summary ==');
   });
 
   it('falls back to priority/created_at when no bv score', async () => {

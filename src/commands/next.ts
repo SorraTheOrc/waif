@@ -4,7 +4,7 @@ import { spawnSync } from 'child_process';
 import { Command } from 'commander';
 import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
-import { renderInProgressIssuesTable } from '../lib/table.js';
+import { renderIssuesTable } from '../lib/table.js';
 
 interface Issue {
   id: string;
@@ -13,6 +13,9 @@ interface Issue {
   status?: string;
   priority?: number;
   created_at?: string;
+  assignee?: string;
+  dependency_count?: number;
+  dependent_count?: number;
   dependencies?: Array<{ type?: string; depends_on_id?: string }>; // best-effort shape
   [key: string]: unknown;
 }
@@ -237,25 +240,30 @@ export function createNextCommand() {
       } else {
         const inProgress = loadInProgressIssues(verbose);
         if (inProgress.length) {
-          logStdout('In Progress');
-          logStdout(renderInProgressIssuesTable(inProgress));
+          logStdout('== In Progress ==');
+          logStdout(renderIssuesTable(inProgress));
           logStdout('');
         }
 
-        let rendered: string | null = null;
+        const recommended = [top.issue];
+
+        logStdout('== Recommended Summary ==');
+        logStdout(renderIssuesTable(recommended));
+        logStdout('');
+
+        logStdout('== Recommended Detail ==');
         if (isCliAvailable('bd')) {
           try {
             const shown = runBd(['show', top.issue.id]);
-            rendered = `${top.rationale}\n${shown.trim()}`;
+            logStdout(shown.trim());
+            return;
           } catch (e) {
             if (verbose) process.stderr.write(`[debug] bd show failed: ${(e as Error).message}\n`);
           }
         }
-        if (!rendered) {
-          const title = top.issue.title ?? '(no title)';
-          rendered = `${top.issue.id}: ${title} — ${top.rationale}`;
-        }
-        logStdout(rendered);
+
+        const title = top.issue.title ?? '(no title)';
+        logStdout(`${top.issue.id}: ${title}`);
       }
 
     });

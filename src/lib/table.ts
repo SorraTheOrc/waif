@@ -4,6 +4,7 @@ export type IssueForTable = {
   priority?: number;
   assignee?: string;
   dependency_count?: number;
+  dependent_count?: number;
   dependencies?: Array<{ type?: string; depends_on_id?: string }>;
 };
 
@@ -13,6 +14,11 @@ function computeBlockersCount(issue: IssueForTable): number {
   const deps = issue.dependencies;
   if (!deps || !Array.isArray(deps)) return 0;
   return deps.filter((d) => (d?.type || '').toLowerCase() === 'blocks').length;
+}
+
+function computeBlocksCount(issue: IssueForTable): number {
+  if (typeof issue.dependent_count === 'number') return issue.dependent_count;
+  return 0;
 }
 
 function padRight(value: string, width: number): string {
@@ -26,17 +32,19 @@ function truncate(value: string, max: number): string {
   return value.slice(0, max - 1) + '…';
 }
 
-export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
+export function renderIssuesTable(issues: IssueForTable[]): string {
   if (!issues.length) return '';
 
   const rows = issues
     .map((i) => {
       const blockers = computeBlockersCount(i);
+      const blocks = computeBlocksCount(i);
       return {
         id: i.id,
         title: i.title ?? '(no title)',
         priority: typeof i.priority === 'number' ? String(i.priority) : '',
         blockers: String(blockers),
+        blocks: String(blocks),
         assignee: typeof i.assignee === 'string' ? i.assignee : '',
       };
     })
@@ -49,6 +57,7 @@ export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
     title: 'Title',
     priority: 'Priority',
     blockers: 'Blockers',
+    blocks: 'Blocks',
     assignee: 'Assignee',
   };
 
@@ -60,6 +69,7 @@ export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
     ),
     priority: Math.max(headers.priority.length, ...rows.map((r) => r.priority.length)),
     blockers: Math.max(headers.blockers.length, ...rows.map((r) => r.blockers.length)),
+    blocks: Math.max(headers.blocks.length, ...rows.map((r) => r.blocks.length)),
     assignee: Math.max(headers.assignee.length, ...rows.map((r) => r.assignee.length)),
   };
 
@@ -72,6 +82,7 @@ export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
       padRight(headers.title, widths.title),
       padRight(headers.priority, widths.priority),
       padRight(headers.blockers, widths.blockers),
+      padRight(headers.blocks, widths.blocks),
       padRight(headers.assignee, widths.assignee),
     ].join('  '),
   );
@@ -81,6 +92,7 @@ export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
       dash(widths.title),
       dash(widths.priority),
       dash(widths.blockers),
+      dash(widths.blocks),
       dash(widths.assignee),
     ].join('  '),
   );
@@ -92,10 +104,15 @@ export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
         padRight(truncate(r.title, widths.title), widths.title),
         padRight(r.priority, widths.priority),
         padRight(r.blockers, widths.blockers),
+        padRight(r.blocks, widths.blocks),
         padRight(r.assignee, widths.assignee),
       ].join('  '),
     );
   }
 
   return lines.join('\n');
+}
+
+export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
+  return renderIssuesTable(issues);
 }
