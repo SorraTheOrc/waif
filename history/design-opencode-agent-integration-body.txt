@@ -1,0 +1,45 @@
+- Goal
+  - Produce an implementable technical design that allows the Node/TypeScript `waif` CLI to initiate and run an *interactive* PRD authoring session using an OpenCode agent, by invoking the OpenCode `/prd` workflow (from `.opencode/command/prd.md`).
+
+- Problem
+  - `waif prd` exists as a deterministic CLI command, but the PRD Agent workflow is currently primarily accessed via the OpenCode TUI as `/prd <path> <issueId>`.
+  - We need a design for how a non-TUI CLI (`waif`) can drive an interactive agent/human interview loop, likely by integrating with OpenCode via a Node SDK and/or supported CLI/server interfaces.
+
+- Key requirements
+  - `waif prd` must be able to invoke the OpenCode `/prd` command with arguments (PRD path + optional issue id) and run interactively.
+  - Interaction modes:
+    - Human-in-the-loop: user answers questions in the terminal.
+    - Agent-driven: agent can proceed autonomously when configured.
+  - Must support providing seed context via `--issue <id>` and/or `--prompt/--prompt-file`.
+  - Must preserve auditability:
+    - PRD edits are written to disk.
+    - Beads ↔ PRD linking is idempotent.
+
+- Environment constraints
+  - Must work repo-locally without requiring a GUI.
+  - Must fail with actionable errors when OpenCode is not installed/configured.
+
+- Integration options to evaluate (design must pick one)
+  1) Node SDK (preferred if available)
+     - Use OpenCode’s server or ACP protocol from Node to create/continue a session, stream agent messages, and collect user responses.
+  2) Spawn OpenCode CLI in headless mode
+     - Use `opencode run --command prd ... --format json` and orchestrate multi-turn interaction by continuing sessions (`--session`), parsing JSON events, and prompting the user for answers.
+  3) Spawn OpenCode TUI (fallback)
+     - Launch `opencode` (or `opencode run` without json) and hand control to the user while pre-populating the `/prd ...` command.
+     - Only acceptable if it can be done deterministically and safely.
+
+- Design deliverables
+  - Proposed CLI UX:
+    - new flags/subcommands (e.g., `waif prd --interactive`, `waif prd --agent <name>`, `waif prd --model <provider/model>`, `waif prd --session <id>`).
+  - Data flow diagram / sequence:
+    - input sources → OpenCode invocation → multi-turn Q&A → file write(s) → beads link update.
+  - Idempotence rules for links and re-runs.
+  - Error handling plan (missing opencode, missing model auth, interrupted session, partial file writes).
+  - Testing strategy:
+    - unit tests for command construction
+    - integration tests gated/skipped when opencode not available
+
+- Acceptance criteria
+  - A written design (in the issue’s design field or description) that is specific enough to implement without further major decisions.
+  - Explicitly selects one integration approach and lists why alternatives were rejected.
+  - Includes example commands (copy/pastable) for the chosen approach.
