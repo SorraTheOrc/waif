@@ -1,0 +1,43 @@
+- Problem
+  - Downstream PRD generation needs a prompt body, but the CLI currently only writes a stub (or seeds from an issue). This issue defines how prompt text is provided to CLI commands in a repeatable way (arg/stdin/file).
+
+- Users
+  - Primary: PM/agent invoking waif prd locally and in automation.
+  - Secondary: future TUI and CI scripts that need deterministic, non-interactive behavior.
+
+- Success criteria
+  - waif prd accepts prompt input from:
+    - CLI arg via --prompt <text>
+    - stdin via --prompt -
+    - file via --prompt-file <path>
+  - If both --prompt and --prompt-file are provided, exit code 2 with a clear usage error.
+  - Prompt is embedded into the generated PRD as a comment block so later stages can consume it.
+  - JSON output includes prompt metadata (source, length) for debugging/automation.
+
+- Constraints
+  - Default behavior must not block waiting on stdin; stdin is only read when explicitly requested with --prompt -.
+  - Preserve existing --out and --issue behavior, exit codes, and JSON/human output conventions.
+
+- Existing state
+  - waif prd writes a stub PRD and can seed from a Beads issue via --issue.
+  - No support for ingesting a freeform prompt from arg/stdin/file.
+
+- Desired change
+  - Add --prompt and --prompt-file to waif prd.
+  - Implement deterministic prompt-source selection with explicit stdin mode only.
+
+- Likely duplicates / related docs (file paths)
+  - .opencode/command/intake.md
+  - docs/dev/CLI_PRD.md
+
+- Related issues (Beads ids)
+  - wf-ba2.2.1 (CLI skeleton)
+  - wf-ba2.3.1 (Minimal PRD generator from prompt input; blocked by this)
+
+- Clarifying questions
+  1. Should stdin be read implicitly when piped and no flags are provided, or explicit-only? (Chosen: explicit-only for safety.)
+  2. Should we support multiple prompt inputs concatenated (e.g. repeated flags)? (Chosen: no, error if ambiguous.)
+  3. Should prompt be persisted as metadata-only or embedded in the PRD file? (Chosen: embed in PRD comment block for traceability.)
+
+- Proposed next step:
+  - Implement in src/commands/prd.ts and add tests in tests/cli.test.ts
