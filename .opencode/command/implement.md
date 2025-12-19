@@ -101,11 +101,17 @@ Process:
 
 9. After merge
 
+Once the user confirms the PR is merged:
+
+   - Switch to `main` and pull the latest changes.
+   - Delete the working branch locally and remotely.
+   - Close the beads issue.
    - After the PR is merged, close the issue on `main`:
      - `bd close $1 --reason "Done" --json`
      - `bd sync`
-   - Move the PRD in `docs/dev/implemented`
-   - Close the beads issue.
-   - Output a summary of the work done, including a link to the updated documentation (on github)
+   - Move the PRD (if one exists) to `docs/dev/implemented`
+   - Output a completion statement, complete with a summary of the work done, including a link to the updated documentation (on github)
+   - Add a user focused summary to the changelog.md file
+   - Commit and push
 
-Start now: confirm the issue scope from the injected JSON and ask the user for the first implementation instruction if the next concrete step is not obvious.
+Start now: Ask the user for the first implementation instruction if the next concrete step is not obvious.
