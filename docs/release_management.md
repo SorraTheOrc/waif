@@ -199,7 +199,7 @@ waif next
 8) Post-merge housekeeping
 
 - Update `docs/releases/` with any expanded release notes if desired.
-- Update `docs/CHANGELOG.md` with the release summary and link to the release tag.
+- If new details emerged after the initial changelog update in step 1, append any additional post-release notes to `docs/CHANGELOG.md` and add a link to the release tag.
 
 
 ### 6) Post-release checks
