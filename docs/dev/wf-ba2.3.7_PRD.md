@@ -88,4 +88,28 @@ Notes: Implementation tasks: Session Manager, CLI adapter (stdin piping), Event 
 * Beads: `bd show wf-ba2.3.7 --json` includes an external-ref `PRD: docs/dev/wf-ba2.3.7_PRD.md` and a comment `Linked PRD: docs/dev/wf-ba2.3.7_PRD.md` (idempotent on repeated runs).
 * File formatting: `npx remark` was run successfully on the file.
 
+## Approved Example Exchange
+
+The following is the exact approved example exchange that must be preserved in the PRD. This is the canonical sample run that demonstrates how the CLI should mediate the OpenCode `/prd` session, including question/answer flow, file-proposal preview and acceptance, atomic file write, and session completion.
+
+- Invocation:
+  - User: `waif prd --issue wf-ba2.3.7 --out docs/dev/wf-ba2.3.7_PRD.md`
+  - waif spawns: `opencode run --command /prd --format json --session <session-id>`
+
+- Question (opencode → waif → user → opencode stdin):
+  - opencode event: `{ "type": "question", "id": "q1", "text": "What is the one-line purpose of this feature?" }`
+  - waif displays and collects answer and writes to opencode stdin: `{ "type": "answer", "questionId": "q1", "text": "..." }`
+
+- File-proposal (preview):
+  - opencode event: `{ "type":"file-proposal","id":"f1","path":"docs/dev/wf-ba2.3.7_PRD.md","preview":"### Purpose\n..." }`
+  - waif prompts accept? [y/N] → on accept send `{ "type":"file-accept","fileId":"f1","accepted":true }` to opencode stdin
+
+- File-write:
+  - opencode event: `{ "type":"file-write","id":"w1","path":"docs/dev/wf-ba2.3.7_PRD.md","content":"<full markdown>" }`
+  - waif runs atomic write: tmp -> remark -> fsync -> rename; audits and replies `{ "type":"file-written","fileId":"w1","status":"ok" }`
+
+- Session complete:
+  - opencode event: `{ "type":"session-complete","summary":{"files":["docs/dev/wf-ba2.3.7_PRD.md"]} }`
+  - waif runs final remark, computes affected-files, idempotently links beads, writes `.waif/audit/<session-id>.json`, emits final JSON summary, exit 0.
+
 ## Source issue: wf-ba2.3.7
