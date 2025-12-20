@@ -2,195 +2,221 @@
 
 **Source issue:** wf-ba2.3.7
 
-## Introduction
+## Summary
 
-- One-liner
-  - Integrate WAIF with OpenCode to enable interactive CLI-driven PRD authoring.
+Integrate `waif prd` with OpenCode `/prd` to provide a reproducible, local CLI flow that runs interactive or agent-driven PRD authoring, writes auditable Markdown PRDs to the repo, and records idempotent beads links.
 
-- Problem statement
-  - The existing `waif prd` command is deterministic but not integrated with the OpenCode PRD agent workflow (`/prd`). PMs and agents lack a single, local-first CLI path that runs an interactive interview (human-in-loop or agent-driven) and produces auditable PRD files with reliable beads linkage.
+## Scope
 
-- Goals
-  - Provide a reproducible, local CLI flow where `waif prd` can invoke the OpenCode `/prd` workflow, drive multi-turn interview loops (human or agent), and write PRD Markdown files on disk.
-  - Ensure two-way, idempotent beads ↔ PRD traceability so PRD authorship and provenance are machine- and human-readable.
-  - Fail fast with clear, actionable errors when OpenCode is not available or misconfigured.
+- Implement a `waif prd` command that invokes OpenCode headless runs and/or attachable servers to drive multi-turn PRD generation.
+- Produce atomic, formatted PRD Markdown files under a repository path (default `docs/dev/<name>_PRD.md`).
+- Add idempotent beads linking (comment + external-ref) after successful PRD writes.
 
-- Non-goals
-  - Ship a full OpenCode Node SDK integration in this work; SDK-based integration is a future migration path.
-  - Hide automated edits; all PRD edits must be written to disk and auditable.
+Out of scope: full OpenCode SDK integration and automatic branch/PR creation unless explicitly requested via `--create-pr`.
 
-## Architecture (improved)
+## Goals (measurable)
 
-This section defines an architectural blueprint and component responsibilities for a robust, maintainable integration.
+1. `waif prd` can run in interactive human mode and agent mode and write a PRD file to disk.
+2. After a successful run, beads issue `wf-ba2.3.7` is updated with a `Linked PRD: <path>` comment and `PRD: <path>` external-ref only once (idempotent).
+3. All file writes use atomic writes and `remark` formatting before finalizing.
+4. Provide clear error codes and messages for missing dependencies or interrupted sessions.
 
-Components
+## Non-goals
 
-- Backend Abstraction (pluggable)
-  - Purpose: provide a single interface for driving OpenCode sessions regardless of integration approach.
-  - Implementations:
-    - `cli` — spawn `opencode run` with `--format json` (primary implementation for M0).
-    - `serve` — attach to a long-running `opencode serve` HTTP server (performance optimization for CI or repeated runs).
-    - `sdk` — use `@opencode-ai/sdk` programmatic client when available (future/migration path).
-  - Benefits: allows incremental improvements and switching implementations with minimal impact to the rest of the codebase.
+- Replacing existing issue-tracking workflows outside of `bd`/beads.
+- Storing audit logs in repo by default (they live under `.waif/audit/` and are gitignored unless opt-in).
+
+## Stakeholders
+
+- PMs / writers: run interactive PRD sessions and receive final Markdown.
+- Engineers: integrate backend adapter code and tests.
+- CI maintainers: add integration test coverage with `opencode` presence gating.
+
+## Requirements
+
+### Functional requirements (explicit)
+
+1. `waif prd --out <path> [--issue <id>] [--interactive|--agent <name>] [--backend <cli|serve|sdk>]` must start a session and produce `<path>` when the session completes.
+2. When `--issue <id>` is provided, include `bd show <id> --json` fields `title`, `description`, and `acceptance` in the seed context `seed.json` passed to OpenCode.
+3. For `cli` backend the command executed must be exactly: `opencode run --command prd <target> --format json --session <session-id> [--model <model>]` (where `<target>` is a repo-relative path or `.` as appropriate).
+4. The tool must support `--session <id>` to resume an existing session directory at `.waif/sessions/<id>/`.
+5. For `file-write` events the tool must write to a temporary file in the session dir, run `remark` on that temp file, fsync the file, then rename it over the target path. If the final content equals the existing file content, do not modify mtime.
+6. After successful writes run the beads linking algorithm (see below) and record audit metadata in `.waif/audit/<session-id>.json`.
+7. Exit codes:
+   - `0` on success (session-complete and beads linking attempted or documented),
+   - `2` if `opencode` binary is missing when `--backend cli` is selected,
+   - `3` on interrupted session saved to `.waif/sessions/<id>/partial.md`,
+   - `4` on schema/event parsing errors.
+
+### Non-functional requirements
+
+1. Tests: unit tests for event parsing, beads linking logic (mock `bd`), and atomic file writes.
+2. Performance: `serve` backend must reduce session startup overhead (implementation detail for later); default is `cli`.
+3. Security: secrets and environment variables must not be written into audit logs; prompts must be redacted.
+4. Compatibility: the implementation must run on Linux/macOS shells where `opencode` is available.
+
+## Acceptance criteria (explicit)
+
+- Running `waif prd --interactive --issue wf-ba2.3.7 --out docs/dev/wf-ba2.3.7_PRD.md` completes and writes `docs/dev/wf-ba2.3.7_PRD.md`.
+- `bd show wf-ba2.3.7 --json` shows an `external_ref` containing `PRD: docs/dev/wf-ba2.3.7_PRD.md` and a comment exactly matching `Linked PRD: docs/dev/wf-ba2.3.7_PRD.md` (no duplicates after repeated runs).
+- `npm test` passes unit tests for newly added modules.
+
+## Architecture Overview (explicit)
+
+Provide a pluggable backend abstraction with three implementations and a clear session lifecycle.
+
+Backends (explicit):
+- `cli` (M0): spawn `opencode run --format json` and stream JSON events.
+- `serve` (M1): attach to `opencode serve` via HTTP attach endpoint and stream events.
+- `sdk` (M2): use `@opencode-ai/sdk` streaming APIs when available.
+
+Core responsibilities:
+- Session Manager: create session dir `.waif/sessions/<id>/`, store `seed.json`, and track `session-id`.
+- Runner/Adapter: start backend and expose a typed async event stream to the Event Parser.
+- Event Parser: validate event shape and map to canonical events.
+- Interaction Adapter: prompt terminal user or call local agent handlers and forward answers to the backend.
+- File Manager: perform atomic writes and formatting.
+- Beads Linker: idempotently comment and update external refs on beads issues.
+- Audit Logger: write `.waif/audit/<session-id>.json` with redacted prompts, timestamps, invoker, backend, model, and affected files.
+
+## Component Responsibilities (concise)
 
 - Session Manager
-  - Manages session lifecycle (create, continue, abort, persist session metadata to disk under `.waif/sessions/`), maps session IDs to temp dirs, and enforces atomic commit rules.
-  - Responsibilities: create `seed.json`, generate `session-id`, ensure session dir respects `.gitignore`.
-
-- Opencode Runner / Adapter
-  - For `cli` backend: spawn `opencode run --command prd $TARGET --format json --session $ID [--model ...]` and stream JSON events.
-  - For `serve` backend: attach to HTTP endpoint (see `opencode serve` docs) and use server attach/continue API.
-  - For `sdk` backend: use client streaming APIs (if available) for lower latency and richer control.
-
+  - Implements: `createSession(seed: object) -> {sessionId, sessionDir}`, `loadSession(sessionId)`.
+  - Ensures session dir is in `.gitignore` and not committed.
+- Runner/Adapter
+  - Implements `start(sessionDir, opts) -> AsyncIterable<Event>` and `sendResponse(token)` API if backend supports stdin/attach.
 - Event Parser
-  - Deterministic parser for the JSON event stream. Normalizes event types into a stable internal event model with the following canonical events: `question`, `choice`, `message`, `file-proposal`, `file-write`, `checkpoint`, `session-complete`, `error`.
-  - Validates event schema and emits errors for unexpected payloads.
-
+  - Validates event JSON, throws parsing error (exit code 4) on invalid required fields.
 - Interaction Adapter
-  - Terminal (human-in-loop): presents `question` events to the user, supports multi-choice and free-text answers, and posts answers back to the session via the backend adapter (CLI stdin or HTTP API).
-  - Agent (autonomous): maps `question` events to configured agent handlers (local subagent or external agent process). Agents may be sandboxed and are only allowed specific permissions.
-
+  - Terminal: synchronous prompt implementation that returns strings or choice indices.
+  - Agent: provides an explicit plugin interface `agent.handleQuestion(q): Promise<answer>`; requires `--allow-agent-permissions` to enable file writes by agents.
 - File Manager
-  - Accepts `file-proposal`/`file-write` events and performs atomic writes: write to temp file, fsync, remark autofix, rename over target.
-  - Computes and returns affected-files list for audit logs.
-
-- Beads Linker (idempotent)
-  - Adds `Linked PRD: <path>` comment and `PRD: <path>` external-ref to the beads issue.
-  - Algorithm: fetch the issue (`bd show <id> --json`), check `comments` and `external_refs` for an exact match; only add when missing.
-
+  - `writeAtomic(path, content)`: write to `<sessionDir>/tmp/<random>`, format with `remark`, fsync, rename.
+- Beads Linker
+  - After writes compute `p = path.relative(repoRoot, targetPath)` and run the idempotent algorithm below.
 - Audit Logger
-  - Stores redact-safe session metadata and prompt excerpts (hash + truncated excerpt) in a per-session audit log under `.waif/audit/` or configured audit location.
-  - Applies redaction rules (prompt redaction/truncation to 8k chars) and stores metadata: timestamp, invoker, backend, model, session-id, affected-files, bead-links.
+  - `log(sessionId, metadata)`: write `.waif/audit/<session-id>.json` with trimmed prompt excerpt (max 8k chars) and prompt hash (SHA256).
 
-- Config & Secrets
-  - Respect OpenCode environment config (e.g., `OPENCODE_CONFIG`, provider API keys) and provide clear guidance on required env vars: `OPENCODE_*` keys and optional `OPENCODE_ATTACH_URL` for `serve` backend.
+## Sequence / Flow (step-by-step)
 
-Architecture notes and rationale
+1. Parse CLI args and validate required inputs (`--out` is required unless `--emit-opencode-cmd`).
+2. If `--backend cli` validate `opencode` presence by running `which opencode` or `opencode --version`.
+   - If missing: print exact install instructions and exit code `2`.
+3. If `--issue <id>` call `bd show <id> --json` and build `seed.json` containing `title`, `description`, `acceptance`, `design`.
+4. Create session using Session Manager; write `seed.json` to session dir.
+5. Start Runner/Adapter for chosen backend and iterate events:
+   - `question`: Interaction Adapter collects answer and forwards to Runner (backend-specific API) as implemented.
+   - `file-proposal`: show proposed diff; require explicit acceptance in interactive mode; auto-accept in agent mode only if `--allow-agent-permissions` is set.
+   - `file-write`: File Manager writes file atomically and records path in session metadata.
+   - `checkpoint`: persist transcript and partial audit data to session dir.
+6. On `session-complete`: run `remark` on all written files, compute `affected-files` list, run Beads Linker, write final audit, print JSON summary and exit `0`.
 
-- Pluggable backend avoids locking into CLI-only behavior and prepares for an SDK/serve migration.
-- Persistent session metadata simplifies resuming partial interviews and supports `waif prd --session` semantics.
-- Deterministic event parsing reduces chance of flakiness when the JSON schema evolves; include feature-toggled lax-parsing for early compatibility.
+## CLI Specification (flags and behavior)
 
-## Overview / Sequence (refined)
+- `--out <path>` (required unless `--emit-opencode-cmd`): target PRD path (relative to repo root).
+- `--issue <id>`: beads issue id to seed context and to link PRD after success.
+- `--interactive` (default): prompt human on terminal for `question` events.
+- `--agent <name>`: run in agent-driven mode using configured agent plugin.
+- `--backend <cli|serve|sdk>`: override backend selection (default: `cli`).
+- `--attach <url>`: attach URL for `serve` backend (overrides env `OPENCODE_ATTACH_URL`).
+- `--emit-opencode-cmd`: do not spawn a backend; print the exact `opencode run ...` command and exit `0`.
+- `--session <id>`: resume session dir `.waif/sessions/<id>/`.
+- `--allow-agent-permissions`: explicitly allow agent-driven writes and destructive actions.
+- `--format json`: print final summary as JSON to stdout.
 
-1. Validate invocation and environment.
-   - verify `--out` or output directory.
-   - verify bead id if provided (`wf-ba2.3.7`).
-   - verify `opencode` availability when using `cli` backend (`which opencode` or `opencode --version`).
-2. Build seed context:
-   - if `--issue <id>`: `bd show <id> --json` and include `title`, `description`, `acceptance`, `design` in `seed.json`.
-   - if `--prompt-file`/`--prompt` provided: include contents/metadata in `seed.json`.
-3. Create session via Session Manager, reserve `session-dir` and `session-id`.
-4. Start Opencode Runner for chosen backend; stream JSON events into Event Parser.
-5. Loop on events:
-   - `question`: Interaction Adapter collects answer (terminal or agent) and sends it back.
-   - `file-proposal`: show preview and await acceptance (interactive) or auto-accept in agent mode.
-   - `file-write`: File Manager writes file atomically.
-   - `checkpoint`: save session transcript + audit log.
-6. On `session-complete`: run `remark` autofix on written files, compute affected files, beads linking, emit final JSON summary and exit 0.
+Behavioral invariants:
+- When `--backend cli` is selected the exact `opencode` invocation must match the functional requirement above.
+- All interactive prompts must be cancellable with SIGINT; on first SIGINT ask to save partial transcript and on second SIGINT abort without saving.
 
-## CLI UX (examples) — refined
+## Idempotent Beads Linking (explicit algorithm)
 
-- Human interactive (default):
-  - `waif prd --interactive --issue wf-ba2.3.7 --out docs/dev/wf-ba2.3.7_PRD.md`
-- Agent-driven (autonomous):
-  - `waif prd --agent builder-bot --model gpt-4o --issue wf-ba2.3.7 --out docs/dev/wf-ba2.3.7_PRD.md`
-- Continue existing session (resume):
-  - `waif prd --session <session-id> --out docs/dev/wf-ba2.3.7_PRD.md`
-- Use attach to long-running server for speed (dev/CI):
-  - `waif prd --backend serve --attach http://localhost:4096 --issue wf-ba2.3.7 --out docs/dev/wf-ba2.3.7_PRD.md`
-- Emit command-only fallback (no spawn):
-  - `waif prd --emit-opencode-cmd --issue wf-ba2.3.7 --out docs/dev/wf-ba2.3.7_PRD.md`
+Given beads issue id `I` and PRD path `p` (repo-relative):
+1. Call `bd show I --json` and parse `comments[]` and `external_refs[]`.
+2. If any comment `text === "Linked PRD: <p>"` exists skip adding a comment.
+   - Else call `bd comment I "Linked PRD: <p>"`.
+3. If any external ref equals `PRD: <p>` skip update.
+   - Else call `bd update I --external-ref "PRD: <p>"`.
+4. If `bd` binary is missing, write a `beads_link_needed` entry in the audit log with exact commands to run manually.
 
-Notes:
-- Default backend is `cli`. Detect `OPENCODE_ATTACH_URL` or `--attach` to prefer `serve` backend.
-- Provide `--format json` for machine-readable final summary.
+All beads operations must be attempted after file writes succeed; failures to run `bd` must not delete the written PRD.
 
-## Idempotence & Linking (concrete algorithm)
+## Audit logging schema (exact)
 
-1. After successful write, compute canonical PRD path `p` (relative to repo root).
-2. Fetch issue state: `bd show <id> --json`.
-3. If `comments` array contains exact string `Linked PRD: <p>`, skip `bd comment`.
-   - Otherwise: `bd comment <id> "Linked PRD: <p>"`.
-4. If `external_refs` (or `externalRef` equivalent) contains `PRD: <p>`, skip `bd update`.
-   - Otherwise: `bd update <id> --external-ref "PRD: <p>"`.
-5. Ensure operations are run after `bd` is available; if `bd` missing, emit instructions and add the information to the audit log for manual linking.
+Write `.waif/audit/<session-id>.json` with:
+- `session_id` (string)
+- `started_at` (ISO8601)
+- `ended_at` (ISO8601 or null)
+- `invoker` (username from `git config user.name` or OS user)
+- `backend` (cli|serve|sdk)
+- `model` (optional)
+- `prompt_hash` (hex SHA256)
+- `prompt_excerpt` (string, max 8192 chars)
+- `affected_files` (array of repo-relative paths)
+- `beads_issue` (id or null)
+- `beads_links_added` (array of `{type: "comment"|"external-ref", value: string}`)
+- `errors` (array of error objects if any)
 
-## Error Handling (expanded)
+Prompts must be redacted before storage: remove PEM blocks and tokens using explicit regexes and replace inner content with `REDACTED`.
 
-- Missing `opencode` (CLI backend):
-  - Detect via `which opencode` or `opencode --version`.
-  - Exit with clear message and link to OpenCode install command and `opencode --version` output.
-  - Suggest alternate flows: `--emit-opencode-cmd` or `--backend serve` (if attach URL present).
+## File Manager: atomic write procedure (explicit)
 
-- Missing model/auth: detect OpenCode provider auth status via `opencode auth list` where possible; otherwise surface provider-specific hints and log missing env vars.
+For each file write event:
+1. Compute `target = repoRoot/<path>`.
+2. Compute `tmp = <sessionDir>/tmp/<uuid>.md` and create parent directories.
+3. Write content to `tmp`.
+4. Run `npx remark --quiet -u remark-preset-lint-recommended <tmp>`; if remark fails, log error and abort write for this file.
+5. fsync the file and parent dir (best-effort), then `rename(tmp, target)`.
+6. If previous file content equals new content, do not update timestamp (use content compare) and do not record as modified in affected-files list.
 
-- Interrupted session (SIGINT):
-  - Prompt: "Save partial draft and audit? [Y/n]"; if yes, persist current session transcript to `.waif/sessions/<id>/partial.md` and audit log.
-  - Close child processes and exit non-zero with actionable note.
+## Error handling (explicit)
 
-- Partial file write: use atomic write and only mark session-complete after all writes succeed and `remark` finished. On failure, revert temp files and log error.
+- Missing `opencode` (`--backend cli`): print "opencode not found; install from https://..." with `opencode --version` suggestion and exit code `2`.
+- Schema drift / unexpected event: print raw JSON to `--debug` stream, write event to session dir for inspection, and exit code `4`.
+- SIGINT during interactive session: on first SIGINT prompt "Save partial draft and audit? [Y/n]"; if `Y`, write `.waif/sessions/<id>/partial.md` and exit `3`.
+- Beads `bd` missing: write a note into `.waif/audit/<session-id>.json` with `beads_link_needed` commands and continue; exit `0` (PRD written) unless other errors occurred.
 
-- Unexpected JSON events/schema drift: switch to graceful fallback mode (print raw JSON to `--debug` output and stop the session), advise upgrade or toggle `--lax-parsing` to continue.
+## Testing Strategy (explicit)
 
-## Testing strategy (detailed)
+Unit tests (run with `npm test`):
+- Event Parser: provide sample JSON events and assert canonical event outputs and error codes.
+- Beads Linker: mock `bd` binary responses and assert idempotent behavior.
+- File Manager: use temporary repo fixture to test `writeAtomic` behavior and content-equality path.
 
-- Unit tests
-  - Command-line arg parsing for all flags and backend selection.
-  - Event Parser unit tests for canonical events.
-  - Beads Linker logic with a mocked `bd` binary (validate idempotence checks).
-  - File Manager (atomic write) with virtual FS or temp dir tests.
+Integration tests (CI matrix):
+- Local integration (runs only when `which opencode` returns success): run `opencode run --command prd --format json` against `.opencode/command/prd.md` canned command and a known seed, assert final PRD content and beads linking.
+- Mock integration: simulate `opencode run` stdout with canned JSON stream and assert end-to-end handling.
 
-- Integration tests
-  - Local-only tests: gated with `OPENCODE_AVAILABLE=true` or `which opencode` check. Run `opencode run --command prd --format json` against a canned `.opencode/command/prd.md` and a known seed to validate end-to-end behavior.
-  - Serve-backed tests: start `opencode serve` in background in CI job and `waif prd --backend serve --attach` to exercise attach path.
+CI policy: Skip heavy integration when `opencode` not available; add explicit matrix job to run full integration when `opencode` present.
 
-- Mocks & CI
-  - Provide a test helper to mock `opencode run` JSON event streams to validate interaction flows without OpenCode installed.
-  - CI: skip heavy integration when `opencode` not available; use a matrix job that runs the full integration when `opencode` tool is available.
+## Migration & Rollout (explicit steps)
 
-## Audit schema (example)
+1. Implement M0: `cli` backend, Session Manager, Event Parser, File Manager, Beads Linker, Audit Logger.
+2. Add unit tests and mock harness; merge to feature branch and open PR.
+3. Add integration test harness that mocks `opencode` and add CI gating.
+4. Implement `serve` backend and add `--attach` support.
+5. Optional: implement `sdk` backend once `@opencode-ai/sdk` is available.
 
-- Stored per session as JSON (redacted):
-  - session_id
-  - started_at
-  - ended_at
-  - invoker (username)
-  - backend (cli|serve|sdk)
-  - model
-  - prompt_hash
-  - prompt_excerpt (truncated 8k)
-  - affected_files [path]
-  - beads_issue: wf-ba2.3.7
-  - beads_links_added [comment, external-ref]
+## Security & Privacy (explicit)
 
-## Fallbacks and migration path
+- Never commit `.waif/audit/` to repo by default; include `.waif/audit/` in `.gitignore`.
+- Redact secrets before writing prompts to audit logs (PEM blocks, tokens, AWS keys, other regex-detected secrets).
+- Agents require `--allow-agent-permissions` to perform file writes or destructive actions.
 
-- Fallback: `--emit-opencode-cmd` prints the exact `opencode run` invocation to stdout for manual execution in environments where spawning is disallowed.
-- Migration: when `@opencode-ai/sdk` usage becomes stable in the environment, add `sdk` backend implementation that uses client streaming and richer session control. The Backend Abstraction hides differences so CLI UX remains stable.
+## Open Questions (actionable)
 
-## Security & privacy (refined)
+1. Default for audit storage: keep out-of-repo under `.waif/audit/` (recommended). Approve? (yes/no)
+2. PR creation policy: implement `--create-pr` opt-in (recommended). Approve? (yes/no)
 
-- Respect `.gitignore` and OpenCode config; never include ignored files in prompts.
-- Prompt redaction: strip obvious secrets (PEM blocks, tokens) and log only truncated excerpts + prompt hash.
-- Agent permission model: agents used with `--agent` run in a limited permission mode; require explicit `--allow-agent-permissions` for dangerous file writes.
+## Appendix: Commands & Paths
 
-## Open Questions (updated)
-
-- Should we automatically create the branch + PR for PRD writes (preferred) or require an explicit flag `--create-pr`? (Implement `--create-pr` opt-in for first iteration.)
-- Should audit logs be committed to git or kept out-of-repo (default: out-of-repo under `.waif/audit/` and ignored by git)?
-- Who configures agents and credentials in multi-developer environments (per-user env or repo config)? Recommend per-user env and optional `.opencode/mcp` configs.
-
+- PRD file path in this work: `docs/dev/wf-ba2.3.7_PRD.md`
+- Example opencode invocation (cli backend): `opencode run --command prd . --format json --session <session-id>`
+- Beads commands:
+  - `bd show <id> --json`
+  - `bd comment <id> "Linked PRD: <path>"`
+  - `bd update <id> --external-ref "PRD: <path>"`
 
 ---
 
-Assumptions (unchanged)
-
-- Use-case is focused on local, repo-based PRD authoring seeded by beads issue `wf-ba2.3.7`.
-- Default backend is `cli` using `opencode run --format json` with a pluggable backend architecture for future SDK/serve integration.
-- The PRD file will be written to `docs/dev/wf-ba2.3.7_PRD.md`.
-
-
----
-
-(End of revised draft)
+(End of revised PRD)
