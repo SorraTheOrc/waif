@@ -56,6 +56,44 @@ if ! command -v tmux >/dev/null 2>&1; then
   exit 1
 fi
 
+setup_tmux_options() {
+  local target_window="${1:-}"
+
+  # Enable mouse globally.
+  tmux set-option -g mouse on >/dev/null 2>&1 || true
+
+  # Configure the workflow window so pane borders show only agent names and
+  # prevent shells/programs from mutating names/titles.
+  if [[ -n "$target_window" ]]; then
+    tmux set-window-option -t "$target_window" allow-rename off >/dev/null 2>&1 || true
+    tmux set-window-option -t "$target_window" automatic-rename off >/dev/null 2>&1 || true
+    tmux set-window-option -t "$target_window" pane-border-format "#{pane_title}" >/dev/null 2>&1 || true
+    tmux set-window-option -t "$target_window" pane-active-border-format "#{pane_title}" >/dev/null 2>&1 || true
+  else
+    tmux set-window-option -g allow-rename off >/dev/null 2>&1 || true
+    tmux set-window-option -g automatic-rename off >/dev/null 2>&1 || true
+    tmux set-window-option -g pane-border-format "#{pane_title}" >/dev/null 2>&1 || true
+    tmux set-window-option -g pane-active-border-format "#{pane_title}" >/dev/null 2>&1 || true
+  fi
+}
+
+retitle_workflow_panes() {
+  local target_window="$1" # session:window
+  local delay="${2:-0}" # optional delay in seconds
+
+  if [[ "$delay" -gt 0 ]]; then
+    sleep "$delay"
+  fi
+
+  # Force pane titles to agent names, overriding any shell escape sequences.
+  tmux select-pane -t "${target_window}.0" -T "pm" 2>/dev/null || true
+  tmux select-pane -t "${target_window}.1" -T "design" 2>/dev/null || true
+  tmux select-pane -t "${target_window}.2" -T "build" 2>/dev/null || true
+  tmux select-pane -t "${target_window}.3" -T "docs" 2>/dev/null || true
+  tmux select-pane -t "${target_window}.4" -T "review" 2>/dev/null || true
+  tmux select-pane -t "${target_window}.5" -T "User" 2>/dev/null || true
+}
+
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # Worktree helpers (creates or reuses a git worktree at ./worktree_<actor>)
@@ -114,7 +152,11 @@ pane_bootstrap() {
   local label="$2"
   local agent_role="${3:-}"
 
-  pane_title "$pane_id" "$label"
+  if [[ -n "$agent_role" ]]; then
+    pane_title "$pane_id" "$agent_role"
+  else
+    pane_title "$pane_id" "$label"
+  fi
 
   if [[ -n "$agent_role" ]]; then
     # Use actor name equal to role for simple mapping; ensure worktree exists and start waif in it.
@@ -134,6 +176,9 @@ pane_bootstrap() {
 
 create_layout_in_window() {
   local target_window="$1" # e.g. session:window
+
+  # Apply window-specific tmux options before any panes start their shells.
+  setup_tmux_options "$target_window"
 
   local pm_pane
   pm_pane="$(tmux display-message -p -t "$target_window" '#{pane_id}')"
@@ -161,22 +206,27 @@ create_layout_in_window() {
 
   tmux select-layout -t "$target_window" tiled >/dev/null 2>&1 || true
   tmux select-pane -t "$user_pane" >/dev/null 2>&1 || true
+
+  # Shells will set their titles via escape sequences during startup.
+  # Wait briefly then force our agent names back.
+  (sleep 0.5; retitle_workflow_panes "$target_window" 0) &
 }
 
 if [[ -n "${TMUX:-}" ]]; then
-  # Already inside tmux: add a new window to the current session.
   current_session="$(tmux display-message -p '#{session_name}')"
   target_window="${current_session}:${WINDOW}"
 
   if tmux list-windows -t "$current_session" -F '#{window_name}' | grep -Fxq "$WINDOW"; then
     echo "Window '$WINDOW' already exists in session '$current_session'." >&2
     echo "Switching to it." >&2
+    setup_tmux_options "$target_window"
   else
     tmux new-window -t "$current_session" -n "$WINDOW" -c "$repo_root" >/dev/null
     create_layout_in_window "$target_window"
   fi
 
   tmux select-window -t "$target_window" >/dev/null
+  retitle_workflow_panes "$target_window" 0
   exit 0
 fi
 
@@ -192,5 +242,10 @@ else
   tmux new-session -d -s "$SESSION" -n "$WINDOW" -c "$repo_root"
   create_layout_in_window "$SESSION:$WINDOW"
 fi
+
+# Wait for background retitle job from create_layout_in_window
+sleep 0.6
+retitle_workflow_panes "$SESSION:$WINDOW" 0
+setup_tmux_options "$SESSION:$WINDOW"
 
 tmux attach -t "$SESSION"
