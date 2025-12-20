@@ -1,0 +1,18 @@
+{"type":"question","id":"q1","text":"What is the one-line purpose of this feature?"}
+{"type":"answer","questionId":"q1","text":"Make it easy for PMs to run an interactive PRD authoring session locally."}
+{"type":"question","id":"q2","text":"Who is the primary user persona for this PRD?"}
+{"type":"answer","questionId":"q2","text":"Product Managers who need auditable, local PRDs."}
+{"type":"question","id":"q3","text":"Should the tool attempt to create a PR, or only write the PRD file?"}
+{"type":"answer","questionId":"q3","text":"Only write the PRD file by default; PR creation is opt-in."}
+{"type":"file-proposal","id":"f1","path":"docs/dev/wf-ba2.3.7_PRD.md","preview":"### Purpose\nMake it easy for PMs to run...\n### Users\n..."}
+{"type":"file-accept","fileId":"f1","accepted":true}
+{"type":"question","id":"q4","text":"Provide 2-3 acceptance criteria for the PRD output."}
+{"type":"answer","questionId":"q4","text":"1) File written, 2) Audit present, 3) Beads link added."}
+{"type":"file-proposal","id":"f2","path":"docs/dev/wf-ba2.3.7_PRD.md","preview":"### Acceptance Criteria\n1. File written...\n2. Audit..."}
+{"type":"file-accept","fileId":"f2","accepted":false}
+{"type":"file-edit","fileId":"f2","patch":"Replace 'Audit' with 'Audit log'"}
+{"type":"file-write","id":"w1","path":"docs/dev/wf-ba2.3.7_PRD.md","content":"<full markdown including accepted edits>"}
+{"type":"file-written","fileId":"w1","status":"ok"}
+{"type":"file-write","id":"w2","path":".waif/audit/<session-id>.json","content":"{...redacted audit...}"}
+{"type":"file-written","fileId":"w2","status":"ok"}
+{"type":"session-complete","summary":{"files":["docs/dev/wf-ba2.3.7_PRD.md",".waif/audit/<session-id>.json"]}}
