@@ -58,10 +58,15 @@ fi
 
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
-# Worktree helpers (creates or reuses a git worktree at ./<actor>)
+# Worktree helpers (creates or reuses a git worktree at ./worktree_<actor>)
 worktree_branch_name() {
   local actor="$1"
-  printf "%s_Worktree" "$actor"
+  printf "worktree_%s" "$actor"
+}
+
+worktree_dir_path() {
+  local actor="$1"
+  printf "%s/worktree_%s" "$repo_root" "$actor"
 }
 
 worktree_exists_for_branch() {
@@ -72,7 +77,8 @@ worktree_exists_for_branch() {
 
 ensure_worktree() {
   local actor="$1"
-  local target_dir="$repo_root/$actor"
+  local target_dir
+  target_dir="$(worktree_dir_path "$actor")"
   local branch
   branch=$(worktree_branch_name "$actor")
 
@@ -117,7 +123,8 @@ pane_bootstrap() {
       tmux send-keys -t "$pane_id" "cd \"$repo_root\"; clear; echo \"[$label] Failed to create/reuse worktree for $actor_name\"" C-m
       return 0
     fi
-    local wt_dir="$repo_root/$actor_name"
+    local wt_dir
+    wt_dir="$(worktree_dir_path "$actor_name")"
     # Export BEADS_NO_DAEMON and BD_ACTOR, cd into worktree, run waif startWork.
     tmux send-keys -t "$pane_id" "cd \"$wt_dir\"; export BEADS_NO_DAEMON=1; export BD_ACTOR=\"$actor_name\"; clear; waif startWork \"$actor_name\"" C-m
   else

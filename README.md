@@ -80,19 +80,15 @@ After `npm run build`, run `npm link` to make the `waif` command available globa
 **If you encounter permission errors**, configure a user-writable npm prefix:
 
 ```bash
-npm config set prefix "$HOME/.npm-global"
-mkdir -p "$HOME/.npm-global/bin"
 npm link
 ```
 
-Then ensure `~/.npm-global/bin` is on your PATH:
+Ensure the link directory is on your PATH:
 
 ```bash
-echo 'export PATH="$HOME/.npm-global/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
+  sudo apt install direnv  # if not already installed
+  echo 'export PATH=$PWD/.npm-global/bin:$PATH' > .envrc
 ```
-
-Then source it (for bash: `source ~/.bashrc`) and run `npm link` again.
 
 ## Development
 
