@@ -108,12 +108,3 @@ agents:
     worktree: true
     env:
       BD_ACTOR: ship
-
-  # Forge (Agent-file Authoring AI) - drafts and validates OpenCode agent definitions
-  - name: forge
-    label: Forge (Agents)
-    role: agents
-    window: specialist
-    worktree: true
-    env:
-      BD_ACTOR: forge
