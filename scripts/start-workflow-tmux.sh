@@ -542,7 +542,47 @@ if [[ "$RESTART" -eq 1 ]]; then
 fi
 
 if tmux has-session -t "$SESSION" 2>/dev/null; then
-  echo "Reusing existing tmux session: $SESSION" >&2
+  echo "Found existing tmux session: $SESSION" >&2
+
+  # If we're running in an interactive terminal, ask the user what to do.
+  if [[ -t 0 ]]; then
+    while true; do
+      read -r -p "Session '$SESSION' exists. (o)pen / (r)ecreate / (c)ancel? [o]: " choice
+      choice=${choice:-o}
+      case "$choice" in
+        o|O|open)
+          echo "Opening existing session: $SESSION" >&2
+          tmux attach -t "$SESSION"
+          exit 0
+          ;;
+        r|R|recreate)
+          echo "Recreating session: $SESSION (killing existing)..." >&2
+          tmux kill-session -t "$SESSION" 2>/dev/null || true
+          echo "Creating new tmux session: $SESSION" >&2
+          tmux new-session -d -s "$SESSION" -n "temp" -c "$repo_root" || {
+            echo "Error: Failed to create tmux session" >&2
+            exit 1
+          }
+          create_all_windows "$SESSION"
+          # Remove the temp window if it still exists
+          tmux kill-window -t "${SESSION}:temp" 2>/dev/null || true
+          break
+          ;;
+        c|C|cancel)
+          echo "Cancelled." >&2
+          exit 0
+          ;;
+        *)
+          echo "Please enter o, r, or c." >&2
+          ;;
+      esac
+    done
+  else
+    # Non-interactive: default to opening existing session to avoid destructive behavior
+    echo "Non-interactive shell: opening existing session: $SESSION" >&2
+    tmux attach -t "$SESSION"
+    exit 0
+  fi
 else
   echo "Creating new tmux session: $SESSION" >&2
   tmux new-session -d -s "$SESSION" -n "temp" -c "$repo_root" || {
