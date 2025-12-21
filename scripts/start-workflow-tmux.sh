@@ -546,7 +546,7 @@ should_create=0
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "tmux session '$SESSION' already exists." >&2
   echo "Choose an option:" >&2
-  echo "  [o] Open existing session" >&2
+  echo "  [o] Open existing session (default)" >&2
   echo "  [r] Reset session (kill and recreate)" >&2
   echo "  [c] Cancel" >&2
   printf "> " >&2
