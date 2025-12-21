@@ -23,47 +23,79 @@
 # Required:
 #   This config file is required. If missing, the script will error with instructions.
 #   Use 'node scripts/parse-workflow-config.js --defaults' to see an example config.
+#
+# Agent definitions match .opencode/agent/*.md files.
 
 agents:
-  - name: pm
-    label: PM agent
+  # Map (PM AI) - primary interface point for Producer
+  - name: map
+    label: Map (PM)
     role: pm
     worktree: true
     env:
-      BD_ACTOR: pm
+      BD_ACTOR: map
     idle:
       task: "clear; waif in-progress"
       frequency: 30
       variance: 10
 
-  - name: design
-    label: Design agent
+  # Muse (Designer AI) - design variants and UX flows
+  - name: muse
+    label: Muse (Design)
     role: design
     worktree: true
     env:
-      BD_ACTOR: design
+      BD_ACTOR: muse
 
-  - name: build
-    label: Build agent
+  # Patch (Implementation AI) - implement small, correct changes
+  - name: patch
+    label: Patch (Impl)
     role: build
     worktree: true
     env:
-      BD_ACTOR: build
+      BD_ACTOR: patch
 
-  - name: docs
-    label: Doc agent
-    role: docs
-    worktree: true
-    env:
-      BD_ACTOR: docs
-
-  - name: review
-    label: Review agent
+  # Probe (QA AI) - quality gates, test strategy, and risk checks
+  - name: probe
+    label: Probe (QA)
     role: review
     worktree: true
     env:
-      BD_ACTOR: review
+      BD_ACTOR: probe
 
+  # Ship (DevOps AI) - CI, build, release readiness
+  - name: ship
+    label: Ship (DevOps)
+    role: devops
+    worktree: true
+    env:
+      BD_ACTOR: ship
+
+  # Scribbler (Docs AI) - maintain PRDs and repo docs
+  - name: scribbler
+    label: Scribbler (Docs)
+    role: docs
+    worktree: true
+    env:
+      BD_ACTOR: scribbler
+
+  # Forge (Agent-file Authoring AI) - drafts and validates OpenCode agent definitions
+  - name: forge
+    label: Forge (Agents)
+    role: agents
+    worktree: true
+    env:
+      BD_ACTOR: forge
+
+  # Pixel (Art AI) - asset generation and review support
+  - name: pixel
+    label: Pixel (Art)
+    role: art
+    worktree: true
+    env:
+      BD_ACTOR: pixel
+
+  # User pane - interactive shell for the Producer
   - name: user
     label: User
     is_user: true
