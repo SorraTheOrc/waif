@@ -41,9 +41,9 @@ export function isEnabled() {
 }
 
 async function checkPort(host: string, port: number, timeout = 500): Promise<boolean> {
+  const net = await import('node:net');
   return new Promise((resolveCheck) => {
-    const net = require('net');
-    const socket = new net.Socket();
+    const socket = new (net as any).Socket();
     let done = false;
     socket.setTimeout(timeout);
     socket.on('connect', () => {
@@ -63,10 +63,10 @@ async function checkPort(host: string, port: number, timeout = 500): Promise<boo
         resolveCheck(false);
       }
     });
-    socket.connect(port, host);
+    // Note: connect signature differs between node versions; use host/port
+    try { socket.connect(port, host); } catch (e) { resolveCheck(false); }
   });
 }
-
 export async function ensureClient(): Promise<any | undefined> {
   if (client) return client;
   if (!isEnabled()) return undefined;
@@ -81,59 +81,93 @@ export async function ensureClient(): Promise<any | undefined> {
 
   try {
     const mod = await import('@opencode-ai/sdk');
-    const OpenCode = mod?.OpenCode ?? mod?.default ?? mod;
-    const oc = new OpenCode({ host, port });
+    const createOpencode = mod?.createOpencode ?? mod?.default?.createOpencode ?? mod?.createOpencodeClient;
+    const createOpencodeClient = mod?.createOpencodeClient ?? mod?.createOpencodeClient;
+
+    let sdkClient: any | undefined;
 
     if (!running) {
-      // attempt to start server
-      try {
-        process.stderr.write('[debug] OpenCode: starting local server...\n');
-        // oc.serve may return a promise or a server object
-        if (typeof oc.serve === 'function') {
-          await oc.serve({ port });
-        }
-        // wait for port to be available
-        const start = Date.now();
+      // start both server and client
+      if (typeof createOpencode === 'function') {
         const timeoutMs = Number(process.env.OPENCODE_STARTUP_TIMEOUT || 5000);
-        while (Date.now() - start < timeoutMs) {
-          const ok = await checkPort(host, port, 200);
-          if (ok) break;
-          await new Promise((r) => setTimeout(r, 200));
-        }
-        process.stderr.write(`[debug] OpenCode: server listening at http://${host}:${port}\n`);
+        const inst = await createOpencode({ hostname: host, port, timeout: timeoutMs });
+        sdkClient = inst?.client ?? inst?.client ?? inst;
+      }
+    } else {
+      // connect to existing server as client only
+      if (typeof createOpencodeClient === 'function') {
+        sdkClient = await createOpencodeClient({ baseUrl: `http://${host}:${port}` });
+      } else if (typeof createOpencode === 'function') {
+        const inst = await createOpencode({ hostname: host, port, timeout: 0 });
+        sdkClient = inst?.client ?? inst;
+      }
+    }
 
-        // recreate agent_map cache after starting server
-        try {
-          const map = await oc.listAgents ? await oc.listAgents() : undefined;
-          // if oc.listAgents returns mapping, write to .opencode/agent_map.yaml
-          if (map && typeof map === 'object') {
-            const outLines: string[] = [];
-            for (const [k, v] of Object.entries(map)) {
-              outLines.push(`${k}: ${v}`);
-            }
+    if (!sdkClient) {
+      throw new Error('Failed to create OpenCode client');
+    }
+
+    // attempt to list agents and write cache
+    try {
+      if (sdkClient.app && typeof sdkClient.app.agents === 'function') {
+        const agents = await sdkClient.app.agents();
+        if (Array.isArray(agents)) {
+          const outLines: string[] = [];
+          for (const a of agents) {
+            const name = (a?.name || a?.title || a?.id || '').toString();
+            const id = (a?.id || name).toString();
+            if (name) outLines.push(`${name}: ${id}`);
+          }
+          if (outLines.length > 0) {
             const { writeFileSync, mkdirSync } = await import('fs');
             const { dirname } = await import('path');
             const target = resolve('.opencode/agent_map.yaml');
             mkdirSync(dirname(target), { recursive: true });
             writeFileSync(target, outLines.join('\n') + '\n', 'utf8');
           }
-        } catch (e) {
-          // ignore errors in cache creation
         }
-      } catch (e) {
-        process.stderr.write(`[warn] OpenCode: failed to start local server: ${e instanceof Error ? e.message : String(e)}\n`);
       }
+    } catch (e) {
+      // ignore agent listing errors
     }
 
     client = {
       ask: async (agent: string, prompt: string) => {
-        if (typeof oc.ask === 'function') {
-          const res = await oc.ask(agent, prompt);
-          return { markdown: res?.markdown ?? String(res) };
+        // Map agent name -> id
+        const map = loadAgentMap();
+        const mapped = map[agent] || agent;
+
+        // Prefer session-based prompt
+        try {
+          if (sdkClient.session && typeof sdkClient.session.create === 'function') {
+            const session = await sdkClient.session.create({ body: { title: `waif ask (${mapped})` } });
+            const res = await sdkClient.session.prompt({ path: { id: session.id }, body: { parts: [{ type: 'text', text: prompt }] } });
+            // Attempt to extract assistant parts text
+            const parts = (res?.parts) || (res?.info?.parts) || res?.parts || [];
+            const texts: string[] = [];
+            for (const p of parts) {
+              if (typeof p === 'string') texts.push(p);
+              else if (p?.type === 'text' && typeof p?.text === 'string') texts.push(p.text);
+              else if (p?.content && typeof p.content === 'string') texts.push(p.content);
+            }
+            const joined = texts.join('\n\n') || JSON.stringify(res);
+            return { markdown: joined };
+          }
+        } catch (e) {
+          // continue to other methods
         }
-        throw new Error('OpenCode client has no ask method');
+
+        // Fallback: try client.app.prompt or client.session.command
+        try {
+          if (sdkClient.app && typeof sdkClient.app.prompt === 'function') {
+            const out = await sdkClient.app.prompt({ body: { text: prompt } });
+            return { markdown: out?.text ?? String(out) };
+          }
+        } catch (e) {}
+
+        throw new Error('OpenCode client has no supported ask method');
       },
-      _oc: oc,
+      _sdk: sdkClient,
     };
 
     // ensure agent_map exists (create empty cache if missing)
@@ -150,7 +184,7 @@ export async function ensureClient(): Promise<any | undefined> {
 
     return client;
   } catch (e) {
-    process.stderr.write(`[warn] OpenCode SDK unavailable: ${e instanceof Error ? e.message : String(e)}\n`);
+    process.stderr.write(`[warn] OpenCode SDK unavailable or failed: ${e instanceof Error ? e.message : String(e)}\n`);
     return undefined;
   }
 }
