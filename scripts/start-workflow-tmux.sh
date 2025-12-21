@@ -4,29 +4,28 @@ set -euo pipefail
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/start-workflow-tmux.sh [--restart] [--session <name>] [--window <name>]
+  scripts/start-workflow-tmux.sh [--restart] [--session <name>]
 
-Starts (or reuses) a tmux session and creates one pane per workflow agent
+Starts (or reuses) a tmux session and creates windows/panes for workflow agents
 (described in docs/Workflow.md) plus a user pane.
 
 Options:
   --restart         kill tmux server first (outside tmux only)
   --session <name>  tmux session name (default: waif-workflow)
-  --window <name>   tmux window name (default: agents)
   -h, --help        show this help
 
 Environment:
   WORKFLOW_AGENTS_CONFIG  path to alternate workflow_agents.yaml config file
 
 Notes:
-  - If already inside tmux, this creates a new window in the current session.
+  - If already inside tmux, this creates new windows in the current session.
   - If the target session already exists, it will be reused.
-  - Agent panes are configured via config/workflow_agents.yaml (or defaults).
+  - Agent panes are configured via config/workflow_agents.yaml.
+  - Agents are grouped into windows by their 'window' field (default: core).
 EOF
 }
 
 SESSION="waif-workflow"
-WINDOW="agents"
 RESTART=0
 
 while [[ $# -gt 0 ]]; do
@@ -37,10 +36,6 @@ while [[ $# -gt 0 ]]; do
       ;;
     --session)
       SESSION="${2:-}"
-      shift 2
-      ;;
-    --window)
-      WINDOW="${2:-}"
       shift 2
       ;;
     -h|--help)
@@ -90,12 +85,13 @@ load_agents_config() {
 }
 
 # Parse JSON array into bash arrays using node (avoids jq dependency)
-# Sets global arrays: AGENT_NAMES, AGENT_LABELS, AGENT_ROLES, AGENT_WORKTREES,
+# Sets global arrays: AGENT_NAMES, AGENT_LABELS, AGENT_ROLES, AGENT_WINDOWS, AGENT_WORKTREES,
 #                     AGENT_IS_USERS, AGENT_IDLE_TASKS, AGENT_IDLE_FREQS, AGENT_IDLE_VARS
 # Also sets associative array: AGENT_ENVS (name -> "KEY=val KEY2=val2" string)
 declare -a AGENT_NAMES=()
 declare -a AGENT_LABELS=()
 declare -a AGENT_ROLES=()
+declare -a AGENT_WINDOWS=()
 declare -a AGENT_WORKTREES=()
 declare -a AGENT_IS_USERS=()
 declare -a AGENT_IDLE_TASKS=()
@@ -114,6 +110,7 @@ for (const agent of data) {
   const name = agent.name;
   const label = agent.label;
   const role = agent.role || '';
+  const window = agent.window || 'core';
   const worktree = agent.worktree ? '1' : '0';
   const is_user = agent.is_user ? '1' : '0';
   
@@ -131,14 +128,15 @@ for (const agent of data) {
   const env_str = envPairs.join(' ');
   
   // Output tab-separated fields
-  console.log([name, label, role, worktree, is_user, idle_task, idle_freq, idle_var, env_str].join('\t'));
+  console.log([name, label, role, window, worktree, is_user, idle_task, idle_freq, idle_var, env_str].join('\t'));
 }
 " <<< "$json")
   
-  while IFS=$'\t' read -r name label role worktree is_user idle_task idle_freq idle_var env_str; do
+  while IFS=$'\t' read -r name label role window worktree is_user idle_task idle_freq idle_var env_str; do
     AGENT_NAMES+=("$name")
     AGENT_LABELS+=("$label")
     AGENT_ROLES+=("$role")
+    AGENT_WINDOWS+=("$window")
     AGENT_WORKTREES+=("$worktree")
     AGENT_IS_USERS+=("$is_user")
     AGENT_IDLE_TASKS+=("$idle_task")
@@ -171,19 +169,24 @@ setup_tmux_options() {
   fi
 }
 
-retitle_workflow_panes() {
+retitle_window_panes() {
   local target_window="$1" # session:window
-  local delay="${2:-0}" # optional delay in seconds
+  local window_name="$2"   # window name to filter agents
+  local delay="${3:-0}"    # optional delay in seconds
 
   if [[ "$delay" -gt 0 ]]; then
     sleep "$delay"
   fi
 
-  # Force pane titles to agent labels, overriding any shell escape sequences.
+  # Force pane titles to agent labels for agents in this window
+  local pane_idx=0
   local i
   for i in "${!AGENT_NAMES[@]}"; do
-    local label="${AGENT_LABELS[$i]}"
-    tmux select-pane -t "${target_window}.${i}" -T "$label" 2>/dev/null || true
+    if [[ "${AGENT_WINDOWS[$i]}" == "$window_name" ]]; then
+      local label="${AGENT_LABELS[$i]}"
+      tmux select-pane -t "${target_window}.${pane_idx}" -T "$label" 2>/dev/null || true
+      ((pane_idx++))
+    fi
   done
 }
 
@@ -312,53 +315,118 @@ pane_bootstrap_from_config() {
 
 # --- Layout creation ---
 
+# Get unique window names from agent config (preserving order)
+get_window_names() {
+  local seen=""
+  for window in "${AGENT_WINDOWS[@]}"; do
+    if [[ ! " $seen " =~ " $window " ]]; then
+      echo "$window"
+      seen="$seen $window"
+    fi
+  done
+}
+
+# Get agent indices for a specific window
+get_agents_for_window() {
+  local window_name="$1"
+  for i in "${!AGENT_NAMES[@]}"; do
+    if [[ "${AGENT_WINDOWS[$i]}" == "$window_name" ]]; then
+      echo "$i"
+    fi
+  done
+}
+
 create_layout_in_window() {
   local target_window="$1" # e.g. session:window
+  local window_name="$2"   # window name to filter agents
 
   # Apply window-specific tmux options before any panes start their shells.
   setup_tmux_options "$target_window"
 
-  local agent_count="${#AGENT_NAMES[@]}"
+  # Get agent indices for this window
+  local -a window_agents=()
+  while read -r idx; do
+    window_agents+=("$idx")
+  done < <(get_agents_for_window "$window_name")
+
+  local agent_count="${#window_agents[@]}"
   if [[ "$agent_count" -eq 0 ]]; then
-    echo "Error: No agents configured." >&2
-    exit 1
+    echo "Error: No agents configured for window '$window_name'." >&2
+    return 1
   fi
 
   # First pane is already created with the window
   local first_pane
   first_pane="$(tmux display-message -p -t "$target_window" '#{pane_id}')"
-  pane_bootstrap_from_config "$first_pane" 0
+  pane_bootstrap_from_config "$first_pane" "${window_agents[0]}"
 
   # Create additional panes
-  local i
+  local pane_num
   local last_user_pane=""
-  for (( i=1; i<agent_count; i++ )); do
+  for (( pane_num=1; pane_num<agent_count; pane_num++ )); do
+    local agent_idx="${window_agents[$pane_num]}"
+    
     # Alternate split direction for a tiled-ish layout
     local split_dir="-v"
-    if (( i % 2 == 0 )); then
+    if (( pane_num % 2 == 0 )); then
       split_dir="-h"
     fi
     
     local new_pane
     new_pane="$(tmux split-window -t "$target_window" -c "$repo_root" -P -F '#{pane_id}' $split_dir)"
-    pane_bootstrap_from_config "$new_pane" "$i"
+    pane_bootstrap_from_config "$new_pane" "$agent_idx"
     
     # Track user pane for focus
-    if [[ "${AGENT_IS_USERS[$i]}" == "1" ]]; then
+    if [[ "${AGENT_IS_USERS[$agent_idx]}" == "1" ]]; then
       last_user_pane="$new_pane"
     fi
   done
 
+  # Check if first agent is user pane
+  if [[ "${AGENT_IS_USERS[${window_agents[0]}]}" == "1" ]]; then
+    last_user_pane="$first_pane"
+  fi
+
   tmux select-layout -t "$target_window" tiled >/dev/null 2>&1 || true
   
-  # Focus on user pane if present
+  # Focus on user pane if present in this window
   if [[ -n "$last_user_pane" ]]; then
     tmux select-pane -t "$last_user_pane" >/dev/null 2>&1 || true
   fi
 
   # Shells will set their titles via escape sequences during startup.
   # Wait briefly then force our agent names back.
-  (sleep 0.5; retitle_workflow_panes "$target_window" 0) &
+  (sleep 0.5; retitle_window_panes "$target_window" "$window_name" 0) &
+}
+
+# Create all windows for a session
+create_all_windows() {
+  local session="$1"
+  local first_window=1
+
+  while read -r window_name; do
+    local target_window="${session}:${window_name}"
+    
+    if [[ "$first_window" -eq 1 ]]; then
+      # Rename the default window created with the session
+      tmux rename-window -t "${session}:0" "$window_name" >/dev/null 2>&1 || true
+      first_window=0
+    else
+      # Create new window
+      if tmux list-windows -t "$session" -F '#{window_name}' | grep -Fxq "$window_name"; then
+        echo "Window '$window_name' already exists in session '$session'." >&2
+      else
+        tmux new-window -t "$session" -n "$window_name" -c "$repo_root" >/dev/null
+      fi
+    fi
+    
+    create_layout_in_window "$target_window" "$window_name"
+  done < <(get_window_names)
+  
+  # Select the first window (usually 'core')
+  local first_win
+  first_win=$(get_window_names | head -1)
+  tmux select-window -t "${session}:${first_win}" >/dev/null 2>&1 || true
 }
 
 # --- Main ---
@@ -369,19 +437,25 @@ parse_agents_json "$agents_json"
 
 if [[ -n "${TMUX:-}" ]]; then
   current_session="$(tmux display-message -p '#{session_name}')"
-  target_window="${current_session}:${WINDOW}"
+  
+  # Create windows for each unique window name in config
+  while read -r window_name; do
+    target_window="${current_session}:${window_name}"
+    
+    if tmux list-windows -t "$current_session" -F '#{window_name}' | grep -Fxq "$window_name"; then
+      echo "Window '$window_name' already exists in session '$current_session'." >&2
+      echo "Switching to it." >&2
+      setup_tmux_options "$target_window"
+    else
+      tmux new-window -t "$current_session" -n "$window_name" -c "$repo_root" >/dev/null
+      create_layout_in_window "$target_window" "$window_name"
+    fi
+  done < <(get_window_names)
 
-  if tmux list-windows -t "$current_session" -F '#{window_name}' | grep -Fxq "$WINDOW"; then
-    echo "Window '$WINDOW' already exists in session '$current_session'." >&2
-    echo "Switching to it." >&2
-    setup_tmux_options "$target_window"
-  else
-    tmux new-window -t "$current_session" -n "$WINDOW" -c "$repo_root" >/dev/null
-    create_layout_in_window "$target_window"
-  fi
-
-  tmux select-window -t "$target_window" >/dev/null
-  retitle_workflow_panes "$target_window" 0
+  # Select the first window (usually 'core')
+  first_win=$(get_window_names | head -1)
+  tmux select-window -t "${current_session}:${first_win}" >/dev/null 2>&1 || true
+  retitle_window_panes "${current_session}:${first_win}" "$first_win" 0
   exit 0
 fi
 
@@ -394,13 +468,19 @@ fi
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "Reusing existing tmux session: $SESSION" >&2
 else
-  tmux new-session -d -s "$SESSION" -n "$WINDOW" -c "$repo_root"
-  create_layout_in_window "$SESSION:$WINDOW"
+  tmux new-session -d -s "$SESSION" -n "temp" -c "$repo_root"
+  create_all_windows "$SESSION"
+  # Remove the temp window if it still exists
+  tmux kill-window -t "${SESSION}:temp" 2>/dev/null || true
 fi
 
-# Wait for background retitle job from create_layout_in_window
+# Wait for background retitle jobs from create_layout_in_window
 sleep 0.6
-retitle_workflow_panes "$SESSION:$WINDOW" 0
-setup_tmux_options "$SESSION:$WINDOW"
+
+# Retitle all windows
+while read -r window_name; do
+  retitle_window_panes "${SESSION}:${window_name}" "$window_name" 0
+  setup_tmux_options "${SESSION}:${window_name}"
+done < <(get_window_names)
 
 tmux attach -t "$SESSION"

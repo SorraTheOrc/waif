@@ -8,6 +8,7 @@
 #     - name: string  # Required: unique agent identifier (used for worktree, BD_ACTOR)
 #       label: string # Optional: display label for tmux pane title (defaults to name)
 #       role: string  # Optional: agent role passed to waif startWork (defaults to name)
+#       window: string # Optional: tmux window name (default: "core"); agents with same window are grouped
 #       worktree: bool # Optional: if true, use dedicated worktree (default: true for agents, false for user)
 #       env:          # Optional: environment variables to set before starting
 #         KEY: value
@@ -25,12 +26,17 @@
 #   Use 'node scripts/parse-workflow-config.js --defaults' to see an example config.
 #
 # Agent definitions match .opencode/agent/*.md files.
+# Agents are grouped into windows: "core" for daily workflow, "specialist" for on-demand.
 
 agents:
+  # === CORE WINDOW ===
+  # Primary agents for typical feature development workflow
+
   # Map (PM AI) - primary interface point for Producer
   - name: map
     label: Map (PM)
     role: pm
+    window: core
     worktree: true
     env:
       BD_ACTOR: map
@@ -43,6 +49,7 @@ agents:
   - name: muse
     label: Muse (Design)
     role: design
+    window: core
     worktree: true
     env:
       BD_ACTOR: muse
@@ -51,14 +58,44 @@ agents:
   - name: patch
     label: Patch (Impl)
     role: build
+    window: core
     worktree: true
     env:
       BD_ACTOR: patch
+
+  # Scribbler (Docs AI) - maintain PRDs and repo docs
+  - name: scribbler
+    label: Scribbler (Docs)
+    role: docs
+    window: core
+    worktree: true
+    env:
+      BD_ACTOR: scribbler
+
+  # Pixel (Art AI) - asset generation and review support
+  - name: pixel
+    label: Pixel (Art)
+    role: art
+    window: core
+    worktree: true
+    env:
+      BD_ACTOR: pixel
+
+  # User pane - interactive shell for the Producer
+  - name: user
+    label: User
+    window: core
+    is_user: true
+    worktree: false
+
+  # === SPECIALIST WINDOW ===
+  # On-demand agents for specific tasks (QA, DevOps, meta-work)
 
   # Probe (QA AI) - quality gates, test strategy, and risk checks
   - name: probe
     label: Probe (QA)
     role: review
+    window: specialist
     worktree: true
     env:
       BD_ACTOR: probe
@@ -67,36 +104,16 @@ agents:
   - name: ship
     label: Ship (DevOps)
     role: devops
+    window: specialist
     worktree: true
     env:
       BD_ACTOR: ship
-
-  # Scribbler (Docs AI) - maintain PRDs and repo docs
-  - name: scribbler
-    label: Scribbler (Docs)
-    role: docs
-    worktree: true
-    env:
-      BD_ACTOR: scribbler
 
   # Forge (Agent-file Authoring AI) - drafts and validates OpenCode agent definitions
   - name: forge
     label: Forge (Agents)
     role: agents
+    window: specialist
     worktree: true
     env:
       BD_ACTOR: forge
-
-  # Pixel (Art AI) - asset generation and review support
-  - name: pixel
-    label: Pixel (Art)
-    role: art
-    worktree: true
-    env:
-      BD_ACTOR: pixel
-
-  # User pane - interactive shell for the Producer
-  - name: user
-    label: User
-    is_user: true
-    worktree: false

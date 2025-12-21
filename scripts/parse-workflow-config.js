@@ -14,6 +14,7 @@
  *   - name: string (required)
  *   - label: string (display name)
  *   - role: string (waif startWork role)
+ *   - window: string (tmux window name, default "core")
  *   - worktree: bool
  *   - env: dict of env vars
  *   - idle: dict with task, frequency, variance (or null)
@@ -36,6 +37,7 @@ const DEFAULT_AGENTS = [
     name: 'pm',
     label: 'PM agent',
     role: 'pm',
+    window: 'core',
     worktree: true,
     env: { BD_ACTOR: 'pm' },
     idle: { task: 'clear; waif in-progress', frequency: 30, variance: 10 },
@@ -45,6 +47,7 @@ const DEFAULT_AGENTS = [
     name: 'design',
     label: 'Design agent',
     role: 'design',
+    window: 'core',
     worktree: true,
     env: { BD_ACTOR: 'design' },
     idle: null,
@@ -54,6 +57,7 @@ const DEFAULT_AGENTS = [
     name: 'build',
     label: 'Build agent',
     role: 'build',
+    window: 'core',
     worktree: true,
     env: { BD_ACTOR: 'build' },
     idle: null,
@@ -63,6 +67,7 @@ const DEFAULT_AGENTS = [
     name: 'docs',
     label: 'Doc agent',
     role: 'docs',
+    window: 'core',
     worktree: true,
     env: { BD_ACTOR: 'docs' },
     idle: null,
@@ -72,6 +77,7 @@ const DEFAULT_AGENTS = [
     name: 'review',
     label: 'Review agent',
     role: 'review',
+    window: 'core',
     worktree: true,
     env: { BD_ACTOR: 'review' },
     idle: null,
@@ -81,6 +87,7 @@ const DEFAULT_AGENTS = [
     name: 'user',
     label: 'User',
     role: null,
+    window: 'core',
     worktree: false,
     env: {},
     idle: null,
@@ -146,6 +153,10 @@ function validateAgent(agent, index) {
     errors.push(`Agent ${index} (${name}): 'role' must be a string or null`);
   }
 
+  if ('window' in agent && typeof agent.window !== 'string') {
+    errors.push(`Agent ${index} (${name}): 'window' must be a string`);
+  }
+
   if ('worktree' in agent && typeof agent.worktree !== 'boolean') {
     errors.push(`Agent ${index} (${name}): 'worktree' must be a boolean`);
   }
@@ -204,6 +215,7 @@ function normalizeAgent(agent) {
     name,
     label: agent.label || name,
     role: isUser ? null : (agent.role || name),
+    window: agent.window || 'core',
     worktree: 'worktree' in agent ? agent.worktree : defaultWorktree,
     env: {},
     idle: null,
