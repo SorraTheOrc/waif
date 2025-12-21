@@ -1,5 +1,11 @@
 #!/usr/bin/env bash
-set -euo pipefail
+# Note: We use 'set -u' for undefined variable checking but NOT 'set -e'
+# because we want to handle errors gracefully (e.g., worktree creation failures
+# should not prevent tmux from starting).
+set -uo pipefail
+
+# Track warnings to display in welcome message
+declare -a WARNINGS=()
 
 usage() {
   cat <<'EOF'
@@ -226,22 +232,31 @@ ensure_worktree() {
     if git -C "$target_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
       return 0
     else
-      echo "Directory exists but is not a git worktree: $target_dir" >&2
+      WARNINGS+=("[$actor] Directory exists but is not a git worktree: $target_dir")
       return 1
     fi
   fi
 
   if worktree_exists_for_branch "$branch" >/dev/null 2>&1; then
-    echo "Branch '$branch' is already checked out in another worktree." >&2
+    WARNINGS+=("[$actor] Branch '$branch' is already checked out in another worktree")
     return 1
   fi
 
-  # Redirect worktree creation output to stderr to avoid polluting script flow
+  # Try to create the worktree
+  local output
   if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
-    git -C "$repo_root" worktree add "$target_dir" "$branch" >&2
+    if ! output=$(git -C "$repo_root" worktree add "$target_dir" "$branch" 2>&1); then
+      WARNINGS+=("[$actor] Failed to create worktree: $output")
+      return 1
+    fi
   else
-    git -C "$repo_root" worktree add -b "$branch" "$target_dir" >&2
+    if ! output=$(git -C "$repo_root" worktree add -b "$branch" "$target_dir" 2>&1); then
+      WARNINGS+=("[$actor] Failed to create worktree: $output")
+      return 1
+    fi
   fi
+  
+  return 0
 }
 
 # --- Pane bootstrap ---
@@ -278,13 +293,15 @@ pane_bootstrap_from_config() {
   
   # Agent pane
   local working_dir="$repo_root"
+  local worktree_failed=0
   
   if [[ "$use_worktree" == "1" ]]; then
-    if ! ensure_worktree "$name"; then
-      tmux send-keys -t "$pane_id" "cd \"$repo_root\"; clear; echo \"[$label] Failed to create/reuse worktree for $name\"" C-m
-      return 0
+    if ensure_worktree "$name"; then
+      working_dir="$(worktree_dir_path "$name")"
+    else
+      # Worktree failed - continue with repo root
+      worktree_failed=1
     fi
-    working_dir="$(worktree_dir_path "$name")"
   fi
   
   # Build the command to send to the pane
@@ -302,6 +319,11 @@ pane_bootstrap_from_config() {
   fi
   
   cmd+="; clear"
+  
+  # Show warning if worktree failed
+  if [[ "$worktree_failed" -eq 1 ]]; then
+    cmd+="; echo '⚠ [$label] Worktree unavailable - using repo root'"
+  fi
   
   # Add idle task setup if configured
   if [[ -n "$idle_task" ]]; then
@@ -359,13 +381,16 @@ create_layout_in_window() {
 
   local agent_count="${#window_agents[@]}"
   if [[ "$agent_count" -eq 0 ]]; then
-    echo "Error: No agents configured for window '$window_name'." >&2
-    return 1
+    echo "Warning: No agents configured for window '$window_name'." >&2
+    return 0  # Don't fail, just skip
   fi
 
   # First pane is already created with the window
   local first_pane
-  first_pane="$(tmux display-message -p -t "$target_window" '#{pane_id}')"
+  first_pane="$(tmux display-message -p -t "$target_window" '#{pane_id}')" || {
+    echo "Error: Failed to get first pane for $target_window" >&2
+    return 0
+  }
   pane_bootstrap_from_config "$first_pane" "${window_agents[0]}"
 
   # Create additional panes
@@ -381,7 +406,10 @@ create_layout_in_window() {
     fi
     
     local new_pane
-    new_pane="$(tmux split-window -t "$target_window" -c "$repo_root" -P -F '#{pane_id}' $split_dir)"
+    new_pane="$(tmux split-window -t "$target_window" -c "$repo_root" -P -F '#{pane_id}' $split_dir 2>&1)" || {
+      echo "Warning: Failed to create pane for ${AGENT_NAMES[$agent_idx]}: $new_pane" >&2
+      continue
+    }
     pane_bootstrap_from_config "$new_pane" "$agent_idx"
     
     # Track user pane for focus
@@ -440,8 +468,18 @@ create_all_windows() {
 # --- Main ---
 
 # Load and parse agent config
-agents_json="$(load_agents_config)"
+agents_json="$(load_agents_config)" || {
+  echo "Error: Failed to load agent config" >&2
+  exit 1
+}
 parse_agents_json "$agents_json"
+
+if [[ "${#AGENT_NAMES[@]}" -eq 0 ]]; then
+  echo "Error: No agents parsed from config" >&2
+  exit 1
+fi
+
+echo "Starting workflow with ${#AGENT_NAMES[@]} agents..." >&2
 
 if [[ -n "${TMUX:-}" ]]; then
   current_session="$(tmux display-message -p '#{session_name}')"
@@ -464,6 +502,15 @@ if [[ -n "${TMUX:-}" ]]; then
   first_win=$(get_window_names | head -1)
   tmux select-window -t "${current_session}:${first_win}" >/dev/null 2>&1 || true
   retitle_window_panes "${current_session}:${first_win}" "$first_win" 0
+  
+  # Print any warnings
+  if [[ "${#WARNINGS[@]}" -gt 0 ]]; then
+    echo "" >&2
+    echo "Warnings:" >&2
+    for warn in "${WARNINGS[@]}"; do
+      echo "  - $warn" >&2
+    done
+  fi
   exit 0
 fi
 
@@ -476,7 +523,11 @@ fi
 if tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "Reusing existing tmux session: $SESSION" >&2
 else
-  tmux new-session -d -s "$SESSION" -n "temp" -c "$repo_root"
+  echo "Creating new tmux session: $SESSION" >&2
+  tmux new-session -d -s "$SESSION" -n "temp" -c "$repo_root" || {
+    echo "Error: Failed to create tmux session" >&2
+    exit 1
+  }
   create_all_windows "$SESSION"
   # Remove the temp window if it still exists
   tmux kill-window -t "${SESSION}:temp" 2>/dev/null || true
@@ -490,5 +541,15 @@ while read -r window_name; do
   retitle_window_panes "${SESSION}:${window_name}" "$window_name" 0
   setup_tmux_options "${SESSION}:${window_name}"
 done < <(get_window_names)
+
+# Print any warnings before attaching
+if [[ "${#WARNINGS[@]}" -gt 0 ]]; then
+  echo "" >&2
+  echo "Warnings:" >&2
+  for warn in "${WARNINGS[@]}"; do
+    echo "  - $warn" >&2
+  done
+  echo "" >&2
+fi
 
 tmux attach -t "$SESSION"
