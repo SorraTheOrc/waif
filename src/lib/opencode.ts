@@ -75,7 +75,7 @@ export async function ensureClient(): Promise<any | undefined> {
   const cfg = readYaml(resolve('.opencode/server.yaml')) || {};
   const serverCfg = cfg.server || {};
   const host = process.env.OPENCODE_HOST || serverCfg.host || 'localhost';
-  const port = Number(process.env.OPENCODE_PORT || serverCfg.port || 8080);
+  const port = Number(process.env.OPENCODE_PORT || serverCfg.port || 4096);
 
   const running = await checkPort(host, port, 300);
 
