@@ -101,6 +101,25 @@ export async function ensureClient(): Promise<any | undefined> {
           await new Promise((r) => setTimeout(r, 200));
         }
         process.stderr.write(`[debug] OpenCode: server listening at http://${host}:${port}\n`);
+
+        // recreate agent_map cache after starting server
+        try {
+          const map = await oc.listAgents ? await oc.listAgents() : undefined;
+          // if oc.listAgents returns mapping, write to .opencode/agent_map.yaml
+          if (map && typeof map === 'object') {
+            const outLines: string[] = [];
+            for (const [k, v] of Object.entries(map)) {
+              outLines.push(`${k}: ${v}`);
+            }
+            const { writeFileSync, mkdirSync } = await import('fs');
+            const { dirname } = await import('path');
+            const target = resolve('.opencode/agent_map.yaml');
+            mkdirSync(dirname(target), { recursive: true });
+            writeFileSync(target, outLines.join('\n') + '\n', 'utf8');
+          }
+        } catch (e) {
+          // ignore errors in cache creation
+        }
       } catch (e) {
         process.stderr.write(`[warn] OpenCode: failed to start local server: ${e instanceof Error ? e.message : String(e)}\n`);
       }
@@ -116,6 +135,19 @@ export async function ensureClient(): Promise<any | undefined> {
       },
       _oc: oc,
     };
+
+    // ensure agent_map exists (create empty cache if missing)
+    try {
+      const { writeFileSync, existsSync, mkdirSync } = await import('fs');
+      const target = resolve('.opencode/agent_map.yaml');
+      if (!existsSync(target)) {
+        mkdirSync(resolve('.opencode'), { recursive: true });
+        writeFileSync(target, '# Auto-generated agent map\n', 'utf8');
+      }
+    } catch (e) {
+      // ignore
+    }
+
     return client;
   } catch (e) {
     process.stderr.write(`[warn] OpenCode SDK unavailable: ${e instanceof Error ? e.message : String(e)}\n`);
