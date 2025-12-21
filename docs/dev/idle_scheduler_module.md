@@ -73,7 +73,7 @@ Override `idle_task()` to change the output destination or action.
 
 ## Testing Notes
 
-- Since the module is sourced in Bash, automated tests can simulate execution by sourcing the file within a subshell, manipulating environment variables, and invoking `__idle_scheduler_run` manually.
+- Since the module is sourced in Bash, automated tests can simulate execution by invoking a test Bash instance with the module sourced, manipulating environment variables, and invoking `__idle_scheduler_run` manually.
 - Manual test steps:
   1. Source the module in a new interactive shell.
   2. Press Enter repeatedly; observe randomized `idle_task` output between prompts.
