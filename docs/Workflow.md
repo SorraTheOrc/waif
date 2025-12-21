@@ -341,9 +341,9 @@ agents:
 
 - `WORKFLOW_AGENTS_CONFIG`: Path to an alternate config file (overrides default location)
 
-### Fallback Behavior
+### Required Config
 
-If `config/workflow_agents.yaml` is missing, the script falls back to built-in defaults matching the original hard-coded behavior (pm, design, build, docs, review, user).
+The `config/workflow_agents.yaml` file is required. If it is missing, the script will error with instructions to create it. Use `node scripts/parse-workflow-config.js --defaults` to see an example config.
 
 See `docs/dev/idle_scheduler_module.md` for details on the idle scheduler integration.
 

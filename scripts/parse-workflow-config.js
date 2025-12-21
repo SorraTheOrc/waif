@@ -317,16 +317,11 @@ function main() {
   const configPath = findConfigPath(explicitPath);
 
   if (configPath === null) {
-    // Config not found - output defaults or error
-    if (explicitPath || process.env.WORKFLOW_AGENTS_CONFIG) {
-      // Explicitly specified path doesn't exist - that's an error
-      const target = explicitPath || process.env.WORKFLOW_AGENTS_CONFIG;
-      console.error(`Error: Config file not found: ${target}`);
-      process.exit(1);
-    }
-    // Default path doesn't exist - use built-in defaults silently
-    console.log(JSON.stringify(DEFAULT_AGENTS, null, 2));
-    return;
+    // Config not found - always error
+    const target = explicitPath || process.env.WORKFLOW_AGENTS_CONFIG || 'config/workflow_agents.yaml';
+    console.error(`Error: Config file not found: ${target}`);
+    console.error('Create a config file or use --defaults to see the expected format.');
+    process.exit(1);
   }
 
   const agents = parseConfig(configPath);

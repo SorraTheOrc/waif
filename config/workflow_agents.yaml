@@ -20,9 +20,9 @@
 # Environment variable override:
 #   Set WORKFLOW_AGENTS_CONFIG to use an alternate config file path.
 #
-# Fallback behavior:
-#   If this file is missing or WORKFLOW_AGENTS_CONFIG points to a non-existent file,
-#   start-workflow-tmux.sh falls back to its built-in defaults (pm, design, build, docs, review, user).
+# Required:
+#   This config file is required. If missing, the script will error with instructions.
+#   Use 'node scripts/parse-workflow-config.js --defaults' to see an example config.
 
 agents:
   - name: pm
