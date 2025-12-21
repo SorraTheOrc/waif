@@ -325,22 +325,27 @@ pane_bootstrap_from_config() {
     cmd+="; echo '⚠ [$label] Worktree unavailable - using repo root'"
   fi
   
-  # Add idle task setup if configured
-  if [[ -n "$idle_task" ]]; then
-    # Escape the idle_task for embedding in the function definition
-    # Use printf %q to properly escape
-    local escaped_task
-    escaped_task=$(printf '%q' "$idle_task")
-    cmd+="; function idle_task(){ eval $escaped_task; }"
-    cmd+="; source \"$repo_root/scripts/idle-scheduler.sh\" $idle_freq $idle_var"
-  fi
-  
   # Start waif if role is specified
+  # Note: waif startWork spawns a new shell, so any setup after this
+  # must be sent as a separate command to the pane
   if [[ -n "$role" ]]; then
     cmd+="; waif startWork \"$role\""
   fi
   
   tmux send-keys -t "$pane_id" "$cmd" C-m
+  
+  # Set up idle task AFTER waif startWork has spawned the new shell
+  # We need a small delay to let the new shell initialize
+  if [[ -n "$idle_task" ]]; then
+    local idle_cmd=""
+    # Escape the idle_task for embedding in the function definition
+    local escaped_task
+    escaped_task=$(printf '%q' "$idle_task")
+    idle_cmd="function idle_task(){ eval $escaped_task; }; source \"$repo_root/scripts/idle-scheduler.sh\" $idle_freq $idle_var"
+    
+    # Send idle setup after a brief delay to let the new shell start
+    (sleep 1; tmux send-keys -t "$pane_id" "$idle_cmd" C-m) &
+  fi
 }
 
 # --- Layout creation ---
