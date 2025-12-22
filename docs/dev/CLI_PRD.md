@@ -207,7 +207,7 @@ Secondary: Observers working in agent panes who need context on injected prompts
 ### Success criteria
 
 - Running `ask <prompt>` opens the target agent’s OpenCode TUI in its tmux pane (per config mapping), injects the prompt, and leaves focus in the invoking pane.
-- Prompt, target agent, and timestamp are logged in an AI-readable format to `~/.waif/logs/ask.log` with size-based rotation.
+- Prompt, target agent, and timestamp are logged in an AI-readable format to `~/.waif/logs/ask.log` with size-based rotation (5 MB max, keep 5 files).
 - If pane resolution or tmux injection fails, `ask` surfaces an inline error and exits non-zero.
 
 ### Constraints
@@ -223,13 +223,15 @@ Secondary: Observers working in agent panes who need context on injected prompts
 ### Desired change
 
 - Resolve the target agent pane via the configured mapping (e.g., `workflow_agents.yaml` or equivalent), not by ad-hoc pane name guessing.
-- Instruct tmux to open/attach the agent pane with OpenCode TUI, inject the provided prompt, and resume agent-side interaction there.
-- Keep the user’s focus in the invoking pane after dispatch.
+- Instruct tmux to open/attach the agent pane with OpenCode TUI, inject the provided prompt, and resume agent-side interaction there while keeping the invoking pane focused.
 - Emit an inline error and non-zero exit if the pane cannot be found or tmux injection fails; include actionable hints (e.g., “start workflow tmux session” or “check agent mapping”).
-- Append a log entry per invocation to `~/.waif/logs/ask.log` with size-based rotation (recommended: 5 MB max size, keep 5 files); entry must include timestamp, agent identifier, and raw prompt in a machine-readable format.
+- Append a log entry per invocation to `~/.waif/logs/ask.log` with size-based rotation (5 MB max size, keep 5 files); entry must include timestamp, agent identifier, and raw prompt in a machine-readable format.
 
-### Open questions
+### Flow / acceptance (decisions locked)
 
-- None. Decisions: size-based rotation 5 MB x 5 files; fail fast when pane missing (no retries); logs contain request payload only (timestamp, agent, prompt), no result metadata.
+1) Pane resolution: use the configured agent mapping (e.g., `config/workflow_agents.yaml`). Do not guess pane names outside the mapping.
+2) TUI dispatch: send the prompt to the mapped agent’s tmux pane, opening/attaching OpenCode TUI there; interaction continues in that pane while the invoking pane keeps focus.
+3) Failure handling: if the agent pane is missing or tmux injection fails, print an inline error with a hint (“start workflow tmux session” / “check agent mapping”) and exit non-zero.
+4) Logging: append one entry per invocation to `~/.waif/logs/ask.log` with rotation (5 MB, 5 files). Entry fields: ISO-8601 timestamp, agent identifier, raw prompt; machine-readable (e.g., JSONL). No response payload is logged.
 
 Source issue: wf-ug7
