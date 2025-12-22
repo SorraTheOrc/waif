@@ -109,7 +109,7 @@ Rule of Five policy: use the 5-pass prompt set when authoring/reviewing artifact
 
 ### 4.6 CLI utility commands (recommended) (see wf-ba2.8, wf-ba2.5)
 
-* `context` (alias: `ctx`): generate the shared context pack at `docs/dev/CONTEXT_PACK.md` following the template in 8.3.1. The command must respect ignore boundaries and redact or omit any ignored content.
+* `context` (alias: `ctx`): generate/update the agent Context Pack at `docs/dev/CONTEXT_PACK.md`. See: `docs/dev/context_pack_PRD.md`.
 * `check-release`: run a full release readiness check that executes tests, collects coverage reports, runs a feature-flag audit, and validates documentation presence. It must exit non-zero on failure and emit a machine-readable JSON summary when `--json` is provided.
 * `flag-audit`: list feature flags and their enabled/disabled state (reads the canonical flags file); optionally produce a report of flags that are enabled by default.
 
