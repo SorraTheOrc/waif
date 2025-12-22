@@ -170,7 +170,9 @@ function sendToPane(paneId: string, prompt: string) {
   if (process.env.WAIF_TMUX_DRY_RUN === '1' || process.env.WAIF_TMUX_PANES) return;
 
   const tmuxBin = process.env.WAIF_TMUX_BIN || 'tmux';
-  const res = spawnSync(tmuxBin, ['send-keys', '-t', paneId, 'opencode', 'C-m', prompt, 'C-m'], { encoding: 'utf8' });
+  const promptArg = JSON.stringify(prompt);
+  const commandString = `opencode --prompt ${promptArg}`;
+  const res = spawnSync(tmuxBin, ['send-keys', '-t', paneId, commandString, 'C-m'], { encoding: 'utf8' });
   if (res.status !== 0) {
     const err = (res.stderr || res.stdout || '').toString().trim();
     throw new CliError(`Failed to send prompt to tmux pane${err ? `: ${err}` : ''}`, 1);
