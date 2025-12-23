@@ -194,6 +194,7 @@ export function createAskCommand() {
       let agent = options.agent || process.env.OPENCODE_DEFAULT_AGENT || 'map';
 
       let promptText: string | undefined;
+      let agentDetectedFromPrompt = false;
       if (Array.isArray(promptArg)) {
         if (promptArg.length === 1 && promptArg[0] === '-') {
           promptText = await readStdin();
@@ -218,6 +219,7 @@ export function createAskCommand() {
         if (map[firstWord]) {
           agent = firstWord;
           promptWords.shift();
+          agentDetectedFromPrompt = true;
         } else {
           const configMatch = Object.values(agents).find(
             (a) => a.name.toLowerCase() === lowerFirst || a.label?.toLowerCase() === lowerFirst,
@@ -225,8 +227,15 @@ export function createAskCommand() {
           if (configMatch) {
             agent = configMatch.name;
             promptWords.shift();
+            agentDetectedFromPrompt = true;
           }
         }
+        
+        // If we found an agent and the next word is "to", remove it
+        if (agentDetectedFromPrompt && promptWords[0]?.toLowerCase() === 'to') {
+          promptWords.shift();
+        }
+
         promptText = promptWords.join(' ').trim();
         if (!promptText) {
           throw new CliError('Missing prompt after removing agent name', 2);
