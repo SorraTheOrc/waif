@@ -33,14 +33,17 @@ function runCmd(cmd: string, args: string[]): { stdout: string; stderr: string; 
 }
 
 function listPanes(): ProbeSource {
-  const res = runCmd('tmux', ['list-panes', '-a', '-F', '#{session_name}:#{window_index}.#{pane_index}\t#{pane_title}\t#{pane_pid}']);
+  // Use window_name so the agent identity (window) is available rather than the numeric window_index
+  const res = runCmd('tmux', ['list-panes', '-a', '-F', '#{session_name}:#{window_name}.#{pane_index}\t#{pane_title}\t#{pane_pid}']);
   if (res.status !== 0) return { rows: [], raw: res.stdout ?? '', error: res.stderr || res.stdout || 'tmux list-panes failed' };
   const rows = res.stdout
     .split(/\r?\n/)
     .filter(Boolean)
     .map((line) => {
       const [pane, title = '', pid = ''] = line.split('\t');
-      return { pane, title, pid: pid && pid !== '-' && pid !== '-1' ? pid : undefined } as PaneSourceRow;
+      const [sessionPart, windowPart] = (pane || '').split(':');
+      const windowName = (windowPart || '').split('.')?.[0] || '';
+      return { pane, title, pid: pid && pid !== '-' && pid !== '-1' ? pid : undefined, session: sessionPart, window: windowName } as any;
     });
   return { rows, raw: res.stdout };
 }
