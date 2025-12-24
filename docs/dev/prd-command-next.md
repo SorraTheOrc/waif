@@ -3,7 +3,7 @@
 ## Introduction
 
 * One-liner
-  * CLI tool `waif` exposing subcommand `next` that returns the single best issue to work on now, with a human summary and an optional `--json` machine output.
+  * CLI tool `waif` exposing subcommand `next` that returns the single best issue to work on now, printing a compact human output and supporting `--json` machine output.
 
 * Problem statement
   * PMs and AI orchestrators spend time deciding what to work on next. This command reduces decision friction by selecting the top, unblocked, high-value issue using repository issue metadata and existing bv prioritization scores.
@@ -28,7 +28,7 @@
   * AI orchestrator / automation tooling — consumes `waif next --json` for programmatic decision-making.
 
 * Key user journeys
-  * PM runs: `waif next` → sees a one-line summary and a 1–2 sentence rationale with link to the issue.
+  * PM runs: `waif next` → sees a one-row recommendation table plus a details section (from `bd show` when available).
   * PM runs: `waif next --json` → receives bd-format JSON augmented with a top-level `waif` object containing computed score and ranking metadata.
   * Automation: scheduled agent runs `waif next --json` to seed downstream orchestration workflows.
 
@@ -37,8 +37,12 @@
 * Functional requirements (MVP)
 
 1. `waif next` lists eligible candidates (open and unblocked) and returns the top-ranked issue.
-2. `waif next` prints human-readable output in three sections: (1) if any issues currently have status `in_progress`, print an "In Progress" section containing a table (ID, Title, Priority, Blocks, Assignee), (2) a "Recommended Summary" section containing a table of the recommended issue(s), and (3) a "Recommended Detail" section containing the full `bd show <id>` output when `bd` is available.
-3. When `bd` is not available, "Recommended Detail" falls back to: `<id>: <title>` (no selection rationale line is printed in human output).
+
+2. `waif next` prints human-readable output. Two presentation modes exist and the CLI should prefer the simpler default unless configured:
+  - Default (concise): print a one-row recommendation table, a blank line, a `# Details` heading, and the full `bd show <id>` output when `bd` is available. When `bd` is not available, `# Details` falls back to `<id>: <title>` (no selection rationale line is printed in human output).
+  - Verbose / in-progress-aware: if any issues currently have status `in_progress`, include an "In Progress" section above the recommendation that contains a table (ID, Title, Priority, Blocks, Assignee). The rest of the output remains as in the default mode.
+
+3. `waif next --json` prints a JSON object with full issue details plus computed score and ranking metadata.
 3. `waif next --json` prints a JSON object with full issue details plus computed score and ranking metadata.
 4. Ranking uses existing bv prioritization scores as the primary signal; tie-break deterministically by computed numeric score and, if equal, by `id` (lexicographic).
 5. CLI flags: `--json`, `--verbose` (debug logs), `--no-clipboard`.

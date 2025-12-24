@@ -12,7 +12,7 @@ function makeIssues(path: string, issues: any[]) {
 }
 
 describe('waif next', () => {
-  it('prints in-progress table before recommendation', async () => {
+  it('does not print in-progress table; shows recommendation', async () => {
     const tmpIssues = join(tmpdir(), `issues-${Date.now()}-inprogress.jsonl`);
     makeIssues(tmpIssues, [
       { id: 'wf-1', title: 'First', status: 'open', priority: 2 },
@@ -47,15 +47,13 @@ describe('waif next', () => {
 
     expect(exitCode).toBe(0);
 
-    const idxInProgress = stdout.indexOf('# In Progress');
     const idxSummary = stdout.indexOf('# Recommended Summary');
-    const idxDetail = stdout.indexOf('# Recommended Detail');
+    const idxDetail = stdout.indexOf('# Details');
 
-    expect(idxInProgress).toBeGreaterThanOrEqual(0);
-    expect(idxSummary).toBeGreaterThan(idxInProgress);
-    expect(idxDetail).toBeGreaterThan(idxSummary);
+    // In Progress should no longer be printed by `waif next`
+    expect(stdout).not.toContain('# In Progress');
 
-    // in-progress table
+    // in-progress table: feature shows in-progress inline; ensure expectations
     expect(stdout).toContain('wf-ip1');
     const symbols = getDefaultSymbols();
     const inProgressLine = stdout
@@ -66,6 +64,10 @@ describe('waif next', () => {
       `wf-ip1  ${symbols.fallback?.issueType ?? '?'} ${symbols.status.in_progress} In progress one`,
     );
     expect(inProgressLine).toMatch(/\s+0\s+alice/);
+
+    // Also respect main's removal of the Recommended Summary heading
+    expect(stdout).not.toContain('# Recommended Summary');
+    expect(idxDetail).toBeGreaterThanOrEqual(0);
 
     // summary table contains the chosen issue
     expect(stdout).toContain('wf-2');
@@ -89,8 +91,8 @@ describe('waif next', () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).not.toContain('# In Progress');
-    expect(stdout).toContain('# Recommended Summary');
-    expect(stdout).toContain('# Recommended Detail');
+    expect(stdout).not.toContain('# Recommended Summary');
+    expect(stdout).toContain('# Details');
   });
 
   it('picks highest bv score when provided', async () => {

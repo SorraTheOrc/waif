@@ -224,18 +224,17 @@ bd sync               # Commit and push changes
 
 ### Workflow Pattern
 
-**IMPORTANT: If working in a secondary worktree (worktree_* branches), sync with main FIRST:**
-
-```bash
-git fetch origin main:main  # Update local main
-git rebase main             # Sync worktree branch with main
-```
-
 1. **Start**: Run `bd ready` to find actionable work
 2. **Claim**: Use `bd update <id> --status=in_progress`
-3. **Work**: Implement the task
+3. **Work**: Implement the task on a branch named with the bd id (see naming conventions)
 4. **Complete**: Use `bd close <id>`
 5. **Sync**: Always run `bd sync` at session end
+
+Branch guidance (branch-per-bd):
+
+- All work MUST be performed on branches that include the bd id. Create a short-lived topic branch from `origin/main` for each bd issue.
+- If a branch already exists for the bd issue, reuse it and record your involvement in bd comments.
+- Agents and humans should avoid editing files that other agents have claimed in bd unless coordination is documented.
 
 ### Key Concepts
 

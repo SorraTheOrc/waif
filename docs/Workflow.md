@@ -87,6 +87,7 @@ waif intake --title "Feature X: Intake brief" \
 ```
 
 Notes:
+
 - The tool prefers calling `bd` for issue creation and update; when `bd` is unavailable it falls back to a deterministic edit of `.beads/issues.jsonl` and prints exact manual steps for the user.
 - The cross-link is idempotent: re-running the same command will not add duplicate `Linked PRD` lines.
 
@@ -130,10 +131,11 @@ waif prd --out "$PRD_PATH" --prompt-file docs/dev/prompt.txt
 ```
 
 Notes:
+
 - `--prompt` and `--prompt-file` are mutually exclusive; providing both exits with code 2.
 - The prompt is embedded into the PRD as a comment block so the context is preserved in-repo.
 
-Summary: at the end of this step, there is a concrete PRD file at `$PRD_PATH`. 
+Summary: at the end of this step, there is a concrete PRD file at `$PRD_PATH`.
 
 ### 3) Review and sign-off the PRD
 
@@ -197,7 +199,7 @@ Summary: the PRD is now expressed as milestone-labeled issues with explicit depe
 
 ### 4.1) Select the next most important issue (PM agent) (see wf-dt1, wf-ca1)
 
-Use the `waif next` command as the canonical, repository-native way to select the next work item. Prefer `waif next` as the single entry point: it queries the project issue state, enriches candidates with available priority signals, and returns a single, defensible recommendation with a concise human rationale and optional machine-readable JSON. If `waif next` appears to be providing a sub-optimal recommendation, consult the detailed `bd`/`bv` outputs for debugging and signal analysis. After selection, proceed with the canonical implementation flow (see `/implement`). For full behavior, flags, and JSON schema, see `docs/dev/find_next_PRD.md`.
+Use the `waif next` command as the canonical, repository-native way to select the next work item. Prefer `waif next` as the single entry point: it queries the project issue state, enriches candidates with available priority signals, and returns a single, defensible recommendation with a concise human rationale and optional machine-readable JSON. If `waif next` appears to be providing a sub-optimal recommendation, consult the detailed `bd`/`bv` outputs for debugging and signal analysis. After selection, proceed with the canonical implementation flow (see `/implement`). For full behavior, flags, and JSON schema, see `docs/dev/prd-command-next.md`.
 
 ### 4.2) Create or improve the issue design (design agent)
 
@@ -233,7 +235,7 @@ Only proceed once the disposition is explicit.
   - Implement scoped changes per issue.
   - Update tests and docs for the change.
   - Keep changes minimal and aligned with repo conventions.
-  - Use the OpenCode command `/implement <bd-id>` for the canonical branch/PR workflow and Beads hygiene.
+  - Use the OpenCode command `/implement <bd-id>` for the canonical branch/PR workflow and Beads hygiene. `implement` will create or reuse a branch named with the beads prefix and id (format: `<beads_prefix>-<id>/<short-desc>`). Agents SHOULD check for existing branches that start with `<beads_prefix>-<id>` and reuse them when present.
 
 Quality and releaseability rules (recommended):
 
@@ -305,7 +307,6 @@ The multi-agent tmux workflow can be launched with `scripts/start-workflow-tmux.
 Agent panes are configured via `config/workflow_agents.yaml`. This file defines:
 
 - **Agent list**: Which agents to spawn and in what order
-- **Worktree settings**: Whether each agent uses a dedicated git worktree
 - **Environment variables**: Per-agent env overrides (e.g., `BD_ACTOR`)
 - **Idle scheduler**: Optional idle task commands with frequency/variance settings
 
@@ -316,7 +317,7 @@ agents:
   - name: pm
     label: PM agent
     role: pm
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: pm
     idle:
@@ -327,14 +328,14 @@ agents:
   - name: design
     label: Design agent
     role: design
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: design
 
   - name: user
     label: User
     is_user: true
-    worktree: false
+    # (no worktree configuration)
 ```
 
 ### Environment Variables

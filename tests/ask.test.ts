@@ -27,8 +27,56 @@ test('ask command sends prompt to mapped tmux pane and logs', async () => {
   rmSync(logDir, { recursive: true, force: true });
 });
 
-test('ask requires prompt', async () => {
+test('ask removes "to" after agent name', async () => {
+  const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
+  process.env.WAIF_LOG_DIR = logDir;
   process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
-  const code = await run(['ask']);
-  expect(code).toBe(2);
+  
+  // "map to hello world" -> agent: map, prompt: "hello world"
+  const code = await run(['ask', 'map', 'to', 'hello', 'world']);
+  expect(code).toBe(0);
+  
+  const logPath = join(logDir, 'ask.log');
+  const log = readFileSync(logPath, 'utf8');
+  const entry = JSON.parse(log);
+  expect(entry.agent).toBe('map');
+  expect(entry.prompt).toBe('hello world');
+  
+  rmSync(logDir, { recursive: true, force: true });
+});
+
+test('ask does not remove "to" if no agent name provided', async () => {
+  const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
+  process.env.WAIF_LOG_DIR = logDir;
+  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
+  
+  // "to be or not to be" -> agent: map (default), prompt: "to be or not to be"
+  const code = await run(['ask', 'to', 'be', 'or', 'not', 'to', 'be']);
+  expect(code).toBe(0);
+  
+  const logPath = join(logDir, 'ask.log');
+  const log = readFileSync(logPath, 'utf8');
+  const entry = JSON.parse(log);
+  expect(entry.agent).toBe('map');
+  expect(entry.prompt).toBe('to be or not to be');
+  
+  rmSync(logDir, { recursive: true, force: true });
+});
+
+test('ask does not remove other words after agent name', async () => {
+  const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
+  process.env.WAIF_LOG_DIR = logDir;
+  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
+  
+  // "map hello world" -> agent: map, prompt: "hello world"
+  const code = await run(['ask', 'map', 'hello', 'world']);
+  expect(code).toBe(0);
+  
+  const logPath = join(logDir, 'ask.log');
+  const log = readFileSync(logPath, 'utf8');
+  const entry = JSON.parse(log);
+  expect(entry.agent).toBe('map');
+  expect(entry.prompt).toBe('hello world');
+  
+  rmSync(logDir, { recursive: true, force: true });
 });

@@ -15,7 +15,7 @@
  *   - label: string (display name)
  *   - role: string (waif startWork role)
  *   - window: string (tmux window name, default "core")
- *   - worktree: bool
+ *   - worktree: (removed) bool — not used (ignored)
  *   - env: dict of env vars
  *   - idle: dict with task, frequency, variance (or null)
  *   - is_user: bool
@@ -38,7 +38,6 @@ const DEFAULT_AGENTS = [
     label: 'PM agent',
     role: 'pm',
     window: 'core',
-    worktree: true,
     env: { BD_ACTOR: 'pm' },
     idle: { task: 'clear; waif in-progress', frequency: 30, variance: 10 },
     is_user: false,
@@ -48,7 +47,6 @@ const DEFAULT_AGENTS = [
     label: 'Design agent',
     role: 'design',
     window: 'core',
-    worktree: true,
     env: { BD_ACTOR: 'design' },
     idle: null,
     is_user: false,
@@ -58,7 +56,6 @@ const DEFAULT_AGENTS = [
     label: 'Build agent',
     role: 'build',
     window: 'core',
-    worktree: true,
     env: { BD_ACTOR: 'build' },
     idle: null,
     is_user: false,
@@ -68,7 +65,6 @@ const DEFAULT_AGENTS = [
     label: 'Doc agent',
     role: 'docs',
     window: 'core',
-    worktree: true,
     env: { BD_ACTOR: 'docs' },
     idle: null,
     is_user: false,
@@ -78,7 +74,6 @@ const DEFAULT_AGENTS = [
     label: 'Review agent',
     role: 'review',
     window: 'core',
-    worktree: true,
     env: { BD_ACTOR: 'review' },
     idle: null,
     is_user: false,
@@ -88,7 +83,6 @@ const DEFAULT_AGENTS = [
     label: 'User',
     role: null,
     window: 'core',
-    worktree: false,
     env: {},
     idle: null,
     is_user: true,
@@ -157,9 +151,7 @@ function validateAgent(agent, index) {
     errors.push(`Agent ${index} (${name}): 'window' must be a string`);
   }
 
-  if ('worktree' in agent && typeof agent.worktree !== 'boolean') {
-    errors.push(`Agent ${index} (${name}): 'worktree' must be a boolean`);
-  }
+  // The 'worktree' key is no longer supported; newer workflows use branch-per-bd naming.
 
   if ('env' in agent) {
     const env = agent.env;
@@ -208,15 +200,12 @@ function normalizeAgent(agent) {
   const name = agent.name;
   const isUser = agent.is_user || false;
 
-  // Default worktree: true for agents, false for user pane
-  const defaultWorktree = !isUser;
-
   const normalized = {
     name,
     label: agent.label || name,
     role: isUser ? null : (agent.role || name),
     window: agent.window || 'core',
-    worktree: 'worktree' in agent ? agent.worktree : defaultWorktree,
+    // 'worktree' key is not used by the runtime; ignore any provided value
     env: {},
     idle: null,
     is_user: isUser,

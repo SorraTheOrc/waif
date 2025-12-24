@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # Note: We use 'set -u' for undefined variable checking but NOT 'set -e'
-# because we want to handle errors gracefully (e.g., worktree creation failures
-# should not prevent tmux from starting).
+# because we want to handle errors gracefully.
 set -uo pipefail
 
 # Track warnings to display in welcome message
@@ -10,7 +9,7 @@ declare -a WARNINGS=()
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/start-workflow-tmux.sh [--restart] [--session <name>] [--force]
+  scripts/start-workflow-tmux.sh [--restart] [--session <name>]
 
 Starts (or reuses) a tmux session and creates windows/panes for workflow agents
 (described in docs/Workflow.md) plus a user pane.
@@ -18,7 +17,6 @@ Starts (or reuses) a tmux session and creates windows/panes for workflow agents
 Options:
   --restart         kill tmux server first (outside tmux only)
   --session <name>  tmux session name (default: waif-workflow)
-  --force           force worktree deletion even with uncommitted changes
   -h, --help        show this help
 
 Environment:
@@ -34,7 +32,6 @@ EOF
 
 SESSION="waif-workflow"
 RESTART=0
-FORCE=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -45,10 +42,6 @@ while [[ $# -gt 0 ]]; do
     --session)
       SESSION="${2:-}"
       shift 2
-      ;;
-    --force)
-      FORCE=1
-      shift
       ;;
     -h|--help)
       usage
@@ -97,14 +90,13 @@ load_agents_config() {
 }
 
 # Parse JSON array into bash arrays using node (avoids jq dependency)
-# Sets global arrays: AGENT_NAMES, AGENT_LABELS, AGENT_ROLES, AGENT_WINDOWS, AGENT_WORKTREES,
+# Sets global arrays: AGENT_NAMES, AGENT_LABELS, AGENT_ROLES, AGENT_WINDOWS,
 #                     AGENT_IS_USERS, AGENT_IDLE_TASKS, AGENT_IDLE_FREQS, AGENT_IDLE_VARS
 # Also sets associative array: AGENT_ENVS (name -> "KEY=val KEY2=val2" string)
 declare -a AGENT_NAMES=()
 declare -a AGENT_LABELS=()
 declare -a AGENT_ROLES=()
 declare -a AGENT_WINDOWS=()
-declare -a AGENT_WORKTREES=()
 declare -a AGENT_IS_USERS=()
 declare -a AGENT_IDLE_TASKS=()
 declare -a AGENT_IDLE_FREQS=()
@@ -125,7 +117,6 @@ for (const agent of data) {
   const label = agent.label;
   const role = agent.role || EMPTY;
   const window = agent.window || 'core';
-  const worktree = agent.worktree ? '1' : '0';
   const is_user = agent.is_user ? '1' : '0';
   
   const idle = agent.idle || {};
@@ -142,11 +133,11 @@ for (const agent of data) {
   const env_str = envPairs.join(' ') || EMPTY;
   
   // Output tab-separated fields
-  console.log([name, label, role, window, worktree, is_user, idle_task, idle_freq, idle_var, env_str].join('\t'));
+  console.log([name, label, role, window, is_user, idle_task, idle_freq, idle_var, env_str].join('\t'));
 }
 " <<< "$json")
   
-  while IFS=$'\t' read -r name label role window worktree is_user idle_task idle_freq idle_var env_str; do
+  while IFS=$'\t' read -r name label role window is_user idle_task idle_freq idle_var env_str; do
     # Convert placeholders back to empty strings
     [[ "$role" == "__EMPTY__" ]] && role=""
     [[ "$idle_task" == "__EMPTY__" ]] && idle_task=""
@@ -156,7 +147,6 @@ for (const agent of data) {
     AGENT_LABELS+=("$label")
     AGENT_ROLES+=("$role")
     AGENT_WINDOWS+=("$window")
-    AGENT_WORKTREES+=("$worktree")
     AGENT_IS_USERS+=("$is_user")
     AGENT_IDLE_TASKS+=("$idle_task")
     AGENT_IDLE_FREQS+=("$idle_freq")
@@ -209,180 +199,43 @@ retitle_window_panes() {
   done
 }
 
-# --- Worktree helpers ---
+# --- Branch helpers ---
 
-worktree_branch_name() {
+# Ensure the current repo working directory is on the canonical branch
+# for the agent if one exists. The canonical branch format is:
+#   <beads_prefix>-<id>/<short-desc>
+# This function will attempt to switch to an existing branch that matches
+# the given beads prefix+id pattern. If no matching branch exists, it
+# leaves the repo at repo root on the current branch.
+ensure_branch_for_agent() {
   local actor="$1"
-  printf "worktree_%s" "$actor"
-}
+  local beads_prefix="$2" # e.g., bd-123
 
-# Return a path for the actor's worktree. If the branch is already checked out
-# in any worktree, return that existing path; otherwise return the default
-# ./worktree_<actor> path under the repo root.
-worktree_dir_path() {
-  local actor="$1"
-  local branch
-  branch=$(worktree_branch_name "$actor")
-
-  # Look for an existing worktree that has this branch checked out. The
-  # porcelain output lists 'worktree <path>' and 'branch refs/heads/<name>' pairs.
-  local existing
-  existing=$(git -C "$repo_root" worktree list --porcelain | awk -v b="refs/heads/$branch" '\
-    $1=="worktree"{p=$2} $1=="branch" && $2==b {print p; exit 0} END{exit 1}') || true
-
-  if [[ -n "$existing" ]]; then
-    printf "%s" "$existing"
+  # Nothing to do if no beads id provided
+  if [[ -z "$beads_prefix" ]]; then
     return 0
   fi
 
-  printf "%s/worktree_%s" "$repo_root" "$actor"
-}
+  # Look for local branch names that start with the beads_prefix
+  local match
+  match=$(git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads | grep -E "^${beads_prefix}(/|-)" | head -n1 || true)
+  if [[ -n "$match" ]]; then
+    git -C "$repo_root" checkout "$match" >/dev/null 2>&1 || WARNINGS+=("[$actor] Failed to checkout branch $match")
+    return 0
+  fi
 
-ensure_worktree() {
-  local actor="$1"
-  local target_dir
-  target_dir="$(worktree_dir_path "$actor")"
-  local branch
-  branch=$(worktree_branch_name "$actor")
-
-  # If the target directory already exists on disk, ensure it's a worktree.
-  if [[ -d "$target_dir" ]]; then
-    if git -C "$target_dir" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  # If none found locally, try remote
+  match=$(git -C "$repo_root" ls-remote --heads origin "${beads_prefix}*" | awk '{print $2}' | sed 's|refs/heads/||' | head -n1 || true)
+  if [[ -n "$match" ]]; then
+    # Create a local tracking branch
+    if git -C "$repo_root" checkout -b "$match" --track "origin/$match" >/dev/null 2>&1; then
       return 0
     else
-      WARNINGS+=("[$actor] Directory exists but is not a git worktree: $target_dir")
-      return 1
+      WARNINGS+=("[$actor] Failed to create tracking branch $match")
     fi
   fi
 
-  # If the branch is checked out in another worktree, reuse it instead of failing.
-  local existing
-  existing=$(git -C "$repo_root" worktree list --porcelain | awk -v b="refs/heads/$branch" '\
-    $1=="worktree"{p=$2} $1=="branch" && $2==b {print p; exit 0} END{exit 1}') || true
-  if [[ -n "$existing" ]]; then
-    WARNINGS+=("[$actor] Branch '$branch' already checked out at: $existing")
-    return 0
-  fi
-
-  # Try to create the worktree at the desired path
-  local output
-  if git -C "$repo_root" show-ref --verify --quiet "refs/heads/$branch"; then
-    if ! output=$(git -C "$repo_root" worktree add "$target_dir" "$branch" 2>&1); then
-      WARNINGS+=("[$actor] Failed to create worktree: $output")
-      return 1
-    fi
-  else
-    if ! output=$(git -C "$repo_root" worktree add -b "$branch" "$target_dir" 2>&1); then
-      WARNINGS+=("[$actor] Failed to create worktree: $output")
-      return 1
-    fi
-  fi
-  
   return 0
-}
-
-# Check if a worktree has uncommitted changes (staged, unstaged, or untracked)
-# Returns 0 if clean, 1 if dirty
-# Sets WORKTREE_STATUS to human-readable status
-check_worktree_clean() {
-  local worktree_path="$1"
-  WORKTREE_STATUS=""
-  WORKTREE_DETAIL=""
-  
-  if [[ ! -d "$worktree_path" ]]; then
-    return 0  # Non-existent is considered clean
-  fi
-  
-  local status_output
-  status_output=$(git -C "$worktree_path" status --porcelain 2>/dev/null) || return 0
-  
-  if [[ -z "$status_output" ]]; then
-    return 0  # Clean
-  fi
-  
-  # Parse status to provide meaningful message
-  local staged=0 modified=0 untracked=0
-  while IFS= read -r line; do
-    local index_status="${line:0:1}"
-    local worktree_status="${line:1:1}"
-    
-    if [[ "$index_status" != " " && "$index_status" != "?" ]]; then
-      ((staged++))
-    fi
-    if [[ "$worktree_status" == "M" || "$worktree_status" == "D" ]]; then
-      ((modified++))
-    fi
-    if [[ "$index_status" == "?" ]]; then
-      ((untracked++))
-    fi
-  done <<< "$status_output"
-  
-  local parts=()
-  [[ "$staged" -gt 0 ]] && parts+=("$staged staged")
-  [[ "$modified" -gt 0 ]] && parts+=("$modified modified")
-  [[ "$untracked" -gt 0 ]] && parts+=("$untracked untracked")
-  
-  WORKTREE_STATUS=$(IFS=", "; echo "${parts[*]}")
-  WORKTREE_DETAIL="$status_output"
-  return 1  # Dirty
-}
-
-# Get list of all workflow worktrees (worktree_* directories)
-get_workflow_worktrees() {
-  git -C "$repo_root" worktree list --porcelain | awk '$1=="worktree"{print $2}' | while read -r wt_path; do
-    local base
-    base=$(basename "$wt_path")
-    if [[ "$base" == worktree_* ]]; then
-      echo "$wt_path"
-    fi
-  done
-}
-
-# Check all worktrees for uncommitted changes
-# Returns 0 if all clean, 1 if any dirty
-# Sets DIRTY_WORKTREES array with paths, status, and detail
-declare -a DIRTY_WORKTREES=()
-check_all_worktrees_clean() {
-  DIRTY_WORKTREES=()
-  local all_clean=0
-  
-  while read -r wt_path; do
-    [[ -z "$wt_path" ]] && continue
-    echo "  Checking $(basename "$wt_path")..." >&2
-    if ! check_worktree_clean "$wt_path"; then
-      DIRTY_WORKTREES+=("$wt_path|$WORKTREE_STATUS|$WORKTREE_DETAIL")
-      all_clean=1
-    fi
-  done < <(get_workflow_worktrees)
-  
-  return $all_clean
-}
-
-# Delete all workflow worktrees
-delete_all_worktrees() {
-  local force_flag="${1:-0}"
-  
-  echo "Removing workflow worktrees..." >&2
-  
-  while read -r wt_path; do
-    [[ -z "$wt_path" ]] && continue
-    local wt_name
-    wt_name=$(basename "$wt_path")
-    echo "  Removing $wt_name..." >&2
-    
-    if [[ "$force_flag" -eq 1 ]]; then
-      if ! git -C "$repo_root" worktree remove --force "$wt_path" 2>&1; then
-        echo "    Warning: Failed to remove $wt_name" >&2
-      fi
-    else
-      if ! git -C "$repo_root" worktree remove "$wt_path" 2>&1; then
-        echo "    Warning: Failed to remove $wt_name" >&2
-      fi
-    fi
-  done < <(get_workflow_worktrees)
-  
-  echo "Pruning worktree references..." >&2
-  git -C "$repo_root" worktree prune 2>/dev/null || true
 }
 
 # --- Pane bootstrap ---
@@ -402,7 +255,7 @@ pane_bootstrap_from_config() {
   local name="${AGENT_NAMES[$idx]}"
   local label="${AGENT_LABELS[$idx]}"
   local role="${AGENT_ROLES[$idx]}"
-  local use_worktree="${AGENT_WORKTREES[$idx]}"
+  # (worktree settings removed; run in repo root and switch branches as needed)
   local is_user="${AGENT_IS_USERS[$idx]}"
   local idle_task="${AGENT_IDLE_TASKS[$idx]}"
   local idle_freq="${AGENT_IDLE_FREQS[$idx]}"
@@ -419,15 +272,24 @@ pane_bootstrap_from_config() {
   
   # Agent pane
   local working_dir="$repo_root"
-  local worktree_failed=0
-  
-  if [[ "$use_worktree" == "1" ]]; then
-    if ensure_worktree "$name"; then
-      working_dir="$(worktree_dir_path "$name")"
-    else
-      # Worktree failed - continue with repo root
-      worktree_failed=1
+
+  # If the config specified a beads id in env (BD_ACTOR_ID) or similar, try
+  # to checkout a branch matching that beads id. Otherwise leave in repo root.
+  local beads_prefix=""
+  # Try common env var used for beads id if present in AGENT_ENVS
+  if [[ -n "${AGENT_ENVS[$name]:-}" ]]; then
+    # Look for a BD_ACTOR_ID or BEADS_ID entry in the env string
+    if echo "${AGENT_ENVS[$name]}" | grep -q "BD_ACTOR_ID="; then
+      beads_prefix=$(echo "${AGENT_ENVS[$name]}" | sed -n "s/.*BD_ACTOR_ID='\([^']*\)'.*/\1/p")
+    elif echo "${AGENT_ENVS[$name]}" | grep -q "BEADS_ID="; then
+      beads_prefix=$(echo "${AGENT_ENVS[$name]}" | sed -n "s/.*BEADS_ID='\([^']*\)'.*/\1/p")
     fi
+  fi
+
+  if [[ -n "$beads_prefix" ]]; then
+    ensure_branch_for_agent "$name" "$beads_prefix"
+    # After attempting checkout, set working_dir to repo_root (we run in-place)
+    working_dir="$repo_root"
   fi
   
   # Build the command to send to the pane
@@ -447,9 +309,7 @@ pane_bootstrap_from_config() {
   cmd+="; clear"
   
   # Show warning if worktree failed
-  if [[ "$worktree_failed" -eq 1 ]]; then
-    cmd+="; echo '⚠ [$label] Worktree unavailable - using repo root'"
-  fi
+  # No worktree-specific warnings; running in repo root or on the checked-out branch
   
   # Start waif if role is specified
   # Note: waif startWork spawns a new shell, so any setup after this
@@ -674,12 +534,11 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
   echo "" >&2
   echo "Select an option:" >&2
   echo "  1) Attach to existing session" >&2
-  echo "  2) Kill session and recreate, preserving git worktrees" >&2
-  echo "  3) Full reset, including git worktrees" >&2
-  echo "  4) Cancel" >&2
+  echo "  2) Kill session and recreate" >&2
+  echo "  3) Cancel" >&2
   echo "" >&2
   
-  read -rp "Enter choice [1-4]: " choice
+  read -rp "Enter choice [1-3]: " choice
   
   case "$choice" in
     1)
@@ -695,58 +554,7 @@ if tmux has-session -t "$SESSION" 2>/dev/null; then
       echo "  Session killed." >&2
       should_create=1
       ;;
-    3)
-      echo "" >&2
-      echo "Checking worktrees for uncommitted changes..." >&2
-      
-      if check_all_worktrees_clean; then
-        echo "  All worktrees are clean." >&2
-      else
-        if [[ "$FORCE" -eq 1 ]]; then
-          echo "" >&2
-          echo "Warning: The following worktrees have uncommitted changes:" >&2
-          for dirty in "${DIRTY_WORKTREES[@]}"; do
-            IFS='|' read -r wt_path wt_status wt_detail <<< "$dirty"
-            echo "    - $wt_path: $wt_status" >&2
-            if [[ -n "$wt_detail" ]]; then
-              echo "      Changes:" >&2
-              while IFS= read -r line; do
-                echo "        $line" >&2
-              done <<< "$wt_detail"
-            fi
-          done
-          echo "" >&2
-          echo "Proceeding with --force flag..." >&2
-        else
-          echo "" >&2
-          echo "Error: The following worktrees have uncommitted changes:" >&2
-          for dirty in "${DIRTY_WORKTREES[@]}"; do
-            IFS='|' read -r wt_path wt_status wt_detail <<< "$dirty"
-            echo "    - $wt_path: $wt_status" >&2
-            if [[ -n "$wt_detail" ]]; then
-              echo "      Changes:" >&2
-              while IFS= read -r line; do
-                echo "        $line" >&2
-              done <<< "$wt_detail"
-            fi
-          done
-          echo "" >&2
-          echo "Aborting to preserve uncommitted work." >&2
-          echo "Use --force to delete worktrees anyway." >&2
-          exit 1
-        fi
-      fi
-      
-      echo "" >&2
-      echo "Performing full reset..." >&2
-      
-      delete_all_worktrees "$FORCE"
-      echo "Killing TMux session '$SESSION'..." >&2
-      tmux kill-session -t "$SESSION" 2>/dev/null || true
-      echo "  Session killed." >&2
-      should_create=1
-      ;;
-    4|"")
+    3|"")
       echo "Cancelled." >&2
       exit 0
       ;;
