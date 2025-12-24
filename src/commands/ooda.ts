@@ -33,8 +33,13 @@ interface ProbeSource {
 }
 
 function runCmd(cmd: string, args: string[]): { stdout: string; stderr: string; status: number } {
-  const res = spawnSync(cmd, args, { encoding: 'utf8' });
-  return { stdout: res.stdout ?? '', stderr: res.stderr ?? '', status: res.status ?? 0 };
+  try {
+    const res = spawnSync(cmd, args, { encoding: 'utf8' });
+    return { stdout: res.stdout ?? '', stderr: res.stderr ?? '', status: res.status ?? 0 };
+  } catch (e: any) {
+    if (e?.code === 'ENOENT') return { stdout: '', stderr: `${cmd} not found`, status: 127 };
+    return { stdout: '', stderr: e?.message || 'command failed', status: 1 };
+  }
 }
 
 export function getAgentFromProc(pid: string | undefined): string | undefined {
@@ -76,6 +81,9 @@ export function getAgentFromProc(pid: string | undefined): string | undefined {
 function listPanes(): ProbeSource {
   // Use window_name so the agent identity (window) is available rather than the numeric window_index
   const res = runCmd('tmux', ['list-panes', '-a', '-F', '#{session_name}:#{window_name}.#{pane_index}\t#{pane_title}\t#{pane_pid}']);
+  if (res.status === 127 && res.stderr.includes('not found')) {
+    return { rows: [], raw: res.stdout ?? '', error: 'tmux not found; install tmux to use ooda' };
+  }
   if (res.status !== 0) return { rows: [], raw: res.stdout ?? '', error: res.stderr || res.stdout || 'tmux list-panes failed' };
 
   // Load workflow agent definitions (best-effort)
@@ -215,7 +223,7 @@ function sampleRows(): PaneRow[] {
 function probeOnce(useSample: boolean): { rows: PaneRow[]; raw?: string } {
   const rows: PaneRow[] = [];
   const base: ProbeSource = useSample ? { rows: sampleRows(), raw: undefined, error: undefined } : listPanes();
-  if (base.error) throw new CliError(`tmux probe failed: ${base.error}`, 1);
+  if (base.error) throw new CliError(`tmux probe failed: ${base.error}`, base.error.includes('not found') ? 127 : 1);
 
   for (const row of base.rows) {
     const { stat, pcpu } = row.pid ? psStats(row.pid) : {};
@@ -258,17 +266,22 @@ export function createOodaCommand() {
       const once = Boolean(options.once);
 
       const runCycle = () => {
-        const { rows, raw } = probeOnce(useSample);
-        const table = renderTable(rows);
-        if (jsonOutput) {
-          emitJson({ rows });
-        } else {
-          logStdout(table);
+        try {
+          const { rows, raw } = probeOnce(useSample);
+          const table = renderTable(rows);
+          if (jsonOutput) {
+            emitJson({ rows });
+          } else {
+            logStdout(table);
+          }
+          if (logEnabled) {
+            logProbe(logPath, rows, raw);
+          }
+          return rows;
+        } catch (err: any) {
+          if (err instanceof CliError) throw err;
+          throw new CliError(err?.message || 'ooda probe failed', 1);
         }
-        if (logEnabled) {
-          logProbe(logPath, rows, raw);
-        }
-        return rows;
       };
 
       if (once) {
