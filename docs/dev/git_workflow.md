@@ -1,56 +1,53 @@
 Overview
 
-This document defines recommended Git, branch, and worktree practices for WAIF's multi-agent, multi-team workflow. The goals are to minimize merge friction, keep `main` releasable, and make coordination explicit and auditable.
+This document defines recommended Git and branch practices for WAIF's multi-agent, multi-team workflow. The goals are to minimize merge friction, keep `main` releasable, and make coordination explicit and auditable.
 
 TL;DR (default happy path)
 
 1) Start from an up-to-date `main`.
-2) Create a short-lived topic branch for a single bd issue.
+2) Create a short-lived topic branch for a single beads issue. Branch names MUST use the beads prefix and id and follow the form `<beads_prefix>-<id>/<short-desc>` (for example `bd-123/fix-ask-prompt` or `wafi-73k/add-feature`).
 3) Keep work small; re-sync frequently; avoid rewriting shared history.
-4) Open a PR into `main` with a `bd-<id>` in the title and use the PR template.
-5) Record handoffs, commands run, and files touched in bd.
+4) Open a PR into `main` with the bd id in the title and use the PR template.
+5) Record handoffs, commands run, and files touched in bd. When an agent works on a branch, it MUST record involvement in bd comments.
 
-Scope and assumptions (Option 3: team worktree + topic branches)
+Scope and assumptions
 
 - Teams are persistent (they deliver many bd issues over time).
-- Each team maintains one long-lived worktree for day-to-day work.
 - Each bd issue is implemented on a short-lived topic branch created from `origin/main`.
-- `main` is the canonical integration branch and must remain releasable.
+- Branches are the canonical unit of work; `main` is the canonical integration branch and must remain releasable.
 - `bd` is the authoritative source of work state and the place to record handoffs, decisions, and commands executed.
 
-Important Git worktree constraint
+Important constraint
 
-- A single branch cannot be checked out in multiple worktrees at once.
-- If multiple agents must work in parallel on the same bd issue, they should use separate branches (agent sub-branches) and merge into the topic branch (or use stacked PRs).
+- If multiple agents must work in parallel on the same bd issue, they should use separate branches (agent sub-branches) and merge into the topic branch (or use stacked PRs). Branch-per-bd ensures a single, traceable branch name that corresponds to a `bd` issue.
 
 Principles
 
-- Topic branch is the unit of work: one bd issue → one topic branch.
+- Topic branch is the unit of work: one bd issue → one topic branch. Branch names MUST include the bd id and should be used by both humans and agents.
 - Keep branches short-lived and PRs small; merge frequently.
 - Prefer determinism over cleverness: record what you did in bd.
 - Never force-push shared branches without explicit Producer authorization.
 
 Naming conventions
 
-Team worktrees
+Topic branches (required):
 
-- Create one worktree per team (examples):
-  - `../worktree_team_core`
-  - `../worktree_team_cli`
-  - `../worktree_team_agents`
+- One topic branch per beads issue. There must be only one canonical branch per beads id. Examples:
+  - `bd-123/fix-ask-prompt`
+  - `wafi-79y/pr-title-validation`
 
-Topic branches
+Agent sub-branches (only when parallel work is needed):
 
-- Create one topic branch per bd issue (examples):
-  - `topic/bd-123/fix-ask-prompt`
-  - `topic/bd-79y/pr-title-validation`
+-- If multiple agents need to work at the same time on the same beads issue, create short-lived agent sub-branches from the canonical beads branch. Examples:
+  - `bd-123/patch`
+  - `bd-123/docs`
+  - `bd-123/ci`
 
-Agent sub-branches (only when parallel work is needed)
+Branch naming rules:
 
-- If multiple agents need to work at the same time on the same bd issue, create sub-branches from the topic branch:
-  - `topic/bd-123/patch`
-  - `topic/bd-123/docs`
-  - `topic/bd-123/ci`
+-- Branch names MUST include the beads prefix and id (e.g., `bd-123`) as the canonical tie to issue tracking.
+-- There can be only one canonical branch per beads id. Before creating a branch, agents or contributors MUST check for any branch that starts with `<beads_prefix>-<id>` (for example `bd-123`) locally or on `origin` and reuse it if present. When reusing, record your involvement in the bd comments.
+-- Avoid using branches without beads ids for tracked work.
 
 Branch lifecycle (topic branches)
 
@@ -59,8 +56,12 @@ Branch lifecycle (topic branches)
    - `git checkout main`
    - `git pull --rebase`
 
-2) Create a topic branch:
-   - `git checkout -b topic/bd-<id>/<short-desc>`
+2) Create or reuse the topic branch for the beads issue:
+   - Check for an existing branch that starts with the beads prefix and id (for example `git branch --list "bd-123*"` or `git ls-remote --heads origin "bd-123*"`). If a matching branch exists, reuse it:
+     - `git checkout bd-<id>/<short-desc>`
+   - Otherwise create the canonical branch:
+     - `git checkout -b bd-<id>/<short-desc>`
+   - Record your involvement in bd comments when you start work in the branch.
 
 3) Work locally with small commits. Run local quality gates when appropriate:
    - `npm test`
@@ -75,43 +76,24 @@ Branch lifecycle (topic branches)
 
 6) Cleanup after merge:
    - delete the remote branch
-   - remove any short-lived worktrees created specifically for the topic branch
 
-Team worktree: recommended setup
+Agent workflows and patterns
 
-The team worktree is a stable working directory for the team. It should generally track `main` when idle and be used to create new topic branches.
-
-Example (create once):
-
-- `git fetch origin`
-- `git worktree add ../worktree_team_<team> origin/main`
-
-Daily usage:
-
-- Keep the team worktree clean.
-- When starting a new bd issue, create the topic branch inside the team worktree and then hand it off to an implementation agent (or publish it if multiple collaborators need it).
-
-Worktrees and agent workflows
-
-Agents may still use per-role worktrees (e.g., `worktree_patch`, `worktree_ship`) for isolation and reproducibility. In Option 3, those worktrees should generally operate on topic branches rather than long-lived per-issue team branches.
-
-Recommended patterns
-
-- One agent working solo on a topic branch:
-  - Work directly on `topic/bd-<id>/<short-desc>` in their worktree.
+-- One agent working solo on a topic branch:
+  - Work directly on `bd-<id>/<short-desc>`.
 
 - Multiple agents working in parallel:
   - Create agent sub-branches and merge into the topic branch.
   - Keep sub-branches short-lived.
 
-Example parallel flow
+Example parallel flow:
 
-- Create topic branch: `topic/bd-123/fix-thing`
-- Create parallel branches:
-  - Patch works on `topic/bd-123/patch`
-  - Scribbler works on `topic/bd-123/docs`
-- Merge sub-branches into `topic/bd-123/fix-thing` (merge owner coordinates).
-- Open PR to `main` from `topic/bd-123/fix-thing`.
+-- Create canonical branch: `bd-123/fix-thing`
+-- Create parallel branches:
+  - Patch works on `bd-123/patch`
+  - Scribbler works on `bd-123/docs`
+-- Merge sub-branches into `bd-123/fix-thing` (merge owner coordinates).
+-- Open PR to `main` from `bd-123/fix-thing`.
 
 Rebasing vs merging (rules)
 
@@ -124,10 +106,7 @@ Rebasing vs merging (rules)
 Push and publish policy
 
 - Default: humans own pushes and merges.
-- Agents must follow their permission files (`.opencode/agent/*.md`). Many roles require asking before `git push`.
-- Before pushing:
-  - ensure local checks are run (as appropriate)
-  - sync with `origin/main` (rebase or merge according to the table above)
+- Agents must follow their permission files (`.opencode/agent/*.md`). Agents and humans MUST use branches named with the bd id. When an agent works in a branch for a bd issue, it MUST record its involvement in bd comments and avoid editing files that other agents have claimed in bd unless coordination is documented.
 
 Pull requests, reviews, and CI
 
@@ -187,3 +166,6 @@ Related process artifacts
 Notes
 
 This guidance intentionally trades some flexibility for predictability. When in doubt about destructive actions, shared branch rewrites, or ownership, escalate via bd and the Producer.
+
+```
+- Record delegations in bd using: `delegated-to:@<actor> (scope)`.

@@ -35,7 +35,7 @@ The project provides a CLI tool (`waif`) that humans, agents, and even old-schoo
   ./scripts/start-workflow-tmux.sh --session waif-workflow --window agents
   ```
 
-  This creates/reuses a tmux window with one pane per role (pm, design, build, docs, review, user). Each agent pane uses a dedicated git worktree and starts `waif startWork <role>` in that directory so prompts and titles reflect the role.
+  This creates/reuses a tmux window with one pane per role (pm, design, build, docs, review, user). Each agent pane may use a separate working directory for isolation, but all work MUST follow the branch-per-bd workflow: create or reuse a branch named with the bd id for the issue you're working on and record activity in bd.
 
 - `waif startWork <agent>` sets the tmux pane title (when inside tmux), prints a brief welcome, and starts an interactive shell with prompt `waif> `. Flags:
   - `--norc` to skip rc/profile loading (defaults to loading your shell rc).

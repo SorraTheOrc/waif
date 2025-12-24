@@ -35,7 +35,7 @@ Delegation pattern (bd)
 When a human wants an agent to perform a normally-restricted action, record it in bd:
 
 - `delegated-to:@ship (merge to main for bd-123)`
-- `delegated-to:@patch (push branch topic/bd-123/patch)`
+- `delegated-to:@patch (push branch bd-123/patch)`
 
 Minimum delegation fields:
 - who (role/account), what (action), which branch/repo area, timebox (optional), and any required checks.
