@@ -53,7 +53,19 @@ describe('waif next', () => {
     // In Progress should no longer be printed by `waif next`
     expect(stdout).not.toContain('# In Progress');
 
-    // Recommended Summary heading was removed; summary table should still be present
+    // in-progress table: feature shows in-progress inline; ensure expectations
+    expect(stdout).toContain('wf-ip1');
+    const symbols = getDefaultSymbols();
+    const inProgressLine = stdout
+      .split('\n')
+      .find((l) => l.includes('wf-ip1') && !l.includes('ID'));
+    expect(inProgressLine).toBeTruthy();
+    expect(inProgressLine).toContain(
+      `wf-ip1  ${symbols.fallback?.issueType ?? '?'} ${symbols.status.in_progress} In progress one`,
+    );
+    expect(inProgressLine).toMatch(/\s+0\s+alice/);
+
+    // Also respect main's removal of the Recommended Summary heading
     expect(stdout).not.toContain('# Recommended Summary');
     expect(idxDetail).toBeGreaterThanOrEqual(0);
 
