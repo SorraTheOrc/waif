@@ -5,11 +5,11 @@
 #
 # Schema:
 #   agents:           # Required: list of agent definitions
-#     - name: string  # Required: unique agent identifier (used for worktree, BD_ACTOR)
+#     - name: string  # Required: unique agent identifier (used for BD_ACTOR)
 #       label: string # Optional: display label for tmux pane title (defaults to name)
 #       role: string  # Optional: agent role passed to waif startWork (defaults to name)
 #       window: string # Optional: tmux window name (default: "core"); agents with same window are grouped
-#       worktree: bool # Optional: if true, use dedicated worktree (default: true for agents, false for user)
+#       (no worktree key)
 #       env:          # Optional: environment variables to set before starting
 #         KEY: value
 #       idle:         # Optional: idle scheduler configuration
@@ -37,7 +37,7 @@ agents:
     label: User
     window: core
     is_user: true
-    worktree: false
+    # (no worktree configuration)
     env:
       BD_ACTOR: $USER
     idle:
@@ -50,7 +50,7 @@ agents:
     label: Map (PM)
     role: pm
     window: core
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: map
     idle:
@@ -66,7 +66,7 @@ agents:
     label: Muse (Design)
     role: design
     window: specialist
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: muse
     idle:
@@ -79,7 +79,7 @@ agents:
     label: Patch (Impl)
     role: build
     window: specialist
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: patch
     idle:
@@ -92,7 +92,7 @@ agents:
     label: Scribbler (Docs)
     role: docs
     window: specialist
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: scribbler
     idle:
@@ -105,7 +105,7 @@ agents:
     label: Pixel (Art)
     role: art
     window: specialist
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: pixel
     idle:
@@ -118,7 +118,7 @@ agents:
     label: Probe (QA)
     role: review
     window: specialist
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: probe
     idle:
@@ -131,7 +131,7 @@ agents:
     label: Ship (DevOps)
     role: devops
     window: specialist
-    worktree: true
+    # (no worktree configuration)
     env:
       BD_ACTOR: ship
     idle:

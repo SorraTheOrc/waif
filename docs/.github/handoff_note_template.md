@@ -5,8 +5,8 @@ This file is a visible copy of the canonical handoff template (also stored in hi
 ---
 Handoff: [brief one-line summary]
 bd: bd-<id>
-Topic branch: topic/bd-<id>/<short-desc>
-(If parallel branches used) Sub-branch: topic/bd-<id>/<patch|docs|ci>
+Branch: <beads_prefix>-<id>/<short-desc>  # canonical branch for the bd issue (e.g., bd-123/short-desc)
+(If parallel branches used) Sub-branch: <beads_prefix>-<id>/<patch|docs|ci>
 From: @<sender> (agent or person)
 To: @<receiver> (agent or person)
 Type: [soft|hard]

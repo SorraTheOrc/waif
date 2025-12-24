@@ -2,8 +2,7 @@
 node_modules/
 dist/
 
-# Per-agent worktrees (created by ./scripts/start-agent)
-worktree_*/
+# (old worktree directories removed)
 
 # Python legacy scaffold (removed)
 src/pm/
