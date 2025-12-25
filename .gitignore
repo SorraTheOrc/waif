@@ -1,8 +1,10 @@
+.npm-global/
 node_modules/
 dist/
 
 # Per-agent worktrees (created by ./scripts/start-agent)
-*_Worktree/
+worktree_*/
+
 # Python legacy scaffold (removed)
 src/pm/
 *.egg-info
