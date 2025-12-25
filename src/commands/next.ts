@@ -4,38 +4,6 @@ import { spawnSync } from 'child_process';
 import { Command } from 'commander';
 import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
-import { renderIssueTitle } from '../lib/issueTitle.js';
-import { renderIssuesTable } from '../lib/table.js';
-import { copyToClipboard } from '../lib/clipboard.js';
-
-const ANSI = {
-  blue: '\u001b[34m',
-  red: '\u001b[31m',
-  reset: '\u001b[0m',
-} as const;
-
-function isColorEnabled(): boolean {
-  if (!process.stdout.isTTY) return false;
-  if (process.env.NO_COLOR) return false;
-  if (process.env.WAIF_NO_COLOR) return false;
-  return true;
-}
-
-function heading(text: string): string {
-  const line = `# ${text}`;
-  if (!isColorEnabled()) return line;
-  return `${ANSI.blue}${line}${ANSI.reset}`;
-}
-
-function issuesTable(issues: Issue[]): string {
-  return renderIssuesTable(issues, {
-    color: {
-      enabled: isColorEnabled(),
-      blockedRow: ANSI.red,
-      reset: ANSI.reset,
-    },
-  });
-}
 
 interface Issue {
   id: string;
@@ -44,10 +12,7 @@ interface Issue {
   status?: string;
   priority?: number;
   created_at?: string;
-  assignee?: string;
-  dependency_count?: number;
-  dependent_count?: number;
-  dependencies?: Array<{ type?: string; depends_on_id?: string }>;
+  dependencies?: Array<{ type?: string; depends_on_id?: string }>; // best-effort shape
   [key: string]: unknown;
 }
 
@@ -82,16 +47,17 @@ function runBd(args: string[], timeout = 30000): string {
   return runSpawn('bd', args, timeout).stdout;
 }
 
-
 function runBv(args: string[], timeout = 30000): string {
   return runSpawn('bv', args, timeout).stdout;
 }
 
 function isCliAvailable(cmd: string): boolean {
-  const res = spawnSync(cmd, ['--version'], { encoding: 'utf8', timeout: 2000 });
-  if (res.error) return false;
-  if (typeof res.status === 'number' && res.status !== 0) return false;
-  return true;
+  try {
+    spawnSync(cmd, ['--version'], { encoding: 'utf8', timeout: 2000 });
+    return true;
+  } catch (e) {
+    return false;
+  }
 }
 
 function parseIssuesFromJsonl(path: string, verbose: boolean): Issue[] {
@@ -135,6 +101,7 @@ function loadIssues(verbose: boolean): LoadResult {
 }
 
 function loadBvScores(verbose: boolean): BvResult {
+  // Env override for tests or offline usage
   const envJson = process.env.WAIF_BV_PRIORITY_JSON;
   if (envJson) {
     try {
@@ -225,10 +192,9 @@ function selectTop(issues: Issue[], bv: BvResult, verbose: boolean) {
 export function createNextCommand() {
   const cmd = new Command('next');
   cmd
-    .description('Return the single best open, unblocked issue to work on now (copies issue id to clipboard)')
+    .description('Return the single best open, unblocked issue to work on now')
     .option('--json', 'Emit JSON output')
     .option('--verbose', 'Emit debug logs to stderr')
-    .option('--no-clipboard', 'Disable copying the recommended issue id to clipboard')
     .action((options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
       const verbose = Boolean(options.verbose ?? command.parent?.getOptionValue('verbose'));
@@ -236,15 +202,6 @@ export function createNextCommand() {
       const { issues, source } = loadIssues(verbose);
       const bv = loadBvScores(verbose);
       const top = selectTop(issues, bv, verbose);
-
-      const clipboardEnabled = Boolean(options.clipboard ?? true);
-      if (clipboardEnabled) {
-        const clipboardResult = copyToClipboard(top.issue.id);
-        if (!clipboardResult.ok && verbose) {
-          process.stderr.write(`[debug] clipboard copy failed: ${clipboardResult.error}\n`);
-        }
-      }
-
       const waif = {
         score: top.score,
         rationale: top.rationale,
@@ -256,27 +213,9 @@ export function createNextCommand() {
         const payload = { ...top.issue, waif };
         emitJson(payload);
       } else {
-        const recommended = [top.issue];
-
-        logStdout(issuesTable(recommended));
-        logStdout('');
-
-        logStdout(heading('Details'));
-        logStdout('');
-        if (isCliAvailable('bd')) {
-          try {
-            const shown = runBd(['show', top.issue.id]);
-            logStdout(shown.trim());
-            return;
-          } catch (e) {
-            if (verbose) process.stderr.write(`[debug] bd show failed: ${(e as Error).message}\n`);
-          }
-        }
-
-        const rendered = renderIssueTitle(top.issue);
-        logStdout(`${top.issue.id}: ${rendered}`);
+        const title = top.issue.title ?? '(no title)';
+        logStdout(`${top.issue.id}: ${title} — ${top.rationale}`);
       }
-
     });
 
   return cmd;
