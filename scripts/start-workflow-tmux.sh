@@ -30,6 +30,10 @@ Notes:
 EOF
 }
 
+# Determine repository root early (before any use of repo_root) so `set -u`
+# doesn't abort when deriving the default session name.
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
 # Default session name pattern: WAIF_session_<Team>
 # If the current working directory name looks like a team identifier, derive
 # a session name using the pattern 'WAIF_session_<Team>' so multiple teams can
@@ -72,8 +76,6 @@ if ! command -v tmux >/dev/null 2>&1; then
   echo "tmux is required but was not found in PATH." >&2
   exit 1
 fi
-
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 
 # --- Config loading ---
 # Load agent config from YAML via Node.js helper.
