@@ -226,15 +226,9 @@ bd sync               # Commit and push changes
 
 1. **Start**: Run `bd ready` to find actionable work
 2. **Claim**: Use `bd update <id> --status=in_progress`
-3. **Work**: Implement the task on a branch named with the bd id (see naming conventions)
+3. **Work**: Implement the task
 4. **Complete**: Use `bd close <id>`
 5. **Sync**: Always run `bd sync` at session end
-
-Branch guidance (branch-per-bd):
-
-- All work MUST be performed on branches that include the bd id. Create a short-lived topic branch from `origin/main` for each bd issue.
-- If a branch already exists for the bd issue, reuse it and record your involvement in bd comments.
-- Agents and humans should avoid editing files that other agents have claimed in bd unless coordination is documented.
 
 ### Key Concepts
 
@@ -265,42 +259,3 @@ git push                # Push to remote
 - Always `bd sync` before ending session
 
 <!-- end-bv-agent-instructions -->
-
-## Landing the Plane (Session Completion)
-
-**When ending a work session**, you MUST complete ALL steps below. Work is NOT complete until `git push` succeeds.
-
-**MANDATORY WORKFLOW:**
-
-1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
-3. **Update issue status** - Close finished work, update in-progress items
-4. **PUSH TO REMOTE** - This is MANDATORY:
-   ```bash
-   git pull --rebase
-   bd sync
-   git push
-   git status  # MUST show "up to date with origin"
-   ```
-5. **Clean up** - Clear stashes, prune remote branches
-6. **Verify** - All changes committed AND pushed
-7. **Hand off** - Provide context for next session
-
-**CRITICAL RULES:**
-
-- Work is NOT complete until `git push` succeeds
-- NEVER stop before pushing - that leaves work stranded locally
-- NEVER say "ready to push when you are" - YOU must push
-- If push fails, resolve and retry until it succeeds
-- When using backticks in strings that are to be passed as arguments to shell commands (e.g. waif, gh), escape them properly to avoid errors
-
-## Project structure
-
-- Source code lives in `src/`
-- Tests live in `tests/`
-- Documentation lives in `docs/`
-- AI-generated planning docs go in `history/` (ephemeral)
-- Beads configs live in `.beads/`
-- Beads issues live in `.beads/issues.jsonl`
-- OpenCode configs live in `.opencode`
-- OpenCode agent commands live in `.opencode/command/` - these are not related to the WAFI CLI itself
