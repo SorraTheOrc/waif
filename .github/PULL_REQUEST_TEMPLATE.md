@@ -1,6 +1,6 @@
 Title: bd-<id>: short, imperative summary
 
-Branch (recommended): topic/bd-<id>/<short-desc>
+Branch (recommended): <beads_prefix>-<id>/<short-desc> (e.g., bd-123/short-desc)
 
 ## Summary
 - One-line summary of the change and why it was made.
