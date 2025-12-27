@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
@@ -47,7 +47,7 @@ describe('opencode ingester', () => {
   it('logs formatted events to stdout', async () => {
     const stopCapture = captureStdout();
     const source = new MockSource();
-    const unsub = await runOpencodeIngestor({ source, once: false, sample: false, logPath: undefined });
+    const unsub = await runOpencodeIngestor({ source, once: false, sample: false, log: false });
 
     // emit events
     source.emit('agent.started', { agent: { name: 'map' } });

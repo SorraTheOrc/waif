@@ -12,6 +12,7 @@ import {
   getSampleOpencodeEvents,
   subscribeToOpencodeEvents,
   loadAgentMap,
+  isEnabled,
 } from '../lib/opencode.js';
 
 
@@ -248,32 +249,55 @@ function logProbe(logPath: string, rows: PaneRow[], raw?: string): void {
   writeFileSync(logPath, `${header}\n[${ts}]\n${rawLine}\n${body}\n`, { flag: 'a' });
 }
 
-export function createOodaCommand() {
+export function createOodaCommand(
+  deps: { runOpencode?: typeof runOpencodeIngestor; probe?: typeof probeOnce; isOpencodeEnabled?: () => boolean } = {},
+) {
+  const runOpencode = deps.runOpencode ?? runOpencodeIngestor;
+  const probe = deps.probe ?? probeOnce;
+  const opencodeEnabled = deps.isOpencodeEnabled ?? isEnabled;
+
   const cmd = new Command('ooda');
   cmd
-    .description('Probe tmux panes and classify Busy/Free')
+    .description('Probe tmux panes or subscribe to OpenCode events')
     .option('--once', 'Run a single probe and exit')
     .option('--interval <seconds>', 'Poll interval in seconds', (v) => parseInt(v, 10), 5)
-    .option('--log <path>', 'Log path (default history/ooda_probe_<ts>.txt)')
+    .option('--log <path>', 'Log path (tmux probe) or OpenCode event log')
     .option('--no-log', 'Disable logging')
     .option('--sample', 'Use built-in sample data (no tmux)')
+    .option('--probe', 'Use legacy tmux probe instead of OpenCode events')
+    .option('--opencode', 'Subscribe to OpenCode agent events')
+    .option('--opencode-sample', 'Use sample OpenCode events (no server)')
     .action(async (options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
       const interval = Number(options.interval ?? 5) || 5;
-      const logEnabled = options.log !== false && options.log !== null && options.log !== undefined;
-      const logPath = options.log || `history/ooda_probe_${Math.floor(Date.now() / 1000)}.txt`;
-      const useSample = Boolean(options.sample);
+      const logEnabled = options.log !== false;
       const once = Boolean(options.once);
+      const probeMode = Boolean(options.probe);
+      const opencodeSample = Boolean(options.sample || options.opencodeSample);
+      const shouldUseOpencode = !probeMode && (Boolean(options.opencode) || opencodeEnabled());
+
+      if (shouldUseOpencode) {
+        const opencodeLogPath = logEnabled ? options.log || DEFAULT_OPENCODE_LOG : undefined;
+        await runOpencode({ sample: opencodeSample, once, logPath: opencodeLogPath, log: logEnabled });
+        if (!once && !opencodeSample) {
+          // keep process alive while subscribed
+          await new Promise(() => {});
+        }
+        return;
+      }
+
+      const useSampleProbe = Boolean(options.sample);
+      const logPath = logEnabled ? options.log || `history/ooda_probe_${Math.floor(Date.now() / 1000)}.txt` : undefined;
 
       const runCycle = () => {
-        const { rows, raw } = probeOnce(useSample);
+        const { rows, raw } = probe(useSampleProbe);
         const table = renderTable(rows);
         if (jsonOutput) {
           emitJson({ rows });
         } else {
           logStdout(table);
         }
-        if (logEnabled) {
+        if (logEnabled && logPath) {
           logProbe(logPath, rows, raw);
         }
         return rows;
@@ -310,19 +334,24 @@ export function createOodaCommand() {
   return cmd;
 }
 
-export async function runOpencodeIngestor(options: { source?: any; once?: boolean; sample?: boolean; logPath?: string } = {}) {
-  const { source, once = false, sample = false, logPath } = options;
-  const writePath = logPath || DEFAULT_OPENCODE_LOG;
+
+export async function runOpencodeIngestor(
+  options: { source?: any; once?: boolean; sample?: boolean; logPath?: string; log?: boolean } = {},
+) {
+  const { source, once = false, sample = false, logPath, log = true } = options;
+  const writePath = log ? logPath || DEFAULT_OPENCODE_LOG : undefined;
   const types = ['agent.started', 'agent.stopped', 'message.returned'];
 
   const handler = (event: any) => {
     const ev = typeof event.type === 'string' ? event : { type: (event && event.type) || 'unknown', payload: event };
     const formatted = formatOpencodeEvent(ev as any);
     logStdout(formatted);
-    try {
-      if (logPath) appendOpencodeEventLog(writePath, ev as any);
-    } catch (e) {
-      // ignore
+    if (writePath) {
+      try {
+        appendOpencodeEventLog(writePath, ev as any);
+      } catch (e) {
+        // ignore
+      }
     }
   };
 
@@ -330,9 +359,6 @@ export async function runOpencodeIngestor(options: { source?: any; once?: boolea
     const list = getSampleOpencodeEvents();
     for (const e of list) {
       handler(e);
-      try {
-        if (logPath) appendOpencodeEventLog(writePath, e);
-      } catch (e) {}
     }
     return;
   }
