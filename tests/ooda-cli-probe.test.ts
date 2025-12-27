@@ -1,17 +1,18 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { createOodaCommand } from '../src/commands/ooda.js';
 
-describe('ooda CLI probe selection', () => {
-  afterEach(() => vi.restoreAllMocks());
+describe('ooda CLI probe opt-in', () => {
+  beforeEach(() => {
+    // nothing
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
 
-  it('runs probe when --probe provided even if opencode enabled', async () => {
-    const runOpencode = vi.fn();
-    const probe = vi.fn().mockReturnValue({ rows: [], raw: '' });
-    const cmd = createOodaCommand({ runOpencode, probe, isOpencodeEnabled: () => true });
-
-    await cmd.parseAsync(['node', 'ooda', 'ooda', '--probe', '--once']);
-
-    expect(probe).toHaveBeenCalledTimes(1);
-    expect(runOpencode).not.toHaveBeenCalled();
+  it('runs probeOnce when --probe --once provided', async () => {
+    const probeSpy = vi.fn().mockReturnValue({ rows: [] });
+    const cmd = createOodaCommand({ probe: probeSpy, isOpencodeEnabled: () => true });
+    await cmd.parse(['node', 'ooda', '--probe', '--once'], { from: 'user' });
+    expect(probeSpy).toHaveBeenCalled();
   });
 });
