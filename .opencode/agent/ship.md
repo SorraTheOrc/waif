@@ -1,6 +1,6 @@
 ---
 description: Ship (DevOps AI) — CI, build, release readiness
-mode: primary
+mode: subagent
 model: github-copilot/gpt-5-mini
 temperature: 0.4
 tools:
@@ -9,7 +9,15 @@ tools:
   bash: true
 permission:
   bash:
-    "git *": allow
+    "git status": allow
+    "git diff": allow
+    "git fetch*": allow
+    "git pull*": allow
+    "git checkout*": allow
+    "git rebase*": allow
+    "git remote*": allow
+    "git rev-parse": allow
+    "gh pr*": allow
     "bd *": allow
     "npm *": allow
     "waif *": allow
