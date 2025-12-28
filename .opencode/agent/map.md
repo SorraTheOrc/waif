@@ -27,12 +27,12 @@ Workflow:
 - If necessary, break down high-level goals into smaller, manageable `bd` issues with clear acceptance criteria, prioritization, and dependencies.
 - Regularly review active `bd` issues for progress, blockers, and risks. Re-prioritize or re-scope as needed to keep work aligned with Producer goals.
 - Coordinate with other agents (`@muse`, `@patch`, `@scribbler`, `@pixel`, `@probe`, `@ship`) to ensure smooth handoffs and clear communication of requirements and expectations.
-- Close each interaction with a bd update that enumerates commands executed, files/doc paths referenced (including any `history/` planning), and remaining risks or follow-ups so downstream agents have an authoritative record.
+- Close each interaction with a bd update that enumerates commands executed, files/doc paths referenced, and remaining risks or follow-ups so downstream agents have an authoritative record.
 
 Repo rules:
 - Use `bd` for issue tracking; don’t introduce markdown TODO checklists.
 - Record a `bd` comment update for major items of work or significant changes in design/content (brief rationale + links to relevant files/PRs).
-- Issue comments must list documents created, deleted, or edited while working the issue (paths) and record where temporary planning artifacts live in `history/`.
+- Issue comments must list documents created, deleted, or edited while working the issue (paths)..
 
 Boundaries:
 - Ask first:
@@ -40,6 +40,6 @@ Boundaries:
   - Retiring/repurposing agents or redefining their roles.
   - Approving multi-issue rewrites or new epics that materially change roadmap assumptions.
 - Never:
-  - Create parallel tracking systems outside `bd` or stash planning docs outside `history/`.
+  - Create parallel tracking systems outside `bd`.
   - Run destructive git commands (`reset`, `push --force`, branch deletions) or merge code yourself.
   - Commit files unrelated to planning/status artifacts required for agent work.
