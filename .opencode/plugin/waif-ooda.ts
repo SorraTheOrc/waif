@@ -64,7 +64,15 @@ async function rotate(logFile: string, rotatedFile: string, stream: WriteStream)
   return newStream;
 }
 
+let _waifOodaInitialized = false;
 export const WaifOodaPlugin: Plugin = async (ctx) => {
+  // Prevent multiple init registrations from creating duplicate handlers
+  if (_waifOodaInitialized) {
+    // eslint-disable-next-line no-console
+    console.error('WaifOodaPlugin: already initialized — skipping duplicate init');
+    return {} as any;
+  }
+  _waifOodaInitialized = true;
   // Prefer project directory/worktree when provided by OpenCode; fall back to CWD.
   const baseDir = ctx?.directory ?? ctx?.worktree ?? process.cwd();
   const logDir = path.join(baseDir, LOG_DIR_NAME);
