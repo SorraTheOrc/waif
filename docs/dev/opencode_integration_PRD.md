@@ -114,3 +114,88 @@ Next actions (I will perform if you confirm)
 3) Post a bd comment linking the PRD and listing created files
 4) Assign owners to child bd issues (done per tentative mapping)
 
+
+---
+
+# Product Requirements Document
+
+## Introduction
+
+- One-liner
+  - Product: OpenCode OODA plugin for WAIF — registerable OpenCode plugin that streams raw OpenCode events to the waif OODA pipeline and writes raw event JSON to stdout.
+
+- Problem statement
+  - The current waif OODA implementation depends on tmux for live monitoring and visibility. This dependency complicates runtime environments and prevents headless consumption of OpenCode events by the OODA loop. We need an in-OpenCode plugin that removes the tmux dependency and provides a stable event stream for waif ooda.
+
+- Goals
+  - Provide a registered OpenCode plugin that subscribes to OpenCode lifecycle and agent events and streams raw event JSON to stdout for the waif OODA pipeline.
+  - Ensure the plugin is available when OpenCode is run and can be installed/registered via waif setup opencode-hooks.
+  - Replace tmux-based monitoring for OODA with the plugin-based event source for v1.
+
+- Non-goals
+  - This PRD does not include building advanced event filtering, mapping to status models, or UI; those are follow-ups under wf-r1d.*. V1 only logs raw events to stdout and provides test integration.
+
+## Users
+
+- Primary users
+  - Waif end-users/operators running the OODA loop locally on Linux machines.
+
+- Secondary users (optional)
+  - WF-R1D implementers, ops engineers, CI maintainers, and security reviewers.
+
+- Key user journeys
+  1. Developer runs `waif setup opencode-hooks` -> plugin is registered with local OpenCode -> runs smoke health-check event -> OODA detects event.
+  2. Developer runs `waif ooda` (headless) -> OODA subscribes to plugin event stream and prints raw event JSON to console.
+  3. CI job starts an ephemeral OpenCode server, registers plugin, runs a short agent session, asserts the plugin emitted events that OODA consumed.
+
+## Requirements
+
+- Functional requirements (MVP)
+  1. Plugin Registration: Plugin must register with OpenCode at startup following OpenCode plugin registration guidance.
+  2. Event Subscription: Plugin must subscribe to lifecycle events (session.start, pre-compact) and agent events as configured.
+  3. Console Logging: Plugin must emit raw OpenCode event JSON to stdout with one JSON object per line (JSONL style) for easy parsing.
+  4. Waif OODA Integration: `waif ooda` must be able to consume the plugin stream without requiring tmux.
+  5. Testability: Provide a test harness that can start an ephemeral OpenCode server on a configurable port and assert events are emitted and ingested.
+
+- Non-functional requirements
+  - Platform: Linux-only for v1 (including WSL).
+  - Performance: Event logging must be near-real-time; minimal added latency (target <200ms per event under light load).
+  - Reliability: Plugin must handle OpenCode restart and re-register cleanly.
+  - Observability: Provide clear stdout logs and an optional debug mode that includes event timestamps.
+
+- Integrations
+  - OpenCode runtime (registered plugin API)
+  - WAIF CLI (`waif setup opencode-hooks`, `waif ooda`)
+  - Test harness (npx opencode serve --port <port>) for integration tests
+
+- Security & privacy
+  - Plugin must not emit secrets. Raw event JSON may contain sensitive fields; tests and debug outputs must avoid logging secrets or include redaction where possible. For v1, document expected sensitive fields and recommend redaction prior to enabling in broader environments.
+
+## Release & Operations
+
+- Rollout plan
+  1. Developer preview: deliver plugin + basic smoke-check; document install/registration steps.
+  2. Integration test: include an automated integration test that starts an ephemeral OpenCode server on a configurable port (default non-standard port for tests) and validates event flow.
+  3. Migration: mark tmux-based OODA flows deprecated and update documentation (see related PRDs) with migration steps.
+  4. Enablement: merge, update ops docs, and confirm plugin owners for rollout (per wf-r1d.8 responsibilities).
+
+- Quality gates / definition of done
+  - Unit tests for plugin registration logic and error paths.
+  - Integration test that starts OpenCode on a dedicated test port, registers plugin, runs a sample agent session, and asserts that OODA consumed at least one event.
+  - Documentation updated: installation, registration, migration steps from tmux to plugin-based flow.
+  - Security review of exposed event fields and redaction guidance completed.
+
+- Risks & mitigations
+  - Risk: OpenCode API changes or incompatibilities — Mitigation: keep plugin registration logic isolated behind an adapter in src/lib/hooks/opencode.ts for easy updates.
+  - Risk: Sensitive data in raw events — Mitigation: document sensitive fields, provide redaction utilities, and gate enabling in non-development environments.
+  - Risk: CI flakiness when starting ephemeral OpenCode — Mitigation: choose a non-default port per test run, add retry/backoff in test startup, and provide fallback mock tests for CI environments.
+
+## Open Questions
+- Exact plugin name / package name to register with OpenCode (suggest: waif-opencode-plugin). Confirm naming before implementation.
+- Event fields that must be redacted by default in logs (list and redaction policy to be defined in follow-up).
+- Integration test port selection policy and process cleanup on failure (we recommend test to pick an available ephemeral port and ensure process termination).
+
+
+Source issue: wf-r1d.5.1
+
+Linked PRD: docs/dev/opencode_integration_PRD.md
