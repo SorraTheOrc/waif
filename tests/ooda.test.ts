@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { classify } from '../src/commands/ooda.js';
+import { classify, __test__ } from '../src/commands/ooda.js';
+
+const { readOpencodeEvents } = __test__;
 
 describe('ooda classify', () => {
   it('marks busy for keywords and bd ids', () => {
@@ -21,5 +23,19 @@ describe('ooda classify', () => {
 
   it('falls back to free', () => {
     expect(classify('unknown title')).toEqual({ status: 'Free', reason: 'fallback' });
+  });
+});
+
+describe('ooda readOpencodeEvents', () => {
+  it('returns empty array for missing file', () => {
+    expect(readOpencodeEvents('/tmp/does-not-exist.jsonl')).toEqual([]);
+  });
+
+  it('parses valid JSON lines and skips invalid', () => {
+    const tmp = `/tmp/ooda-test-${Date.now()}.jsonl`;
+    const lines = ['{"a":1}', 'not json', '{"b":2}'];
+    require('fs').writeFileSync(tmp, lines.join('\n'), 'utf8');
+    expect(readOpencodeEvents(tmp)).toEqual([{ a: 1 }, { b: 2 }]);
+    require('fs').unlinkSync(tmp);
   });
 });

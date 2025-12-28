@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { Command } from 'commander';
 import { existsSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import path from 'node:path';
 import yaml from 'yaml';
 import { emitJson, logStdout } from '../lib/io.js';
 import { CliError } from '../types.js';
@@ -225,6 +226,27 @@ function probeOnce(useSample: boolean): { rows: PaneRow[]; raw?: string } {
   return { rows, raw: base.raw };
 }
 
+function readOpencodeEvents(logPath: string): any[] {
+  try {
+    const txt = readFileSync(logPath, 'utf8');
+    return txt
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((line) => {
+        try {
+          return JSON.parse(line);
+        } catch (e) {
+          return undefined;
+        }
+      })
+      .filter(Boolean) as any[];
+  } catch (e) {
+    return [];
+  }
+}
+
+export const __test__ = { readOpencodeEvents };
+
 function logProbe(logPath: string, rows: PaneRow[], raw?: string): void {
   const ts = new Date().toISOString();
   const dir = dirname(logPath);
@@ -257,13 +279,22 @@ export function createOodaCommand() {
       const useSample = Boolean(options.sample);
       const once = Boolean(options.once);
 
+      const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
+
       const runCycle = () => {
         const { rows, raw } = probeOnce(useSample);
+        const events = readOpencodeEvents(opencodeLogPath);
         const table = renderTable(rows);
         if (jsonOutput) {
-          emitJson({ rows });
+          emitJson({ rows, opencodeEvents: events });
         } else {
           logStdout(table);
+          if (events.length > 0) {
+            logStdout(`\nOpenCode events (${events.length}):`);
+            for (const ev of events.slice(-5)) {
+              logStdout(JSON.stringify(ev));
+            }
+          }
         }
         if (logEnabled) {
           logProbe(logPath, rows, raw);
