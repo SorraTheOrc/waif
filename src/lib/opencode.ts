@@ -225,3 +225,130 @@ export function loadAgentMap(): Record<string, string> {
     return {};
   }
 }
+
+export default { ensureClient, loadAgentMap, log };
+
+// Simple rotation-aware logger for .opencode/logs/events.jsonl
+const DEFAULT_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+const DEFAULT_TARGET = resolve('.opencode', 'logs', 'events.jsonl');
+const DEFAULT_ROTATED = `${DEFAULT_TARGET}.1`;
+
+type StreamMeta = {
+  stream: import('node:fs').WriteStream;
+  size: number;
+};
+
+const streamMap: Map<string, StreamMeta> = new Map();
+let mkdirCalled = false;
+
+async function ensureDirForTarget(target: string) {
+  if (mkdirCalled) return;
+  const { dirname } = await import('path');
+  const { mkdir } = await import('node:fs/promises');
+  const dir = dirname(target);
+  try {
+    await mkdir(dir, { recursive: true });
+    mkdirCalled = true;
+  } catch (e) {
+    // ignore
+  }
+}
+
+async function openStreamForTarget(target: string): Promise<StreamMeta> {
+  if (streamMap.has(target)) return streamMap.get(target)!;
+  const { stat } = await import('node:fs/promises');
+  const { createWriteStream } = await import('node:fs');
+  let size = 0;
+  try {
+    const st = await stat(target);
+    size = st.size;
+  } catch (e) {
+    size = 0;
+  }
+  const stream = createWriteStream(target, { flags: 'a' });
+  stream.on('error', (err: any) => {
+    // Avoid blowing up host process for logging failures
+    try {
+      process.stderr.write(`[warn] opencode.log stream error: ${err instanceof Error ? err.message : String(err)}\n`);
+    } catch (e) {}
+  });
+  const meta = { stream, size };
+  streamMap.set(target, meta);
+  return meta;
+}
+
+async function rotateTarget(target: string, rotated: string) {
+  const meta = streamMap.get(target);
+  if (meta) {
+    await new Promise<void>((res) => meta.stream.end(res));
+    streamMap.delete(target);
+  }
+  try {
+    const { rename } = await import('node:fs/promises');
+    await rename(target, rotated);
+  } catch (e) {
+    // ignore rename errors
+  }
+  // open a fresh stream and track it
+  await openStreamForTarget(target);
+}
+
+export async function log(line: string, stream?: NodeJS.WritableStream, opts?: { target?: string; maxBytes?: number }): Promise<void> {
+  const target = opts?.target ? resolve(opts.target) : DEFAULT_TARGET;
+  const rotated = opts?.target ? `${resolve(opts.target)}.1` : DEFAULT_ROTATED;
+  const maxBytes = (opts?.maxBytes ?? Number(process.env.OPENCODE_LOG_MAX_BYTES)) || DEFAULT_MAX_BYTES;
+
+  const text = line.endsWith('\n') ? line : line + '\n';
+
+  // If caller provided a writable stream, use it directly (no rotation performed on external streams)
+  if (stream && typeof (stream as any).write === 'function') {
+    await new Promise<void>((resolveP, rejectP) => {
+      (stream as any).write(text, (err?: Error | null) => {
+        if (err) rejectP(err); else resolveP();
+      });
+    });
+    return;
+  }
+
+  // Ensure directory exists for the default target
+  await ensureDirForTarget(target);
+
+  // Open or reuse stream for target
+  const meta = await openStreamForTarget(target);
+
+  // Rotation check
+  if (meta.size + text.length > maxBytes) {
+    await rotateTarget(target, rotated);
+    // reopen stream meta
+    const newMeta = await openStreamForTarget(target);
+    newMeta.size = 0;
+    // write below using newMeta
+    try {
+      const ok = newMeta.stream.write(text, 'utf8');
+      newMeta.size += text.length;
+      if (!ok) await new Promise<void>((res) => newMeta.stream.once('drain', res));
+      return;
+    } catch (e) {
+      // fallback to appendFile
+    }
+  }
+
+  // Write to stream and update size
+  try {
+    const ok = meta.stream.write(text, 'utf8');
+    meta.size += text.length;
+    if (!ok) await new Promise<void>((res) => meta.stream.once('drain', res));
+    return;
+  } catch (e) {
+    // fallback to appendFile
+  }
+
+  try {
+    const { appendFile } = await import('node:fs/promises');
+    await appendFile(target, text, 'utf8');
+  } catch (e) {
+    // as last resort, write to stderr
+    try { process.stderr.write(`[warn] opencode.log fallback write failed: ${e instanceof Error ? e.message : String(e)}\n`); } catch (er) {}
+  }
+}
+

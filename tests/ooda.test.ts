@@ -27,15 +27,28 @@ describe('ooda classify', () => {
 });
 
 describe('ooda readOpencodeEvents', () => {
-  it('returns empty array for missing file', () => {
-    expect(readOpencodeEvents('/tmp/does-not-exist.jsonl')).toEqual([]);
+  it('returns empty array for missing file', async () => {
+    expect(await readOpencodeEvents('/tmp/does-not-exist.jsonl')).toEqual([]);
   });
 
-  it('parses valid JSON lines and skips invalid', () => {
+  it('keeps only the latest per agent while parsing and skips invalid', async () => {
     const tmp = `/tmp/ooda-test-${Date.now()}.jsonl`;
-    const lines = ['{"a":1}', 'not json', '{"b":2}'];
+    const lines = [
+      '{"type":"start","properties":{"agent":"a","seq":1}}',
+      'not json',
+      '{"type":"start","properties":{"agent":"b","seq":1}}',
+      '{"type":"update","properties":{"agent":"a","seq":2}}',
+      '{"type":"update","properties":{"agent":"b","seq":2}}',
+    ];
     require('fs').writeFileSync(tmp, lines.join('\n'), 'utf8');
-    expect(readOpencodeEvents(tmp)).toEqual([{ a: 1 }, { b: 2 }]);
+    const result = await readOpencodeEvents(tmp);
+    expect(result).toHaveLength(2);
+    const agents = result.map((r) => r?.properties?.agent).sort();
+    expect(agents).toEqual(['a', 'b']);
+    const a = result.find((r) => r?.properties?.agent === 'a');
+    const b = result.find((r) => r?.properties?.agent === 'b');
+    expect(a).toEqual({ type: 'update', properties: { agent: 'a', seq: 2 } });
+    expect(b).toEqual({ type: 'update', properties: { agent: 'b', seq: 2 } });
     require('fs').unlinkSync(tmp);
   });
 });

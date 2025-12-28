@@ -1,132 +1,111 @@
 // OpenCode plugin for waif OODA
-// Logs every OpenCode event as raw JSON to .opencode/logs/events.jsonl (with simple rotation and write-stream).
-import { mkdir, stat, rename } from "node:fs/promises";
-import { createWriteStream, WriteStream } from "node:fs";
+// Logs every OpenCode event as raw JSON to .opencode/logs/events.jsonl (delegates rotation to centralized logger).
+import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import type { Plugin } from "@opencode-ai/plugin";
+import type { Plugin, PluginInput } from "@opencode-ai/plugin";
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+import { log as opencodeLog } from "../../src/lib/opencode.js";
+
+type OpencodeClient = PluginInput["client"];
 
 const LOG_DIR_NAME = path.join(".opencode", "logs");
 const LOG_FILE_NAME = "events.jsonl";
-const ROTATED_LOG_FILE_NAME = "events.jsonl.1";
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB simple size cap for rotation
 
 async function ensureLogDir(dir: string) {
   await mkdir(dir, { recursive: true });
 }
 
-// Singleton stream support: ensures multiple plugin initializations share one WriteStream
-let _sharedStream: WriteStream | undefined = undefined;
-let _sharedStartSize = 0;
-let _sharedPath: string | undefined = undefined;
-
-async function openLogStream(filePath: string): Promise<{ stream: WriteStream; startSize: number }> {
-  // If a stream for this path is already open, reuse it
-  if (_sharedStream && _sharedPath === filePath) {
-    return { stream: _sharedStream, startSize: _sharedStartSize };
-  }
-
-  let size = 0;
+/**
+ * Get the current model/agent context for a session by querying messages.
+ *
+ * Mirrors OpenCode's internal lastModel() logic to find the most recent
+ * user message. Used during event handling when we don't have direct access
+ * to the current user message's context.
+ */
+async function getSessionContext(
+  client: OpencodeClient,
+  sessionID: string
+): Promise<
+  { model?: { providerID: string; modelID: string }; agent?: string } | undefined
+> {
   try {
-    const st = await stat(filePath);
-    size = st.size;
-  } catch (e) {
-    size = 0; // file likely does not exist yet
+    const response = await client.session.messages({
+      path: { id: sessionID },
+      query: { limit: 50 },
+    });
+
+    if (response.data) {
+      for (const msg of response.data) {
+        if (msg.info.role === "user" && "model" in msg.info && msg.info.model) {
+          return { model: msg.info.model, agent: msg.info.agent };
+        }
+      }
+    }
+  } catch {
+    // On error, return undefined (let opencode use its default)
   }
-  const stream = createWriteStream(filePath, { flags: "a" });
-  // Save as shared so future inits reuse the same descriptor
-  _sharedStream = stream;
-  _sharedStartSize = size;
-  _sharedPath = filePath;
-  // Ensure the stream is in non-blocking mode; handle errors to avoid crashing the host process.
-  stream.on("error", (err) => {
-    console.error("WaifOodaPlugin: stream error", err);
-  });
-  return { stream, startSize: size };
+
+  return undefined;
 }
 
-async function rotate(logFile: string, rotatedFile: string, stream: WriteStream): Promise<WriteStream> {
-  await new Promise((resolve) => stream.end(resolve));
-  // Clear shared stream if we rotated the currently-shared file
-  if (_sharedPath === logFile) {
-    _sharedStream = undefined;
-    _sharedStartSize = 0;
-    _sharedPath = undefined;
-  }
-  try {
-    await rename(logFile, rotatedFile);
-  } catch (e) {
-    // If rename fails (e.g., file missing), continue with fresh file
-  }
-  const newStream = createWriteStream(logFile, { flags: "a" });
-  _sharedStream = newStream;
-  _sharedStartSize = 0;
-  _sharedPath = logFile;
-  return newStream;
-}
-
-let _waifOodaInitialized = false;
-export const WaifOodaPlugin: Plugin = async (ctx) => {
-  // Prevent multiple init registrations from creating duplicate handlers
-  if (_waifOodaInitialized) {
-    // eslint-disable-next-line no-console
-    console.error('WaifOodaPlugin: already initialized — skipping duplicate init');
-    return {} as any;
-  }
-  _waifOodaInitialized = true;
+export const WaifOodaPlugin: Plugin = async (context) => {
   // Prefer project directory/worktree when provided by OpenCode; fall back to CWD.
-  const baseDir = ctx?.directory ?? ctx?.worktree ?? process.cwd();
+  const baseDir = context?.directory ?? context?.worktree ?? process.cwd();
   const logDir = path.join(baseDir, LOG_DIR_NAME);
   const logFile = path.join(logDir, LOG_FILE_NAME);
-  const rotatedLogFile = path.join(logDir, ROTATED_LOG_FILE_NAME);
 
   await ensureLogDir(logDir);
-  let { stream, startSize } = await openLogStream(logFile);
-  let currentSize = startSize;
-  // Small in-memory dedupe cache to avoid duplicate writes when the runtime emits the same event twice
-  const _recent = new Map<string, number>();
-  const DEDUPE_WINDOW_MS = 2000; // ignore same id within 2s
 
+  // Track the last logged line for simple deduplication.
+  // If the new line is byte-for-byte identical to the most recently
+  // logged line, skip writing it to reduce log spam.
+  let lastLoggedLine: string | undefined;
+
+  async function maybeLog(line: string) {
+    if (line === lastLoggedLine) return;
+    lastLoggedLine = line;
+    await opencodeLog(line, undefined, { target: logFile, maxBytes: MAX_BYTES });
+  }
 
   return {
-    "chat.message": async (_input, output) => {
+    "chat.message": async (input, output) => {
       const sessionID = output.message.sessionID;
       const agent = output.message.agent;
       const role = output.message.role;
-      const line = `${JSON.stringify({ sessionID, agent, role, message: output.message })}\n`;
+      const parts = output.parts
+      const line = `${JSON.stringify({ sessionID, agent, role, parts })}\n`;
 
-      try {
-        // Dedupe by message id (if available) within a short window
-        const msgId = output?.message?.id || output?.message?.message?.id || output?.message?.message?.id;
-        if (msgId) {
-          const now = Date.now();
-          const last = _recent.get(msgId);
-          if (last && now - last < DEDUPE_WINDOW_MS) {
-            // skip duplicate
-            return;
-          }
-          _recent.set(msgId, now);
-          // prune old entries occasionally
-          if (_recent.size > 1000) {
-            const cutoff = now - DEDUPE_WINDOW_MS * 5;
-            for (const [k, v] of _recent.entries()) {
-              if (v < cutoff) _recent.delete(k);
-            }
-          }
-        }
+      await maybeLog(line);
+    },
 
-        // Simple size-based rotation
-        if (currentSize + line.length > MAX_BYTES) {
-          stream = await rotate(logFile, rotatedLogFile, stream);
-          currentSize = 0;
-        }
+    "permission.ask": async (input, output) => {
+      const type = input.type;
+      const pattern = input.pattern;
+      const status = output.status;
+      const line = `${JSON.stringify({ type, pattern, status })}\n`;
 
-        const ok = stream.write(line, "utf8");
-        currentSize += line.length;
-        if (!ok) {
-          await new Promise<void>((resolve) => stream.once("drain", resolve));
+      await maybeLog(line);
+    },
+
+    event: async (input) => {
+      if (input.event.type === "session.created") {
+        const title = input.event.properties.info.title;
+
+        const line = `${JSON.stringify({ eventType: input.event.type, title })}\n`;
+
+        await maybeLog(line);
+      }
+      else if (input.event.type === "message.updated") {
+        const summary = input.event.properties.info.summary;
+        // summary can be a boolean (false) or an object with optional title/body.
+        // Ensure it's an object and has a title before proceeding.
+        if (typeof summary !== "object" || summary === null || summary.title === undefined) {
+          return;
         }
-      } catch (error) {
-        console.error("WaifOodaPlugin: failed to write event log", error);
+        const line = `${JSON.stringify({ eventType: input.event.type, title: summary.title })}\n`;
+
+        await maybeLog(line);
       }
     },
   };

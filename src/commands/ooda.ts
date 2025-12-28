@@ -1,5 +1,6 @@
 import { Command } from 'commander';
-import { readFileSync } from 'node:fs';
+import { readFileSync, createReadStream } from 'node:fs';
+import readline from 'node:readline';
 import path from 'node:path';
 import { emitJson, logStdout } from '../lib/io.js';
 
@@ -84,23 +85,46 @@ function sampleRows(): PaneRow[] {
   ];
 }
 
-function readOpencodeEvents(logPath: string): any[] {
+async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]> {
+  // Streaming JSONL parser: read line-by-line and keep only the latest event per agent to avoid full in-memory materialization.
   try {
-    const txt = readFileSync(logPath, 'utf8');
-    return txt
-      .split(/\r?\n/)
-      .filter(Boolean)
-      .map((line) => {
-        try {
-          return JSON.parse(line);
-        } catch (e) {
-          return undefined;
-        }
-      })
-      .filter(Boolean) as any[];
+    const stream = createReadStream(logPath, { encoding: 'utf8' });
+    const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
+    const latestMap: Record<string, OpencodeAgentEvent> = {};
+    for await (const line of rl) {
+      if (!line || !line.trim()) continue;
+      let parsed: OpencodeAgentEvent | undefined;
+      try {
+        parsed = JSON.parse(line) as OpencodeAgentEvent;
+      } catch (e) {
+        // skip malformed lines
+        continue;
+      }
+      const agent =
+        (parsed?.properties?.agent as string) ||
+        (parsed?.properties?.name as string) ||
+        (parsed?.properties?.id as string) ||
+        'unknown';
+      latestMap[agent] = parsed;
+    }
+    return Object.keys(latestMap).map((k) => latestMap[k]);
   } catch (e) {
     return [];
   }
+}
+
+function latestEventsByAgent(events: OpencodeAgentEvent[]): OpencodeAgentEvent[] {
+  if (!Array.isArray(events) || events.length === 0) return [];
+  const map: Record<string, OpencodeAgentEvent> = {};
+  for (const ev of events) {
+    const agent =
+      (ev?.properties?.agent as string) ||
+      (ev?.properties?.name as string) ||
+      (ev?.properties?.id as string) ||
+      'unknown';
+    map[agent] = ev; // last one wins
+  }
+  return Object.keys(map).map((k) => map[k]);
 }
 
 function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
@@ -117,7 +141,7 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
   });
 }
 
-export const __test__ = { readOpencodeEvents, eventsToRows };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent };
 
 export function createOodaCommand() {
   const cmd = new Command('ooda');
@@ -134,14 +158,18 @@ export function createOodaCommand() {
       const useSample = Boolean(options.sample);
       const once = Boolean(options.once);
 
-      const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
+            const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
 
-      const runCycle = () => {
-        const events = useSample ? [] : readOpencodeEvents(opencodeLogPath);
-        const rows = useSample && events.length === 0 ? sampleRows() : eventsToRows(events);
+      const runCycle = async () => {
+        const latest = useSample ? [] : await readOpencodeEvents(opencodeLogPath);
+        const rows = useSample && latest.length === 0 ? sampleRows() : eventsToRows(latest);
         const table = renderTable(rows);
         if (jsonOutput) {
-          emitJson({ rows, opencodeEvents: events });
+          emitJson({
+            rows,
+            opencodeEventsRaw: latest,
+            opencodeEventsLatest: latest,
+          });
         } else {
           logStdout(table);
         }
@@ -149,7 +177,7 @@ export function createOodaCommand() {
       };
 
       if (once) {
-        runCycle();
+        await runCycle();
         return;
       }
 
@@ -162,7 +190,7 @@ export function createOodaCommand() {
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const rows = runCycle();
+        const rows = await runCycle();
         const fingerprint = rows.map((r) => `${r.pane}|${r.status}|${r.title}|${r.reason}`).join(';');
         if (fingerprint === lastFingerprint) {
           stableCycles += 1;
