@@ -137,7 +137,7 @@ export function createOodaCommand() {
     .option('--once', 'Run a single probe and exit')
     .option('--interval <seconds>', 'Poll interval in seconds', (v) => parseInt(v, 10), 5)
     .option('--log <path>', 'Log path (default history/ooda_probe_<ts>.txt)')
-    .option('--no-log', 'Disable logging')
+    .option('--no-log', 'Disable logging (still reads .opencode/logs/events.jsonl)')
     .option('--sample', 'Use built-in sample data (no OpenCode)')
     .action(async (options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
@@ -157,12 +157,6 @@ export function createOodaCommand() {
           emitJson({ rows, opencodeEvents: events });
         } else {
           logStdout(table);
-          if (events.length > 0) {
-            logStdout(`\nOpenCode events (${events.length} total)`);
-            for (const ev of events.slice(-5)) {
-              logStdout(JSON.stringify(ev));
-            }
-          }
         }
         if (logEnabled) {
           logProbe(logPath, rows);
