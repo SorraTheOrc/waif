@@ -9,16 +9,20 @@ tools:
   bash: true
 permission:
   bash:
-    "git status": allow
+    "git add *": allow
+    "git commit*": allow
     "git diff": allow
     "git fetch*": allow
     "git pull*": allow
-    "git checkout*": allow
+    "git push*": ask
     "git rebase*": allow
     "git remote*": allow
     "git rev-parse": allow
+    "git status": allow
+    "gh --version": allow
     "gh pr*": allow
     "bd *": allow
+    "ls *": allow
     "npm *": allow
     "waif *": allow
     "*": ask

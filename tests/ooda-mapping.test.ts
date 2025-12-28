@@ -1,26 +1,21 @@
-import { describe, expect, it, vi } from 'vitest';
-import * as fs from 'node:fs';
-import { getAgentFromProc } from '../src/commands/ooda.js';
+import { describe, it, expect } from 'vitest';
+import { __test__ } from '../src/commands/ooda.js';
 
-// Mock FS reads for /proc
-vi.mock('node:fs', async () => {
-  const actual = await vi.importActual<any>('node:fs');
-  return {
-    ...actual,
-    readFileSync: (path: string, enc: string) => {
-      if (path === '/proc/123/environ') return 'BD_ACTOR=patch\0OTHER=1\0';
-      if (path === '/proc/124/cmdline') return 'node\0waif\0startWork\0--actor\0map\0\0';
-      throw new Error('not found');
-    },
-  };
-});
+const { eventsToRows } = __test__;
 
-describe('proc-based agent detection', () => {
-  it('reads BD_ACTOR from environ', () => {
-    expect(getAgentFromProc('123')).toBe('patch');
+describe('ooda OpenCode event mapping', () => {
+  it('maps agent.start events to Busy rows with agent name', () => {
+    const events = [{ type: 'agent.started', properties: { agent: 'map' } }];
+    expect(eventsToRows(events)).toEqual([{ pane: 'map', title: 'agent.started', status: 'Busy', reason: 'opencode-event' }]);
   });
 
-  it('reads actor from cmdline fallback', () => {
-    expect(getAgentFromProc('124')).toBe('map');
+  it('maps agent.stop events to Free rows', () => {
+    const events = [{ type: 'agent.stopped', properties: { name: 'forge' } }];
+    expect(eventsToRows(events)).toEqual([{ pane: 'forge', title: 'agent.stopped', status: 'Free', reason: 'opencode-event' }]);
+  });
+
+  it('falls back to unknown when no agent identifiers are present', () => {
+    const events = [{ type: 'agent.started', properties: { foo: 'bar' } }];
+    expect(eventsToRows(events)).toEqual([{ pane: 'unknown', title: 'agent.started', status: 'Busy', reason: 'opencode-event' }]);
   });
 });
