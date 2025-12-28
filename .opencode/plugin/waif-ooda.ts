@@ -82,6 +82,10 @@ export const WaifOodaPlugin: Plugin = async (ctx) => {
   await ensureLogDir(logDir);
   let { stream, startSize } = await openLogStream(logFile);
   let currentSize = startSize;
+  // Small in-memory dedupe cache to avoid duplicate writes when the runtime emits the same event twice
+  const _recent = new Map<string, number>();
+  const DEDUPE_WINDOW_MS = 2000; // ignore same id within 2s
+
 
   return {
     "chat.message": async (_input, output) => {
@@ -91,6 +95,25 @@ export const WaifOodaPlugin: Plugin = async (ctx) => {
       const line = `${JSON.stringify({ sessionID, agent, role, message: output.message })}\n`;
 
       try {
+        // Dedupe by message id (if available) within a short window
+        const msgId = output?.message?.id || output?.message?.message?.id || output?.message?.message?.id;
+        if (msgId) {
+          const now = Date.now();
+          const last = _recent.get(msgId);
+          if (last && now - last < DEDUPE_WINDOW_MS) {
+            // skip duplicate
+            return;
+          }
+          _recent.set(msgId, now);
+          // prune old entries occasionally
+          if (_recent.size > 1000) {
+            const cutoff = now - DEDUPE_WINDOW_MS * 5;
+            for (const [k, v] of _recent.entries()) {
+              if (v < cutoff) _recent.delete(k);
+            }
+          }
+        }
+
         // Simple size-based rotation
         if (currentSize + line.length > MAX_BYTES) {
           stream = await rotate(logFile, rotatedLogFile, stream);
