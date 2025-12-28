@@ -1,5 +1,5 @@
 import { Command } from 'commander';
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { emitJson, logStdout } from '../lib/io.js';
 
@@ -119,17 +119,6 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
 
 export const __test__ = { readOpencodeEvents, eventsToRows };
 
-function logProbe(logPath: string, rows: PaneRow[]): void {
-  const ts = new Date().toISOString();
-  const dir = path.dirname(logPath);
-  if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
-  const header = existsSync(logPath) ? '' : '# ooda probe log\n';
-  const body = rows
-    .map((r) => `pane=${r.pane}\tstatus=${r.status}\ttitle=${r.title}\treason=${r.reason}`)
-    .join('\n');
-  writeFileSync(logPath, `${header}\n[${ts}]\n${body}\n`, { flag: 'a' });
-}
-
 export function createOodaCommand() {
   const cmd = new Command('ooda');
   cmd
@@ -142,8 +131,6 @@ export function createOodaCommand() {
     .action(async (options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
       const interval = Number(options.interval ?? 5) || 5;
-      const logEnabled = options.log !== false && options.log !== null && options.log !== undefined;
-      const logPath = options.log || `history/ooda_probe_${Math.floor(Date.now() / 1000)}.txt`;
       const useSample = Boolean(options.sample);
       const once = Boolean(options.once);
 
@@ -157,9 +144,6 @@ export function createOodaCommand() {
           emitJson({ rows, opencodeEvents: events });
         } else {
           logStdout(table);
-        }
-        if (logEnabled) {
-          logProbe(logPath, rows);
         }
         return rows;
       };
