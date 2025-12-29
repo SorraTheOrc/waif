@@ -103,6 +103,7 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
       }
       const agent =
         (parsed?.properties?.agent as string) ||
+        (parsed as any).agent ||
         (parsed?.properties?.name as string) ||
         (parsed?.properties?.id as string) ||
         'unknown';
@@ -119,6 +120,7 @@ function latestEventsByAgent(events: OpencodeAgentEvent[]): OpencodeAgentEvent[]
   const map: Record<string, OpencodeAgentEvent> = {};
   for (const ev of events) {
     const agent =
+      (ev as any).agent ||
       (ev?.properties?.agent as string) ||
       (ev?.properties?.name as string) ||
       (ev?.properties?.id as string) ||
@@ -132,12 +134,14 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
   if (!Array.isArray(events) || events.length === 0) return [];
   return events.map((ev) => {
     const agent =
+      (ev as any).agent ||
       (ev?.properties?.agent as string) ||
       (ev?.properties?.name as string) ||
       (ev?.properties?.id as string) ||
       'unknown';
-    const title = ev?.type || 'event';
-    const status = title.includes('stopped') || title.includes('stop') ? 'Free' : 'Busy';
+    // prefer a short human title from event properties if available
+    const title = (ev as any).title || ev?.type || ((ev?.properties && (ev.properties.title || ev.properties.summary)) as string) || 'event';
+    const status = String(title).toLowerCase().includes('stopped') || String(title).toLowerCase().includes('stop') ? 'Free' : 'Busy';
     return { pane: agent, title, status, reason: 'opencode-event' };
   });
 }
