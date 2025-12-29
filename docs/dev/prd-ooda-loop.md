@@ -67,6 +67,7 @@ The repository already contains a working event-driven implementation for the OO
 * Plugin: `.opencode/plugin/waif-ooda.ts` — emits JSONL lines to `.opencode/logs/events.jsonl`. The plugin deduplicates identical repeated lines and uses the opencode log helper in `src/lib/opencode.ts`.
 * CLI: `src/commands/ooda.ts` — implements `readOpencodeEvents` (streaming JSONL reader), event reduction to latest-per-agent, `classify()` mapping heuristics, and table/JSON rendering. Passing `--json` adds `opencodeEventsRaw` and `opencodeEventsLatest` to the output.
 * Tests: `tests/ooda.test.ts`, `tests/ooda-mapping.test.ts`, `tests/latest-events.test.ts` — these tests exercise the streaming reader and mapping logic and pass locally.
+* Utilities: a small dev emitter (`scripts/dev_opencode_emitter.js`) can append sample events to `.opencode/logs/events.jsonl` for CI/local testing. A redaction helper (`src/lib/redact.ts`) is available to sanitize long bodies and obvious tokens before writing snapshots to `history/`.
 
 Sample JSONL event line (one-per-line):
 
