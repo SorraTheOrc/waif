@@ -23,6 +23,8 @@ export function redactSecrets(text: string): string {
 
   // 4) Long base64-like strings (very long continuous base64) -> redact first to avoid hex collisions
   out = out.replace(/\b(?:[A-Za-z0-9+\/=]{40,})\b/g, (m) => {
+    // Skip if the token is hex-only (allow hex to be caught by hex rule)
+    if (/^[a-f0-9]+$/i.test(m)) return m;
     return '[REDACTED_BASE64]';
   });
 
