@@ -34,7 +34,7 @@
 
 * Functional requirements (MVP)
   1. CLI surface
-     * Provide `waif ooda` with flags: `--interval <seconds>` (default: 5), `--log <path>` to persist probe output (optional), and `--once` to run a single snapshot.
+     * Provide `waif ooda` with flags: `--interval <seconds>` (default: 5), `--log <path>` to persist probe output (optional), `--json` to emit JSON output, and `--once` to run a single snapshot. The `--interval` default is 5 seconds when streaming.
   2. Event ingestion
      * Ingest OpenCode events from `.opencode/logs/events.jsonl` (JSONL). A lightweight in-repo OpenCode plugin (`.opencode/plugin/waif-ooda.ts`) writes selected events to that file.
      * The ingestion reader MUST be stream-oriented and line-by-line to avoid OOM when logs grow (see `readOpencodeEvents` in `src/commands/ooda.ts`).
@@ -43,7 +43,7 @@
   4. Display
      * Print a width-aware table with columns: Agent | Busy/Free | Title (or emit JSON when `--json` is passed). Include derived fields used for audits.
   5. Logging & snapshots
-     * When `--log <path>` is provided, append a snapshot JSON (canonical object) to the chosen file under `history/` by default (e.g., `history/ooda_snapshot_<ts>.jsonl`).
+      * When `--log <path>` is provided, append a snapshot JSON (canonical object) to the chosen file under `history/` by default (e.g., `history/ooda_snapshot_<ts>.jsonl`). Recommended snapshot shape for `--log`: { "time": "<ISO8601>", "agent": "<agent>", "status": "Busy|Free", "title": "<short title>", "reason": "<event.type>" }. Do NOT include full message bodies in persisted snapshots. Retention: write timestamped snapshot lines/files under `history/` (e.g., `history/ooda_snapshot_<ts>.jsonl`) for auditability; do not overwrite a single canonical file in v1. Rotation and cleanup policies can be specified in a future maintenance task.
   6. Safety & read-only
      * The command must not send instructions to agents in v1. Any automation capability must be gated and require explicit review.
 
@@ -57,8 +57,8 @@
   * Local filesystem for snapshots (`history/`).
 
 * Security & privacy
-  * Do not persist full message bodies or raw terminal buffers. Plugin and reader should limit logged fields to event `type`, `time`, and selected `properties` (e.g., `agent`, `title`, `summary`).
-  * Document the exact event schema and implement redaction in future iterations (see wf-ba2.8 for audit/redaction requirements).
+   * Do not persist full message bodies or raw terminal buffers. Plugin and reader MUST limit persisted fields to the minimal set: event `type`, `time`, and selected `properties` (e.g., `agent`, `title`, `seq`). Full message bodies must never be written to history/ snapshots.
+   * Document the exact event schema and implement redaction in v2 (see wf-ba2.8 for audit/redaction requirements).
 
 ## Implementation notes (current state)
 
@@ -73,6 +73,13 @@ Sample JSONL event line (one-per-line):
 ```
 {"type":"agent.started","time":"2025-12-28T14:00:00Z","properties":{"agent":"map","title":"map started wf-cvz.1","seq":1}}
 ```
+
+Recommended event names and properties (v1):
+- `agent.started` — properties: `agent`, `title`, `seq`, `time`
+- `agent.stopped` / `agent.exited` — properties: `agent`, `time`, `reason` (optional)
+- `agent.message` (or `message.returned`) — properties: `agent`, `title` (short summary), `seq`, `time`
+
+Note: for v1 we recommend `agent.started`, `agent.stopped`, and `agent.message` as the canonical names; owners may confirm alternate names in the review responses.
 
 Sample OODA JSON output shape (when `--json` is used):
 
