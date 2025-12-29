@@ -18,14 +18,22 @@ export function redactSecrets(text: string): string {
   // 2) API keys and secrets in `key=...` or `"key": "..."` forms
   out = out.replace(/([a-zA-Z0-9_\-]*?(?:api[_-]?key|secret|token|access[_-]?token|sk)\b)\s*[:=]\s*(["']?)[A-Za-z0-9\-\._~\+\/=]{8,}\2/gi, '$1: [REDACTED]');
 
-  // 3) Keys that look like `sk-` (OpenAI-like) or long hex/blob strings
+  // 3) Keys that look like `sk-` (OpenAI-like)
   out = out.replace(/\bsk-[A-Za-z0-9]{16,}\b/gi, 'sk-[REDACTED]');
+
+  // 4) Long base64-like strings (very long continuous base64) -> redact first to avoid hex collisions
+  out = out.replace(/\b(?:[A-Za-z0-9+\/=]{40,})\b/g, (m) => {
+    return '[REDACTED_BASE64]';
+  });
+
+  // 5) Long hex/blob strings
   out = out.replace(/\b[a-f0-9]{32,}\b/gi, '[REDACTED_HEX]');
 
-  // 4) Long base64-like strings (very long continuous base64) -> redact
-  out = out.replace(/\b(?:[A-Za-z0-9+\/=]{24,})\b/g, (m) => {
-    // only redact if it's sufficiently long (likely a token/blob)
-    return m.length > 40 ? '[REDACTED_BASE64]' : m;
+  // 6) Inline JSON fields with long text values; truncate values longer than 200 chars
+  out = out.replace(/(\"(?:text|body|message|content)\"\s*:\s*\")(.*?)(\")/gis, (full, pre, val, post) => {
+    if (!val) return full;
+    const clean = val.length > 200 ? val.slice(0, 200) + '...[TRUNCATED]' : val;
+    return pre + clean + post;
   });
 
   // 5) Inline JSON fields with long text values; truncate values longer than 200 chars
