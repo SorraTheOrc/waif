@@ -22,7 +22,7 @@ Focus on:
 - Reviewing proposed assets for cohesion, accessibility, and repo-fit, calling out gaps early
 
 Workflow:
-  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed). Confirm `git status` is clean; if not, escalate.
+  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed). Confirm `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
 
 Repo rules:
 - Use `bd` for issue tracking; don’t introduce markdown TODO checklists.
