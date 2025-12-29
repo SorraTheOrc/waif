@@ -1,66 +1,66 @@
-// OpenCode plugin for waif OODA
-// Logs every OpenCode event as raw JSON to .opencode/logs/events.jsonl (delegates rotation to centralized logger).
-import { mkdir } from "node:fs/promises";
-import path from "node:path";
-import type { Plugin, PluginInput } from "@opencode-ai/plugin";
-import type { Session, Message, Part } from "@opencode-ai/sdk"
-import { log as opencodeLog } from "../../src/lib/opencode.js";
+// OpenCode plugin for waif OODA — canonical event emitter
+// This plugin normalizes incoming OpenCode events to a canonical waif schema
+// and writes one JSONL line per logical event to .opencode/logs/events.jsonl
 
-type OpencodeClient = PluginInput["client"];
+import { mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { log as opencodeLog } from '../../src/lib/opencode.js';
 
-const LOG_DIR_NAME = path.join(".opencode", "logs");
-const LOG_FILE_NAME = "events.jsonl";
+// Use loose any typing for compatibility with various OpenCode SDK shapes
+type OpencodeClient = any;
+
+const LOG_DIR_NAME = path.join('.opencode', 'logs');
+const LOG_FILE_NAME = 'events.jsonl';
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB simple size cap for rotation
 
 async function ensureLogDir(dir: string) {
   await mkdir(dir, { recursive: true });
 }
 
-/**
- * Get the current model/agent context for a session by querying messages.
- *
- * Mirrors OpenCode's internal lastModel() logic to find the most recent
- * user message. Used during event handling when we don't have direct access
- * to the current user message's context.
- */
-async function getSessionContext(
-  client: OpencodeClient,
-  sessionID: string
-): Promise<
-  { model?: { providerID: string; modelID: string }; agent?: string } | undefined
-> {
-  try {
-    const response = await client.session.messages({
-      path: { id: sessionID },
-      query: { limit: 50 },
-    });
+// Helper to produce a short human title from parts or summary
+function titleFromParts(parts: any[] | undefined, summary: any | undefined, fallback: string) {
+  if (typeof summary === 'string' && summary.trim()) return summary.trim();
+  if (Array.isArray(parts) && parts.length > 0) {
+    try {
+      const texts = parts
+        .filter((p) => p && (p.type === 'text' || typeof p.text === 'string'))
+        .map((p) => (typeof p.text === 'string' ? p.text.trim() : ''))
+        .filter(Boolean);
+      const joined = texts.join(' ');
+      if (joined) return joined.length > 240 ? joined.slice(0, 240) + '...[TRUNCATED]' : joined;
+    } catch {
+      // ignore
+    }
+  }
+  if (typeof fallback === 'string' && fallback) return fallback;
+  return 'event';
+}
 
-    if (response.data) {
-      for (const msg of response.data) {
-        if (msg.info.role === "user" && "model" in msg.info && msg.info.model) {
-          return { model: msg.info.model, agent: msg.info.agent };
-        }
-      }
+// Query the session messages to infer an agent if none is present on the event
+async function getSessionAgent(client: OpencodeClient | undefined, sessionID: string | undefined) {
+  if (!client || !sessionID) return undefined;
+  try {
+    const resp = await client.session.messages({ path: { id: sessionID }, query: { limit: 50 } });
+    if (!resp?.data || !Array.isArray(resp.data)) return undefined;
+    // scan for the most recent user message that contains an agent hint
+    for (const msg of resp.data) {
+      if (msg?.info && msg.info.agent) return msg.info.agent;
     }
   } catch {
-    // On error, return undefined (let opencode use its default)
+    // ignore errors; best-effort
   }
-
   return undefined;
 }
 
 export const WaifOodaPlugin: Plugin = async (context) => {
-  // Prefer project directory/worktree when provided by OpenCode; fall back to CWD.
   const baseDir = context?.directory ?? context?.worktree ?? process.cwd();
   const logDir = path.join(baseDir, LOG_DIR_NAME);
   const logFile = path.join(logDir, LOG_FILE_NAME);
 
   await ensureLogDir(logDir);
 
-  // Track the last logged line for simple deduplication.
-  // If the new line is byte-for-byte identical to the most recently
-  // logged line, skip writing it to reduce log spam.
   let lastLoggedLine: string | undefined;
+  let seq = 0;
 
   async function maybeLog(line: string) {
     if (line === lastLoggedLine) return;
@@ -68,44 +68,69 @@ export const WaifOodaPlugin: Plugin = async (context) => {
     await opencodeLog(line, undefined, { target: logFile, maxBytes: MAX_BYTES });
   }
 
+  // Build canonical event object
+  function buildCanonical(fields: {
+    type: string;
+    agent?: string;
+    title?: string;
+    sessionID?: string;
+    properties?: Record<string, any>;
+  }) {
+    seq += 1;
+    return {
+      time: new Date().toISOString(),
+      type: fields.type,
+      agent: fields.agent || undefined,
+      title: fields.title || undefined,
+      seq,
+      sessionID: fields.sessionID || undefined,
+      properties: fields.properties || {},
+    };
+  }
+
   return {
-    "chat.message": async (input, output) => {
-      const sessionID = output.message.sessionID;
-      const agent = output.message.agent;
-      const role = output.message.role;
-      const parts = output.parts
-      const line = `${JSON.stringify({ sessionID, agent, role, parts })}\n`;
+    // Chat messages: contain sessionID, agent, role, parts
+    'chat.message': async (input: any, output: any) => {
+      const sessionID = output?.message?.sessionID;
+      const agent = output?.message?.agent;
+      const parts = output?.parts;
+      const title = titleFromParts(parts, undefined, undefined);
 
-      await maybeLog(line);
+      let canonicalAgent = agent;
+      if (!canonicalAgent) canonicalAgent = await getSessionAgent((context as any)?.client, sessionID);
+
+      const obj = buildCanonical({ type: 'message', agent: canonicalAgent, title, sessionID, properties: { role: output?.message?.role, parts: parts ? parts.map((p: any) => ({ type: p.type, text: p.text })) : undefined } });
+      await maybeLog(JSON.stringify(obj) + '\n');
     },
 
-    "permission.ask": async (input, output) => {
-      const type = input.type;
-      const pattern = input.pattern;
-      const status = output.status;
-      const line = `${JSON.stringify({ type, pattern, status })}\n`;
-
-      await maybeLog(line);
+    // Permission asks
+    'permission.ask': async (input: any, output: any) => {
+      const type = input?.type;
+      const pattern = input?.pattern;
+      const status = output?.status;
+      const title = `permission:${type}`;
+      const obj = buildCanonical({ type: 'permission.ask', title, properties: { pattern, status } });
+      await maybeLog(JSON.stringify(obj) + '\n');
     },
 
-    event: async (input) => {
-      if (input.event.type === "session.created") {
-        const title = input.event.properties.info.title;
+    // Generic events
+    event: async (input: any) => {
+      try {
+        const ev = input.event as any;
+        const etype = ev?.type || 'event';
+        const sessionID = ev?.properties?.sessionID || ev?.properties?.info?.sessionID || ev?.properties?.sessionID || undefined;
+        // Attempt to compute a human title
+        const summary = ev?.properties?.info?.summary;
+        const title = titleFromParts(undefined, summary && summary.title ? summary.title : ev?.properties?.info?.title || ev?.properties?.title, ev?.type || etype);
 
-        const line = `${JSON.stringify({ eventType: input.event.type, title })}\n`;
+        // Attempt to find an agent in various spots
+        let agent = ev?.properties?.agent || ev?.properties?.info?.actor || ev?.actor || undefined;
+        if (!agent && sessionID) agent = await getSessionAgent((context as any)?.client, sessionID);
 
-        await maybeLog(line);
-      }
-      else if (input.event.type === "message.updated") {
-        const summary = input.event.properties.info.summary;
-        // summary can be a boolean (false) or an object with optional title/body.
-        // Ensure it's an object and has a title before proceeding.
-        if (typeof summary !== "object" || summary === null || summary.title === undefined) {
-          return;
-        }
-        const line = `${JSON.stringify({ eventType: input.event.type, title: summary.title })}\n`;
-
-        await maybeLog(line);
+        const obj = buildCanonical({ type: etype, agent, title, sessionID, properties: ev?.properties || {} });
+        await maybeLog(JSON.stringify(obj) + '\n');
+      } catch (e) {
+        // best-effort, ignore
       }
     },
   };
