@@ -1,8 +1,9 @@
 import { Command } from 'commander';
-import { readFileSync, createReadStream } from 'node:fs';
+import { readFileSync, createReadStream, appendFileSync, mkdirSync } from 'node:fs';
 import readline from 'node:readline';
 import path from 'node:path';
 import { emitJson, logStdout } from '../lib/io.js';
+import { redactSecrets } from '../lib/redact.js';
 
 interface PaneRow {
   pane: string;
@@ -143,6 +144,27 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
 
 export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent };
 
+export function writeSnapshots(logPath: string, rows: PaneRow[]) {
+  if (!logPath || !Array.isArray(rows)) return;
+  try {
+    const dir = path.dirname(logPath);
+    if (dir && dir !== '.' ) mkdirSync(dir, { recursive: true });
+    const time = new Date().toISOString();
+    for (const r of rows) {
+      const snapshot = {
+        time,
+        agent: r.pane,
+        status: r.status,
+        title: redactSecrets(String(r.title)),
+        reason: redactSecrets(String(r.reason)),
+      };
+      appendFileSync(logPath, JSON.stringify(snapshot) + '\n', 'utf8');
+    }
+  } catch (e) {
+    // best-effort: do not throw from logging
+  }
+}
+
 export function createOodaCommand() {
   const cmd = new Command('ooda');
   cmd
@@ -158,7 +180,7 @@ export function createOodaCommand() {
       const useSample = Boolean(options.sample);
       const once = Boolean(options.once);
 
-            const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
+      const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
 
       const runCycle = async () => {
         const latest = useSample ? [] : await readOpencodeEvents(opencodeLogPath);
@@ -173,6 +195,13 @@ export function createOodaCommand() {
         } else {
           logStdout(table);
         }
+
+        // If logging is enabled via --log <path>, append sanitized snapshots
+        if (options.log && options.log !== false) {
+          const lp = typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
+          writeSnapshots(lp, rows);
+        }
+
         return rows;
       };
 
