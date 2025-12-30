@@ -38,18 +38,15 @@ export function createContextCommand() {
     .option('--force', 'Overwrite existing file')
     .option('--max-tokens <n>', 'Soft max tokens (not enforced in v1)')
     .action((options, command) => {
-      const outOpt = options.out as string | undefined;
+      // Default behavior: write to canonical path and overwrite on every run
+      const outOpt = (options.out as string | undefined) ?? 'docs/dev/CONTEXT_PACK.md';
       const force = Boolean(options.force);
       const content = buildTemplate();
 
-      if (!outOpt) {
-        // Print to stdout by default
-        logStdout(content);
-        return;
-      }
-
       const out = resolve(outOpt);
-      if (!force && existsSync(out)) {
+
+      // If user explicitly provided --out, preserve overwrite protection unless --force supplied
+      if (options.out && !force && existsSync(out)) {
         throw new CliError(`File already exists at ${out}. Use --force to overwrite`, 2);
       }
 
