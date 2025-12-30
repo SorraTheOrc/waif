@@ -34,7 +34,7 @@
 
 * Functional requirements (MVP)
   1. CLI surface
-     * Provide `waif ooda` with flags: `--interval <seconds>` (default: 5), `--log <path>` to persist probe output (optional), and `--once` to run a single snapshot.
+     * Provide `waif ooda` with flags: `--interval <seconds>` (default: 5), `--log <path>` to persist probe output (optional), `--json` to emit JSON output, and `--once` to run a single snapshot. The `--interval` default is 5 seconds when streaming.
   2. Event ingestion
      * Ingest OpenCode events from `.opencode/logs/events.jsonl` (JSONL). A lightweight in-repo OpenCode plugin (`.opencode/plugin/waif-ooda.ts`) writes selected events to that file.
      * The ingestion reader MUST be stream-oriented and line-by-line to avoid OOM when logs grow (see `readOpencodeEvents` in `src/commands/ooda.ts`).
@@ -43,7 +43,7 @@
   4. Display
      * Print a width-aware table with columns: Agent | Busy/Free | Title (or emit JSON when `--json` is passed). Include derived fields used for audits.
   5. Logging & snapshots
-     * When `--log <path>` is provided, append a snapshot JSON (canonical object) to the chosen file under `history/` by default (e.g., `history/ooda_snapshot_<ts>.jsonl`).
+      * When `--log <path>` is provided, append a snapshot JSON (canonical object) to the chosen file under `history/` by default (e.g., `history/ooda_snapshot_<ts>.jsonl`). Recommended snapshot shape for `--log`: { "time": "<ISO8601>", "agent": "<agent>", "status": "Busy|Free", "title": "<short title>", "reason": "<event.type>" }. Do NOT include full message bodies in persisted snapshots. Retention: write timestamped snapshot lines/files under `history/` (e.g., `history/ooda_snapshot_<ts>.jsonl`) for auditability; do not overwrite a single canonical file in v1. Rotation and cleanup policies can be specified in a future maintenance task.
   6. Safety & read-only
      * The command must not send instructions to agents in v1. Any automation capability must be gated and require explicit review.
 
@@ -57,8 +57,8 @@
   * Local filesystem for snapshots (`history/`).
 
 * Security & privacy
-  * Do not persist full message bodies or raw terminal buffers. Plugin and reader should limit logged fields to event `type`, `time`, and selected `properties` (e.g., `agent`, `title`, `summary`).
-  * Document the exact event schema and implement redaction in future iterations (see wf-ba2.8 for audit/redaction requirements).
+   * Do not persist full message bodies or raw terminal buffers. Plugin and reader MUST limit persisted fields to the minimal set: event `type`, `time`, and selected `properties` (e.g., `agent`, `title`, `seq`). Full message bodies must never be written to history/ snapshots.
+   * Document the exact event schema and implement redaction in v2 (see wf-ba2.8 for audit/redaction requirements).
 
 ## Implementation notes (current state)
 
@@ -67,12 +67,20 @@ The repository already contains a working event-driven implementation for the OO
 * Plugin: `.opencode/plugin/waif-ooda.ts` — emits JSONL lines to `.opencode/logs/events.jsonl`. The plugin deduplicates identical repeated lines and uses the opencode log helper in `src/lib/opencode.ts`.
 * CLI: `src/commands/ooda.ts` — implements `readOpencodeEvents` (streaming JSONL reader), event reduction to latest-per-agent, `classify()` mapping heuristics, and table/JSON rendering. Passing `--json` adds `opencodeEventsRaw` and `opencodeEventsLatest` to the output.
 * Tests: `tests/ooda.test.ts`, `tests/ooda-mapping.test.ts`, `tests/latest-events.test.ts` — these tests exercise the streaming reader and mapping logic and pass locally.
+* Utilities: a small dev emitter (`scripts/dev_opencode_emitter.js`) can append sample events to `.opencode/logs/events.jsonl` for CI/local testing. A redaction helper (`src/lib/redact.ts`) is available to sanitize long bodies and obvious tokens before writing snapshots to `history/`.
 
 Sample JSONL event line (one-per-line):
 
 ```
 {"type":"agent.started","time":"2025-12-28T14:00:00Z","properties":{"agent":"map","title":"map started wf-cvz.1","seq":1}}
 ```
+
+Recommended event names and properties (v1):
+- `agent.started` — properties: `agent`, `title`, `seq`, `time`
+- `agent.stopped` / `agent.exited` — properties: `agent`, `time`, `reason` (optional)
+- `agent.message` (or `message.returned`) — properties: `agent`, `title` (short summary), `seq`, `time`
+
+Note: for v1 we recommend `agent.started`, `agent.stopped`, and `agent.message` as the canonical names; owners may confirm alternate names in the review responses.
 
 Sample OODA JSON output shape (when `--json` is used):
 
@@ -87,10 +95,27 @@ Sample OODA JSON output shape (when `--json` is used):
 ## Heuristics (examples)
 
 * Mapping examples (v1):
-  * `agent.started` → Busy (reason: agent.started)
-  * `agent.stopped` / `agent.exited` → Free
-  * `message.updated` or `ask.request` → Busy
-  * Unknown or missing recent events → Free (after configurable timeout)
+
+Below is a canonical mapping table that links the normalized event "type" emitted by the `.opencode/plugin/waif-ooda.ts` plugin (and the raw OpenCode event messages that commonly produce them) to the OODA status used by the `waif ooda` monitor. Use this table as the authoritative reference for v1 mapping and for configuring the ignore-list noted elsewhere in the PRD.
+
+| waif-ooda event type | Common OpenCode event(s) / origin | OODA status | When it occurs / notes |
+|---|---|---:|---|
+| `agent.started` | `agent.started` | Busy | Agent process/session started; marks agent as active. |
+| `agent.stopped` / `agent.exited` | `agent.stopped`, `agent.exited` | Free | Agent terminated or signalled stop; marks agent as not active. |
+| `message` (chat.message → normalized `message`) | `message.updated`, `message` (assistant/user), `message.part.updated` producing text parts | Busy | New or updated chat messages from an agent or assistant indicate active work; used to show agent is Busy and provide a short Title. |
+| `permission.ask` | `permission.ask` | Busy (awaiting response) | A permission request was emitted; agent/workflow is waiting on a permission decision. Treated as Busy for monitoring purposes until resolved. |
+| `session.status` → `{ type: "busy" }` | `session.status` (properties.status.type === "busy") | Busy | Explicit session-level Busy indicator from OpenCode/agent runtime. |
+| `session.status` → `{ type: "idle" }` | `session.status` (properties.status.type === "idle") | Free | Explicit session-level Idle indicator; treat as Free. |
+| `session.status` → `{ type: "retry" }` | `session.status` (properties.status.type === "retry") | Busy (transient) | Session is in a retry/backoff loop after an error; surface as Busy with retry metadata. |
+| Tool call states (via `message.part.updated` / ToolPart) | Tool state.status: `pending`, `running`, `completed`, `error` | `pending`/`running` → Busy; `completed` → Busy (brief) → Free; `error` → Busy (error) | Tool executions indicate active work while pending/running. On `completed` the monitor may keep Busy for a short grace window then downgrade to Free if no other Busy signals arrive. Errors surface as Busy and may trigger alert/retry rules. |
+| Pty/process lifecycle | `pty.created`, `pty.updated` (status `running`), `pty.exited` (status `exited`) | `running` → Busy; `exited` → Free | Terminal/pty process lifecycle can be used as supplemental signal for agent activity. |
+| Noisy / ignored events | `session.diff`, `file.watcher.updated` (noise), other high-volume watchers | Ignored (configurable) | These events are noisy for OODA; the plugin or reader should filter them by default (see `wf-5ad` / ignore-list). |
+
+*Reduction & precedence rules*: when multiple events for the same agent are present, `waif ooda` reduces to the latest-per-agent event using `time`/`seq`. Explicit `session.status` values (busy/idle/retry) have higher precedence over inferred signals from messages or tool states. Tool `running`/`pending` states should treat the agent as Busy until `completed` or a short grace timeout elapses.
+
+*Configurable items*: ignore-list (types to drop), grace timeout after `completed` tool events before downgrading to Free, and which event types should take precedence can be adjusted via CLI flags or a small YAML config (implementation notes in docs/dev/ooda_implementation_plan.md).
+
+
 
 * Reduction policy: keep latest event per `properties.agent` and use event `time`/`seq` for ordering.
 

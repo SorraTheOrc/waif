@@ -35,7 +35,7 @@ Focus on:
 - Surfacing operational risks (missing smoke tests, versioning gaps, flaky builds) with actionable mitigation plans
 
 Workflow:
-  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed).
+  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed). Verify `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
 - Start from the targeted bd issue (`bd show <id> --json`) plus key docs (`README.md`, `docs/release_management.md`, `docs/Workflow.md`, `history/` planning context when relevant) to understand desired release state.
 - Inspect current build/test config via `git diff`, package scripts, and npm configs before proposing changes.
 - Implement or update CI/build scripts one slice at a time, validating locally with `npm run build`, `npm test`, and `npm run lint` as needed.

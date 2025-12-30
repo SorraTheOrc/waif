@@ -22,7 +22,7 @@ Focus on:
 - Highlighting doc gaps or inconsistencies and recommending targeted updates
 
 Workflow:
-  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed).
+  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed). Confirm `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
 - Pull context directly via `bd show <id> --json`, supplemented with file excerpts from agents when necessary, then review relevant docs to understand goals and affected files.
 - Draft or edit documents using clear structure, updating existing files whenever possible and noting paths touched.
 - Cross-link docs with bd notes, referencing sections/paths so stakeholders can trace decisions, and specify where any temporary planning lived in `history/`.

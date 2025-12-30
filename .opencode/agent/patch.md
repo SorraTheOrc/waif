@@ -25,9 +25,8 @@ Focus on:
 - Surfacing blockers, risky refactors, or missing context early to the Producer and peer agents
 
 Workflow:
-  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed).
-- Begin by confirming context: `waif next --json` to verify the assignment, then `bd show <id> --json` plus relevant files/tests (`tests/*.test.ts`, `docs/Workflow.md`, `docs/release_management.md`, etc.).
-- Inspect the working tree via `git status`; stop and escalate if dirty.
+  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main` (rebase if needed). Verify `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
+ - Begin by confirming context: `waif next --json` to verify the assignment, then `bd show <id> --json` plus relevant files/tests (`tests/*.test.ts`, `docs/Workflow.md`, `docs/release_management.md`, etc.).
 - Implement the smallest change that meets acceptance criteria, using `git diff` frequently to keep scope tight.
 - Run the most targeted checks available (`npm test`, `npm run build`, or narrower suites) and summarize results.
 - Summaries in bd must list every command executed, tests/docs touched (including `history/` planning artifacts), and remaining risks or follow-ups before handing off.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classify, __test__ } from '../src/commands/ooda.js';
+import { classify, __test__, writeSnapshots } from '../src/commands/ooda.js';
 
 const { readOpencodeEvents } = __test__;
 
@@ -49,6 +49,29 @@ describe('ooda readOpencodeEvents', () => {
     const b = result.find((r) => r?.properties?.agent === 'b');
     expect(a).toEqual({ type: 'update', properties: { agent: 'a', seq: 2 } });
     expect(b).toEqual({ type: 'update', properties: { agent: 'b', seq: 2 } });
+    require('fs').unlinkSync(tmp);
+  });
+});
+
+// New test for snapshot logging and redaction
+describe('ooda snapshots', () => {
+  it('writes sanitized snapshot lines to log', () => {
+    /* writeSnapshots imported above */
+    const tmp = `/tmp/ooda-snap-${Date.now()}.jsonl`;
+    // ensure file does not exist
+    try { require('fs').unlinkSync(tmp); } catch (e) {}
+    const rows = [
+      { pane: 'agent-a', title: 'doing secret run sk-abcdef1234567890', status: 'Busy', reason: 'opencode-event' },
+      { pane: 'agent-b', title: 'idle', status: 'Free', reason: 'opencode-event' },
+    ];
+    writeSnapshots(tmp, rows);
+    const content = require('fs').readFileSync(tmp, 'utf8').trim().split('\n');
+    expect(content.length).toBe(2);
+    const parsed0 = JSON.parse(content[0]);
+    expect(parsed0.agent).toBe('agent-a');
+    expect(parsed0.title).toContain('sk-');
+    // the redact helper replaces sk- keys with sk-[REDACTED]
+    expect(parsed0.title).not.toMatch(/sk-[A-Za-z0-9]{8,}/);
     require('fs').unlinkSync(tmp);
   });
 });
