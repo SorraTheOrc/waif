@@ -30,6 +30,7 @@ export async function run(argv = process.argv.slice(2)): Promise<number> {
     .showHelpAfterError();
 
   program.addCommand(createPrdCommand());
+  import('./commands/context.js').then((m) => program.addCommand(m.createContextCommand()));
   program.addCommand(createAskCommand());
   program.addCommand(createNextCommand());
   program.addCommand(createRecentCommand());
