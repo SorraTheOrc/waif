@@ -251,7 +251,7 @@ export function createNextCommand() {
         const candidates = selectTopN(issues, bv, topN, verbose);
         const items = candidates.map((c) => c.issue);
 
-        const titleFuse = new Fuse(items, { keys: ['title'], includeScore: true, threshold: 0.6 });
+        const titleFuse = new Fuse(items, { keys: ['title'], includeScore: true, threshold: 0.4 });
         const descFuse = new Fuse(items, { keys: ['description'], includeScore: true, threshold: 0.6 });
 
         const titleResults = titleFuse.search(search);
