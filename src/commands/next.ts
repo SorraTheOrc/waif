@@ -7,6 +7,7 @@ import { emitJson, logStdout } from '../lib/io.js';
 import { renderIssueTitle } from '../lib/issueTitle.js';
 import { renderIssuesTable } from '../lib/table.js';
 import { copyToClipboard } from '../lib/clipboard.js';
+import Fuse from 'fuse.js';
 
 const ANSI = {
   blue: '\u001b[34m',
@@ -226,11 +227,12 @@ export function createNextCommand() {
   const cmd = new Command('next');
   cmd
     .description('Return the single best open, unblocked issue to work on now (copies issue id to clipboard)')
+    .argument('[search]', 'Optional search string to bias selection')
     .option('--json', 'Emit JSON output')
     .option('--verbose', 'Emit debug logs to stderr')
     .option('--no-clipboard', 'Disable copying the recommended issue id to clipboard')
     .option('-n, --number <n>', 'Number of suggestions to return (default 1)')
-    .action((options, command) => {
+    .action((search: string | undefined, options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
       const verbose = Boolean(options.verbose ?? command.parent?.getOptionValue('verbose'));
       const numberRaw = options.number ?? command.parent?.getOptionValue('number');
@@ -240,30 +242,91 @@ export function createNextCommand() {
       const bv = loadBvScores(verbose);
       const selected = selectTopN(issues, bv, n, verbose);
 
+      // If search provided, re-rank selected candidates by fuzzy match
+      let finalSelection = selected;
+      let searchApplied = false;
+      let searchMatched = false;
+      if (search && search.trim().length > 0) {
+        searchApplied = true;
+        const topN = n || 10;
+        const candidates = selectTopN(issues, bv, topN, verbose);
+        const items = candidates.map((c) => c.issue);
+
+        const titleFuse = new Fuse(items, { keys: ['title'], includeScore: true, threshold: 0.4 });
+        const descFuse = new Fuse(items, { keys: ['description'], includeScore: true, threshold: 0.6 });
+
+        const titleResults = titleFuse.search(search);
+        const descResults = descFuse.search(search);
+
+        const titleMap = new Map(titleResults.map((r) => [(r.item as Issue).id, 1 - (typeof r.score === 'number' ? r.score : 1)] as const));
+        const descMap = new Map(descResults.map((r) => [(r.item as Issue).id, 1 - (typeof r.score === 'number' ? r.score : 1)] as const));
+
+        const titleBoost = 0.2;
+        const descBoost = 0.1;
+
+        type Ranked = { issue: Issue; originalScore: number; rationale: string; metadata: Record<string, unknown>; titleMatch: number; descMatch: number; adjustedScore: number };
+
+        const ranked: Ranked[] = candidates.map((c) => {
+          const originalScore = c.score ?? 0;
+          const titleMatch = titleMap.get(c.issue.id) ?? 0;
+          const descMatch = descMap.get(c.issue.id) ?? 0;
+          // Use absolute magnitude so positive boosts improve (less-negative) bv scores
+          const adjustedScore = originalScore + Math.abs(originalScore) * (titleBoost * titleMatch + descBoost * descMatch);
+          return { issue: c.issue, originalScore, rationale: c.rationale, metadata: c.metadata, titleMatch, descMatch, adjustedScore };
+        });
+
+        const anyMatch = ranked.some((r) => r.titleMatch > 0 || r.descMatch > 0);
+        if (!anyMatch) {
+          // no-match fallback: keep original selection (selected) and indicate no-match
+          finalSelection = selected;
+          searchMatched = false;
+        } else {
+          ranked.sort((a, b) => {
+            if (b.adjustedScore !== a.adjustedScore) return b.adjustedScore - a.adjustedScore;
+            if (b.originalScore !== a.originalScore) return b.originalScore - a.originalScore;
+            return a.issue.id.localeCompare(b.issue.id);
+          });
+          finalSelection = ranked.map((r) => ({ issue: r.issue, score: r.adjustedScore, rationale: r.rationale, metadata: r.metadata }));
+          searchMatched = true;
+        }
+      }
+
       // Copy only the first recommended id to clipboard when enabled
       const clipboardEnabled = Boolean(options.clipboard ?? true);
-      if (clipboardEnabled && selected.length > 0) {
-        const clipboardResult = copyToClipboard(selected[0].issue.id);
+      if (clipboardEnabled && finalSelection.length > 0) {
+        const clipboardResult = copyToClipboard(finalSelection[0].issue.id);
         if (!clipboardResult.ok && verbose) {
           process.stderr.write(`[debug] clipboard copy failed: ${clipboardResult.error}\n`);
         }
       }
 
       if (jsonOutput) {
-        const payload = selected.map((s, idx) => ({ ...s.issue, waif: { score: s.score, rationale: s.rationale, rank: idx + 1, metadata: { ...s.metadata, issuesSource: source, bvSource: bv.source } } }));
-        emitJson(payload);
+        const payload = finalSelection.map((s, idx) => ({ ...s.issue, waif: { score: s.score, rationale: s.rationale, rank: idx + 1, metadata: { ...s.metadata, issuesSource: source, bvSource: bv.source } } }));
+        emitJson(payload.length === 1 ? payload[0] : payload);
         return;
       }
 
       // Human output: render a table with up to n rows, then show details for the first
-      const recommendedIssues = selected.map((s) => s.issue);
-      logStdout(issuesTable(recommendedIssues));
+      const recommendedIssues = finalSelection.map((s) => s.issue);
+      // When search applied and matched, show only the chosen first item; otherwise show full selection
+      const displayIssues = (searchApplied && searchMatched && finalSelection.length > 0)
+        ? [finalSelection[0].issue]
+        : recommendedIssues;
+      logStdout(issuesTable(displayIssues));
       logStdout('');
+
+      if (searchApplied && finalSelection === selected) {
+        logStdout('Search: no-match; using default recommendation');
+        logStdout('');
+      } else if (searchApplied) {
+        logStdout(`# Search applied: "${search}"`);
+        logStdout('');
+      }
 
       logStdout(heading('Details'));
       logStdout('');
-      if (selected.length > 0) {
-        const top = selected[0];
+      if (finalSelection.length > 0) {
+        const top = finalSelection[0];
         if (isCliAvailable('bd')) {
           try {
             const shown = runBd(['show', top.issue.id]);
