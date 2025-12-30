@@ -56,6 +56,18 @@ async function getSessionAgent(client: OpencodeClient | undefined, sessionID: st
   return undefined;
 }
 
+// In-process subscribers will be called with the parsed canonical object
+const subscribers = new Set<(obj: any) => void>();
+
+export function subscribe(handler: (obj: any) => void) {
+  subscribers.add(handler);
+  return () => unsubscribe(handler);
+}
+
+export function unsubscribe(handler: (obj: any) => void) {
+  subscribers.delete(handler);
+}
+
 export const WaifOodaPlugin: Plugin = async (context) => {
   const baseDir = context?.directory ?? context?.worktree ?? process.cwd();
   const logDir = path.join(baseDir, LOG_DIR_NAME);
@@ -66,10 +78,35 @@ export const WaifOodaPlugin: Plugin = async (context) => {
   let lastLoggedLine: string | undefined;
   let seq = 0;
 
+  // In-process subscribers will be called with the parsed canonical object
+  const subscribers = new Set<(obj: any) => void>();
+
+  export function subscribe(handler: (obj: any) => void) {
+    subscribers.add(handler);
+    return () => unsubscribe(handler);
+  }
+
+  export function unsubscribe(handler: (obj: any) => void) {
+    subscribers.delete(handler);
+  }
+
   async function maybeLog(line: string) {
     if (line === lastLoggedLine) return;
     lastLoggedLine = line;
     await opencodeLog(line, undefined, { target: logFile, maxBytes: MAX_BYTES });
+    // Notify subscribers with the parsed object (best-effort). Keep file logging as the source-of-record.
+    try {
+      const parsed = JSON.parse(line);
+      for (const s of Array.from(subscribers)) {
+        try {
+          s(parsed);
+        } catch (e) {
+          // swallow subscriber errors to avoid breaking plugin behavior
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
   }
 
   // Build canonical event object
