@@ -34,19 +34,26 @@ export function createContextCommand() {
   cmd
     .description('Generate/refresh docs/dev/CONTEXT_PACK.md')
     .alias('ctx')
-    .option('--out <path>', 'Path to write context pack', 'docs/dev/CONTEXT_PACK.md')
+    .option('--out <path>', 'Path to write context pack (if omitted, prints to stdout)')
     .option('--force', 'Overwrite existing file')
     .option('--max-tokens <n>', 'Soft max tokens (not enforced in v1)')
     .action((options, command) => {
-      const out = resolve(options.out as string);
+      const outOpt = options.out as string | undefined;
       const force = Boolean(options.force);
+      const content = buildTemplate();
 
+      if (!outOpt) {
+        // Print to stdout by default
+        logStdout(content);
+        return;
+      }
+
+      const out = resolve(outOpt);
       if (!force && existsSync(out)) {
         throw new CliError(`File already exists at ${out}. Use --force to overwrite`, 2);
       }
 
       ensureParent(out);
-      const content = buildTemplate();
       writeFileSync(out, content, { encoding: 'utf8' });
       logStdout(`Wrote context pack to ${out}`);
     });

@@ -11,11 +11,10 @@ describe('waif context command', () => {
     try { if (existsSync(outPath)) unlinkSync(outPath); } catch (e) {}
   });
 
-  test('writes default file', () => {
-    execSync(`${cli} context --out ${outPath}`);
-    expect(existsSync(outPath)).toBe(true);
-    const content = readFileSync(outPath, 'utf8');
-    expect(content).toMatch(/CONTEXT PACK/);
+  test('prints to stdout by default', () => {
+    const out = execSync(`${cli} context`).toString();
+    expect(out).toMatch(/CONTEXT PACK/);
+    expect(existsSync(outPath)).toBe(false);
   });
 
   test('fails without --force when file exists', () => {
