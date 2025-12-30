@@ -269,7 +269,8 @@ export function createNextCommand() {
           const originalScore = c.score ?? 0;
           const titleMatch = titleMap.get(c.issue.id) ?? 0;
           const descMatch = descMap.get(c.issue.id) ?? 0;
-          const adjustedScore = originalScore * (1 + titleBoost * titleMatch + descBoost * descMatch);
+          // Use absolute magnitude so positive boosts improve (less-negative) bv scores
+          const adjustedScore = originalScore + Math.abs(originalScore) * (titleBoost * titleMatch + descBoost * descMatch);
           return { issue: c.issue, originalScore, rationale: c.rationale, metadata: c.metadata, titleMatch, descMatch, adjustedScore };
         });
 
