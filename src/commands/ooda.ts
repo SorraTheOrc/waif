@@ -463,34 +463,6 @@ export function createOodaCommand() {
 
       const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
 
-      // Attach to plugin emission API (if available) so we can forward real-time events to stdout.
-      let unsubFromPlugin: (() => void) | undefined;
-      async function attachPluginSubscriber(jsonMode: boolean) {
-        try {
-          // Import plugin JS (built into dist) when available; prefer runtime path so TS build won't choke.
-          const pluginPath = '../../.opencode/plugin/waif-ooda.js';
-          const mod = await import(pluginPath).catch(() => undefined);
-          if (mod && typeof (mod as any).subscribe === 'function') {
-            const unsub = (mod as any).subscribe((obj: any) => {
-              try {
-                // When not in JSON mode, we still emit raw JSON lines for the plugin events
-                // so downstream consumers can read the same canonical shape as the file log.
-                process.stdout.write(JSON.stringify(obj) + '\n');
-              } catch (e) {
-                // swallow errors from writing to stdout
-              }
-            });
-            return typeof unsub === 'function' ? unsub as () => void : undefined;
-          }
-        } catch (e) {
-          // plugin not present or failed to load; ignore
-        }
-        return undefined;
-      }
-
-      unsubFromPlugin = await attachPluginSubscriber(jsonOutput);
-
-
       let lastPrintedTableLines = 0;
       const runCycle = async () => {
         const latest = useSample ? [] : await readOpencodeEvents(opencodeLogPath);

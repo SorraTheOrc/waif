@@ -9,29 +9,20 @@ import { log as opencodeLog } from '../../src/lib/opencode.js';
 // Use loose any typing for compatibility with various OpenCode SDK shapes
 type OpencodeClient = any;
 
-type Plugin = any;
-
-const LOG_DIR_NAME = '.opencode/logs';
-const LOG_FILE_NAME = 'events.jsonl'; // kept for clarity
+const LOG_DIR_NAME = path.join('.opencode', 'logs');
+const LOG_FILE_NAME = 'events.jsonl';
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB simple size cap for rotation
 
 // Types of OpenCode events that are noisy and should be ignored by default.
 // Add more types here if needed (configurable in future iterations).
-const IGNORE_EVENT_TYPES = new Set([
-  'session.diff',
-  'file.watcher.updated',
-  'message.updated',
-  'message.part.updated',
-  'permission.updated',
-  'session.status',
-]);
+const IGNORE_EVENT_TYPES = new Set(["session.diff", "file.watcher.updated", "message.updated", "message.part.updated", "permission.updated", "session.status"]);
 
 async function ensureLogDir(dir: string) {
   await mkdir(dir, { recursive: true });
 }
 
 // Helper to produce a short human title from parts or summary
-function titleFromParts(parts: any[] | undefined, summary: any | undefined, fallback?: string) {
+function titleFromParts(parts: any[] | undefined, summary: any | undefined, fallback: string) {
   if (typeof summary === 'string' && summary.trim()) return summary.trim();
   if (Array.isArray(parts) && parts.length > 0) {
     try {
@@ -65,19 +56,7 @@ async function getSessionAgent(client: OpencodeClient | undefined, sessionID: st
   return undefined;
 }
 
-// In-process subscribers will be called with the parsed canonical object
-const subscribers = new Set<(obj: any) => void>();
-
-export function subscribe(handler: (obj: any) => void) {
-  subscribers.add(handler);
-  return () => unsubscribe(handler);
-}
-
-export function unsubscribe(handler: (obj: any) => void) {
-  subscribers.delete(handler);
-}
-
-export const WaifOodaPlugin: Plugin = async (context: any) => {
+export const WaifOodaPlugin: Plugin = async (context) => {
   const baseDir = context?.directory ?? context?.worktree ?? process.cwd();
   const logDir = path.join(baseDir, LOG_DIR_NAME);
   const logFile = path.join(logDir, LOG_FILE_NAME);
@@ -91,19 +70,6 @@ export const WaifOodaPlugin: Plugin = async (context: any) => {
     if (line === lastLoggedLine) return;
     lastLoggedLine = line;
     await opencodeLog(line, undefined, { target: logFile, maxBytes: MAX_BYTES });
-    // Notify subscribers with the parsed object (best-effort). Keep file logging as the source-of-record.
-    try {
-      const parsed = JSON.parse(line.trim());
-      for (const s of Array.from(subscribers)) {
-        try {
-          s(parsed as any);
-        } catch (e) {
-          // swallow subscriber errors to avoid breaking plugin behavior
-        }
-      }
-    } catch (e) {
-      // ignore parse errors
-    }
   }
 
   // Build canonical event object
@@ -137,13 +103,7 @@ export const WaifOodaPlugin: Plugin = async (context: any) => {
       let canonicalAgent = agent;
       if (!canonicalAgent) canonicalAgent = await getSessionAgent((context as any)?.client, sessionID);
 
-      const obj = buildCanonical({
-        type: 'message',
-        agent: canonicalAgent,
-        title,
-        sessionID,
-        properties: { role: output?.message?.role, parts: parts ? parts.map((p: any) => ({ type: p.type, text: p.text })) : undefined },
-      });
+      const obj = buildCanonical({ type: 'message', agent: canonicalAgent, title, sessionID, properties: { role: output?.message?.role, parts: parts ? parts.map((p: any) => ({ type: p.type, text: p.text })) : undefined } });
       await maybeLog(JSON.stringify(obj) + '\n');
     },
 
