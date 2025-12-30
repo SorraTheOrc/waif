@@ -245,6 +245,7 @@ export function createNextCommand() {
       // If search provided, re-rank selected candidates by fuzzy match
       let finalSelection = selected;
       let searchApplied = false;
+      let searchMatched = false;
       if (search && search.trim().length > 0) {
         searchApplied = true;
         const topN = n || 10;
@@ -278,6 +279,7 @@ export function createNextCommand() {
         if (!anyMatch) {
           // no-match fallback: keep original selection (selected) and indicate no-match
           finalSelection = selected;
+          searchMatched = false;
         } else {
           ranked.sort((a, b) => {
             if (b.adjustedScore !== a.adjustedScore) return b.adjustedScore - a.adjustedScore;
@@ -285,6 +287,7 @@ export function createNextCommand() {
             return a.issue.id.localeCompare(b.issue.id);
           });
           finalSelection = ranked.map((r) => ({ issue: r.issue, score: r.adjustedScore, rationale: r.rationale, metadata: r.metadata }));
+          searchMatched = true;
         }
       }
 
@@ -305,7 +308,11 @@ export function createNextCommand() {
 
       // Human output: render a table with up to n rows, then show details for the first
       const recommendedIssues = finalSelection.map((s) => s.issue);
-      logStdout(issuesTable(recommendedIssues));
+      // When search applied and matched, show only the chosen first item; otherwise show full selection
+      const displayIssues = (searchApplied && searchMatched && finalSelection.length > 0)
+        ? [finalSelection[0].issue]
+        : recommendedIssues;
+      logStdout(issuesTable(displayIssues));
       logStdout('');
 
       if (searchApplied && finalSelection === selected) {
