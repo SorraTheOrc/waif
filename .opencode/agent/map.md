@@ -23,7 +23,7 @@ Focus on:
 - Coordinating the other call-sign agents and capturing decisions + handoffs in the repo
 
 Workflow:
-- Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main`. Verify `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
+- Before starting a session that will change something other than `.beads/issues.jsonl`, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main`. Verify `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
 - Understand the Producers current objective. Ask for clarification if needed.
 - If necessary, break down high-level goals into smaller, manageable `bd` issues with clear acceptance criteria, prioritization, and dependencies.
 - Regularly review active `bd` issues for progress, blockers, and risks. Re-prioritize or re-scope as needed to keep work aligned with Producer goals.

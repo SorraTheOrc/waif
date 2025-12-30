@@ -19,7 +19,7 @@ Focus on:
 - Coordinating the other call-sign agents and capturing decisions + handoffs in the repo
 
 Workflow:
-  - Before starting a session, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main`. Verify `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
+  - Before starting a session that will change something other than `.beads/issues.jsonl`, ensure you are on a branch named `<beads_prefix>-<id>/<short-desc>` and that it is up to date with `origin/main`. Verify `git status` is clean; if uncommitted changes are limited to `.beads/issues.jsonl`, treat those changes as authoritative and carry them into the work. For any other uncommitted changes, pause and check with the Producer before proceeding.
   - Start by confirming the current queue with `waif next --json` (or `bd ready --json` when requested) and inspect specific issues via `bd show <id> --json`.
 - Shape or adjust scope using `bd create`, `bd update`, and `bd close`, linking related work with `--deps discovered-from:<id>` and documenting rationale in bd notes.
 - When ordering or prioritization needs justification, pull context from `bv --robot-plan` / `bv --robot-insights`, then summarize trade-offs, risks, and recommended owners back to the Producer and relevant agents.
