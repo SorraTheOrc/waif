@@ -78,7 +78,7 @@ Process:
 
 2. Create a working branch
 
-   - If you are already on a topic branch for this issue, keep it.
+   - If you are already on a topic branch for this issue, or a parent of this issue, keep it.
    - Otherwise create a new branch named like `feature/$1-<short-suffix>` or `bug/$1-<short-suffix>`.
    - Do not commit directly on `main`.
 
@@ -106,15 +106,10 @@ Process:
    - Update any relevant README.md files to reflect changes in usage, setup, or configuration.
    - Update any documents linked from `workflow.md` that are affected by the changes made in this issue.
 
-7. Commit, Push and open a PR
+7. Commit
 
    - Commit your code changes on the branch (include the Beads id in the commit message).
-   - Push the branch to `origin` and set upstream.
-     - If `origin` is missing, ask the user for the correct remote URL and add it with `git remote add origin <url>` before pushing.
-   - Open a PR.
-     - Prefer `gh pr create` if `gh` is installed and authenticated.
-     - Otherwise, provide the exact branch name and ask the user to open a PR in the hosting UI.
-   - Capture the PR URL.
+   - Ensure the commit message is clear and descriptive.
 
 8. Update Beads (do not close)
 
@@ -123,20 +118,4 @@ Process:
    - Run `bd sync` before ending the session.
      - If there are no Beads changes to commit (or you are on an ephemeral branch without upstream), use `bd sync --flush-only`.
    - Output a summary of the goal of the issue and the work done, including a brief summary of changes to each file. Including a link to the PR. Provide hints on how to test any new functionality locally. Ask the user to review the PR and merge when ready.
-
-9. After merge
-
-Once the user confirms the PR is merged:
-
-- Switch to `main` and pull the latest changes.
-- Delete the working branch locally and remotely.
-- Close the beads issue with a reason of "Closed PR #<pr-number>".
-- After the PR is merged, close the issue on `main`:
-  - `bd close $1 --reason "Done" --json`
-  - `bd sync`
-- Move the PRD (if one exists) to `docs/dev/implemented`
-- Output a completion statement, complete with a summary of the work done, including a link to the updated documentation (on github)
-- Add a user focused summary to the CHANGELOG.md file
-- Commit and push
-
-Start now: Ask the user for the first implementation instruction if the next concrete step is not obvious.
+   - Ask the producer to provide feedback on the implementation and, if ready to do so, to instruct the agent to "land the plane" (merge the PR and close the issue).

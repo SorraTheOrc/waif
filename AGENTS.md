@@ -273,21 +273,21 @@ git push                # Push to remote
 **MANDATORY WORKFLOW:**
 
 1. **File issues for remaining work** - Create issues for anything that needs follow-up
-2. **Run quality gates** (if code changed) - Tests, linters, builds
+2. **Run quality gates** (if code changed) - Tests, linters, builds, stop the landing if a test fails
 3. **Document changes** - Update docs, changelogs, comments
-4. **Update issue status** - Close finished work, update in-progress items
-5. **PUSH TO REMOTE** - This is MANDATORY:
+4. **PUSH TO REMOTE** - This is MANDATORY:
    ```bash
    git pull --rebase
    bd sync
    git push
    git status  # MUST show "up to date with origin"
    ```
-6. **Raise a PR** (if applicable, ask if unsure) - Link to issues
-7. **Clean up** - Clear stashes, prune remote branches
-8. **Verify** - All changes committed AND pushed
-9. **Hand off** - Provide context for next session
-
+5. **Raise a PR** (if applicable, ask if unsure) - Link to issues and update the BD with a link to the PR.
+6. Notify the producer that the PR is ready for review. Stop this process until the PR is reviewed and merged. Once reviewed and merged, proceed.
+7. **Update issue status** - Close finished work, update in-progress items
+8. **Clean up** - Clear stashes, prune remote branches
+9. **Verify** - All changes committed AND pushed
+10. **Hand off** - Provide context for next session
 **CRITICAL RULES:**
 
 - Work is NOT complete until `git push` succeeds
