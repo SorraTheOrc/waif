@@ -83,45 +83,60 @@
   * Risk: BV scores unavailable or stale. Mitigation: fallback to a reproducible local scoring heuristic and surface which signal was used.
   * Risk: Performance on large issue sets. Mitigation: paginate or limit candidates (e.g., top N by priority) before heavy scoring.
 
-## Open Questions
+## Update: Search-Prioritized Selection (Intake)
 
-* None remain; the intake decisions:
-  * No numeric threshold for "high value" (always pick top-ranked). (resolved)
-  * No banned labels to exclude. (resolved)
-  * No time-based preferences (resolved)
+This PRD is updated to cover the intake for adding an optional search string that allows the Producer to bias `waif next` recommendations. The Source issue for this intake is: wf-c2n.
 
-## Appendices / Notes
+### Problem (update)
+Deciding the next issue in a large project is currently based purely on a mathematical calculation that relies on issues being accurately prioritized and the hierarchy being fully defined. In practice this is not a perfect science. Allowing a search term to filter/prioritize possible next issues will allow the Producer to influence the next issue decision when needed.
 
-* Implementation notes
+### Users
+Primary: Producer (user running `waif next`). No secondary stakeholders identified.
 
-  * Prefer querying `bd ready --json` to get unblocked candidates, then enrich with bv scores.
-  * `waif next --json` should emit the exact `bd show`/`bd` JSON issue object for the selected issue, with an additional top-level `waif` object.
+### Acceptance criteria
+1. `waif next` accepts an optional positional search string: `waif next "<search>"`.
+2. When a search string is provided, the implementation requests the top N candidates from bv (top_n = 10 by default), then applies fuzzy matching to those candidates and re-ranks them using the weighting model below.
+3. Matching model: fuzzy matching (recommendation: fuse.js) applied over issue title and description.
+4. Weighting model (hard-coded defaults): title match = +20% score multiplier, description match = +10% score multiplier. These weights are configurable in follow-ups but hard-coded for the initial implementation.
+5. Fallback behavior: if no candidate in the top N rises above the top non-matching candidate after weighting, the command should fall back to the existing selection process and clearly indicate a "no-match" result in the human output.
+6. CLI UX: search string is a positional argument (e.g., `waif next "ui bug"`).
+7. `waif next --json` must preserve its existing JSON contract and must NOT include additional match metadata in v1.
+8. Tests: unit tests for title vs description weighting and an integration test verifying top_n re-ranking and fallback behavior.
 
-  Example output shape:
+### Constraints
+- Must be a no-op when no search string is provided.
+- Performance: interactive latency remains a goal; scoping to top N candidates reduces search work.
+- Determinism: tie-breaking and scoring must be deterministic and stable.
 
-  ```json
-  {
-    "id": "wf-123",
-    "title": "...",
-    "description": "...",
-    "...": "(other bd fields)",
-    "waif": {
-      "score": 12.34,
-      "rationale": "high priority + low dependency depth",
-      "rank": 1,
-      "metadata": {
-        "issuesSource": "bd|jsonl|env",
-        "bvSource": "bv|env|none",
-        "priority": 1,
-        "created_at": "2025-01-01T00:00:00Z",
-        "tie_break": "id",
-        "contributing_signals": {
-          "bv_score": 12.34,
-          "priority_score": 4000000,
-          "recency_score": -1700000000,
-          "dependency_depth": 2
-        }
-      }
-    }
-  }
-  ```
+### Existing state
+- Current implementation lives at `src/commands/next.ts` and test stubs at `tests/next.test.ts`.
+
+### Desired change
+- Update `src/commands/next.ts` to accept a positional search term, request top_n candidates from bv, apply fuzzy matching (fuse.js), re-rank with the weighted model, and implement the fallback behavior above.
+- Add/modify unit and integration tests in `tests/next.test.ts` to cover the new behavior.
+
+### Likely duplicates / related docs
+- docs/dev/prd-command-next.md (this document)
+- docs/Workflow.md (selection rules)
+- docs/dev/CLI_PRD.md
+
+### Related Beads issues
+- wf-3ur.1 Add --number/-n option to 'waif next' to return multiple suggestions (BLOCKER)
+- wf-35m.4 Reduce code duplication across next/recent/in-progress commands
+- wf-ba2.1.5 Rule of Five: Select next issue (Workflow step 4.1)
+- wf-ba2.3.6 Wire waif prd command to PRD Agent workflow (adjacent)
+- wf-32r Beads search command (related search UX)
+
+### Clarifying questions (recorded)
+1. Fuzzy matching chosen (fuse.js recommended). No other library required for v1.
+2. Weights are hard-coded for v1: title +20%, description +10%.
+3. top_n candidate strategy removes the need for an explicit numeric threshold.
+4. Positional CLI arg chosen for UX.
+5. No additional JSON metadata in v1.
+
+### Proposed next step
+- UPDATE PRD at: docs/dev/prd-command-next.md (this file updated)
+- Recommended next command: `/prd docs/dev/prd-command-next.md wf-c2n`
+
+# Source issue: wf-c2n
+# Linked issue: wf-c2n
