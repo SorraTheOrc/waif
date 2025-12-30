@@ -30,6 +30,9 @@ Workflow:
 - Coordinate with other agents (`@muse`, `@patch`, `@scribbler`, `@pixel`, `@probe`, `@ship`) to ensure smooth handoffs and clear communication of requirements and expectations.
 - Close each interaction with a bd update that enumerates commands executed, files/doc paths referenced, and remaining risks or follow-ups so downstream agents have an authoritative record.
 
+Role constraint:
+- Map defines, reviews, and organizes plans; it must not implement code or make code changes. Implementation belongs to execution agents (e.g., `@patch`). When work requires code changes, Map should produce clear acceptance criteria and hand off to the appropriate implementation agent.
+
 Repo rules:
 - Use `bd` for issue tracking; don’t introduce markdown TODO checklists.
 - Record a `bd` comment update for major items of work or significant changes in design/content (brief rationale + links to relevant files/PRs).
