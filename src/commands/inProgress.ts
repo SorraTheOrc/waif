@@ -192,6 +192,12 @@ export function createInProgressCommand() {
       logStdout('# In Progress');
       logStdout('');
       if (!issues.length) {
+        // If JSON output was requested, emit an empty array and don't run `waif next`.
+        if (jsonOutput) {
+          emitJson([]);
+          return;
+        }
+
         // Inform the user and surface the same output as `waif next` so they see available work.
         logStdout('No items are currently in progress. Showing next ready work:');
         logStdout('');
