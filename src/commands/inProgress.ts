@@ -192,7 +192,27 @@ export function createInProgressCommand() {
       logStdout('# In Progress');
       logStdout('');
       if (!issues.length) {
-        logStdout('No in-progress issues.');
+        // If JSON output was requested, emit an empty array and don't run `waif next`.
+        if (jsonOutput) {
+          emitJson([]);
+          return;
+        }
+
+        // Inform the user and surface the same output as `waif next` so they see available work.
+        logStdout('No items are currently in progress. Showing next ready work:');
+        logStdout('');
+        try {
+          // Invoke the compiled CLI's `next` command and print its output. We intentionally
+          // call the CLI entrypoint so the behavior matches what the user would see when
+          // running `waif next` from the shell.
+          const nextOut = runSpawn('node', ['dist/index.js', 'next']);
+          if (nextOut && nextOut.stdout) {
+            logStdout(nextOut.stdout.trim());
+          }
+        } catch (e) {
+          // Fallback to previous friendly message if invoking next fails for any reason.
+          logStdout('No in-progress issues.');
+        }
         return;
       }
 
