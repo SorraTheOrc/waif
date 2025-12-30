@@ -312,15 +312,21 @@ export function createNextCommand() {
       const displayIssues = (searchApplied && searchMatched && finalSelection.length > 0)
         ? [finalSelection[0].issue]
         : recommendedIssues;
-      logStdout(issuesTable(displayIssues));
-      logStdout('');
 
       if (searchApplied && finalSelection === selected) {
+        // No-match: print the message before the table and leave a blank line after it
         logStdout('Search: no-match; using default recommendation');
         logStdout('');
-      } else if (searchApplied) {
-        logStdout(`# Search applied: "${search}"`);
+        logStdout(issuesTable(recommendedIssues));
         logStdout('');
+      } else {
+        logStdout(issuesTable(displayIssues));
+        logStdout('');
+
+        if (searchApplied) {
+          logStdout(`# Search applied: "${search}"`);
+          logStdout('');
+        }
       }
 
       logStdout(heading('Details'));
