@@ -1,4 +1,4 @@
-.npm-global/
+ .npm-global/
 node_modules/
 dist/
 
@@ -9,3 +9,7 @@ src/pm/
 *.egg-info
 __pycache__/
 *.pyc
+
+# opencode logs
+.opencode/logs
+
