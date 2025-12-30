@@ -35,6 +35,8 @@ export async function run(argv = process.argv.slice(2)): Promise<number> {
   program.addCommand(createRecentCommand());
   program.addCommand(createInProgressCommand());
   program.addCommand(createStartWorkCommand());
+  const { createImplementCommand } = await import('./commands/implement.js');
+  program.addCommand(createImplementCommand());
   program.addCommand(createOodaCommand());
   program.addCommand(createShowCommand());
 
