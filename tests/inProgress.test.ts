@@ -51,6 +51,6 @@ describe('waif in-progress', () => {
 
     expect(exitCode).toBe(0);
     expect(stdout).toContain('# In Progress');
-    expect(stdout).toContain('No in-progress issues');
+    expect(stdout).toContain('No items are currently in progress.');
   });
 });
