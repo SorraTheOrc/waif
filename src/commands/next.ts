@@ -201,7 +201,7 @@ function computeScore(issue: Issue, bv: BvResult): { score: number; rationale: s
   };
 }
 
-function selectTop(issues: Issue[], bv: BvResult, verbose: boolean) {
+function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean) {
   const candidates = issues.filter(eligible);
   if (!candidates.length) {
     throw new CliError('No eligible issues found (need open, unblocked issues)', 1);
@@ -215,11 +215,11 @@ function selectTop(issues: Issue[], bv: BvResult, verbose: boolean) {
     return a.issue.id.localeCompare(b.issue.id);
   });
   if (verbose) {
-    scored.slice(0, 5).forEach((s, idx) => {
+    scored.slice(0, Math.min(5, n)).forEach((s, idx) => {
       process.stderr.write(`[debug] rank ${idx + 1}: ${s.issue.id} score=${s.score} (${s.rationale})\n`);
     });
   }
-  return scored[0];
+  return scored.slice(0, n);
 }
 
 export function createNextCommand() {
@@ -229,40 +229,41 @@ export function createNextCommand() {
     .option('--json', 'Emit JSON output')
     .option('--verbose', 'Emit debug logs to stderr')
     .option('--no-clipboard', 'Disable copying the recommended issue id to clipboard')
+    .option('-n, --number <n>', 'Number of suggestions to return (default 1)')
     .action((options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
       const verbose = Boolean(options.verbose ?? command.parent?.getOptionValue('verbose'));
+      const numberRaw = options.number ?? command.parent?.getOptionValue('number');
+      const n = numberRaw ? Math.max(1, parseInt(String(numberRaw), 10) || 1) : 1;
 
       const { issues, source } = loadIssues(verbose);
       const bv = loadBvScores(verbose);
-      const top = selectTop(issues, bv, verbose);
+      const selected = selectTopN(issues, bv, n, verbose);
 
+      // Copy only the first recommended id to clipboard when enabled
       const clipboardEnabled = Boolean(options.clipboard ?? true);
-      if (clipboardEnabled) {
-        const clipboardResult = copyToClipboard(top.issue.id);
+      if (clipboardEnabled && selected.length > 0) {
+        const clipboardResult = copyToClipboard(selected[0].issue.id);
         if (!clipboardResult.ok && verbose) {
           process.stderr.write(`[debug] clipboard copy failed: ${clipboardResult.error}\n`);
         }
       }
 
-      const waif = {
-        score: top.score,
-        rationale: top.rationale,
-        rank: 1,
-        metadata: { ...top.metadata, issuesSource: source, bvSource: bv.source },
-      };
-
       if (jsonOutput) {
-        const payload = { ...top.issue, waif };
+        const payload = selected.map((s, idx) => ({ ...s.issue, waif: { score: s.score, rationale: s.rationale, rank: idx + 1, metadata: { ...s.metadata, issuesSource: source, bvSource: bv.source } } }));
         emitJson(payload);
-      } else {
-        const recommended = [top.issue];
+        return;
+      }
 
-        logStdout(issuesTable(recommended));
-        logStdout('');
+      // Human output: render a table with up to n rows, then show details for the first
+      const recommendedIssues = selected.map((s) => s.issue);
+      logStdout(issuesTable(recommendedIssues));
+      logStdout('');
 
-        logStdout(heading('Details'));
-        logStdout('');
+      logStdout(heading('Details'));
+      logStdout('');
+      if (selected.length > 0) {
+        const top = selected[0];
         if (isCliAvailable('bd')) {
           try {
             const shown = runBd(['show', top.issue.id]);
