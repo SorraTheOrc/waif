@@ -1,4 +1,8 @@
-Context selection strategy (wf-ba2.5.2)
+PRD: Context selection and eligibility (wf-ba2.5.2)
+
+Author: map
+Date: 2025-12-30
+
 
 Purpose
 
@@ -145,12 +149,13 @@ The CLI or agent implementing context selection should:
 
 Acceptance criteria (definition of done)
 
-- docs/dev/context_selection_strategy.md exists and is committed
+- docs/dev/prd-context.md exists and is committed
 - Contains an explicit eligibility checklist (allowed / disallowed) and at least two concrete examples
 - Provides token/size thresholds and redaction rules
 - Contains a short "how to use" section for CLI/agents
 - References bead wf-ba2.5.2
 - No source code or tests were modified (docs-only)
+- Includes guidance for minimal Beads metadata allowed in context packs (id, title, status, labels, external_ref, updated_at) and an example manifest
 
 How maintainers use this document
 

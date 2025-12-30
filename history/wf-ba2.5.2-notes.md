@@ -14,3 +14,5 @@ Open questions
 Beads: wf-ba2.5.2
 
 Added Beads metadata guidance to docs/dev/context_selection_strategy.md (see PR #84).
+
+Converted to PRD: docs/dev/prd-context.md (see PR #84).
