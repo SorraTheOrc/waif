@@ -95,10 +95,27 @@ Sample OODA JSON output shape (when `--json` is used):
 ## Heuristics (examples)
 
 * Mapping examples (v1):
-  * `agent.started` → Busy (reason: agent.started)
-  * `agent.stopped` / `agent.exited` → Free
-  * `message.updated` or `ask.request` → Busy
-  * Unknown or missing recent events → Free (after configurable timeout)
+
+Below is a canonical mapping table that links the normalized event "type" emitted by the `.opencode/plugin/waif-ooda.ts` plugin (and the raw OpenCode event messages that commonly produce them) to the OODA status used by the `waif ooda` monitor. Use this table as the authoritative reference for v1 mapping and for configuring the ignore-list noted elsewhere in the PRD.
+
+| waif-ooda event type | Common OpenCode event(s) / origin | OODA status | When it occurs / notes |
+|---|---|---:|---|
+| `agent.started` | `agent.started` | Busy | Agent process/session started; marks agent as active. |
+| `agent.stopped` / `agent.exited` | `agent.stopped`, `agent.exited` | Free | Agent terminated or signalled stop; marks agent as not active. |
+| `message` (chat.message → normalized `message`) | `message.updated`, `message` (assistant/user), `message.part.updated` producing text parts | Busy | New or updated chat messages from an agent or assistant indicate active work; used to show agent is Busy and provide a short Title. |
+| `permission.ask` | `permission.ask` | Busy (awaiting response) | A permission request was emitted; agent/workflow is waiting on a permission decision. Treated as Busy for monitoring purposes until resolved. |
+| `session.status` → `{ type: "busy" }` | `session.status` (properties.status.type === "busy") | Busy | Explicit session-level Busy indicator from OpenCode/agent runtime. |
+| `session.status` → `{ type: "idle" }` | `session.status` (properties.status.type === "idle") | Free | Explicit session-level Idle indicator; treat as Free. |
+| `session.status` → `{ type: "retry" }` | `session.status` (properties.status.type === "retry") | Busy (transient) | Session is in a retry/backoff loop after an error; surface as Busy with retry metadata. |
+| Tool call states (via `message.part.updated` / ToolPart) | Tool state.status: `pending`, `running`, `completed`, `error` | `pending`/`running` → Busy; `completed` → Busy (brief) → Free; `error` → Busy (error) | Tool executions indicate active work while pending/running. On `completed` the monitor may keep Busy for a short grace window then downgrade to Free if no other Busy signals arrive. Errors surface as Busy and may trigger alert/retry rules. |
+| Pty/process lifecycle | `pty.created`, `pty.updated` (status `running`), `pty.exited` (status `exited`) | `running` → Busy; `exited` → Free | Terminal/pty process lifecycle can be used as supplemental signal for agent activity. |
+| Noisy / ignored events | `session.diff`, `file.watcher.updated` (noise), other high-volume watchers | Ignored (configurable) | These events are noisy for OODA; the plugin or reader should filter them by default (see `wf-5ad` / ignore-list). |
+
+*Reduction & precedence rules*: when multiple events for the same agent are present, `waif ooda` reduces to the latest-per-agent event using `time`/`seq`. Explicit `session.status` values (busy/idle/retry) have higher precedence over inferred signals from messages or tool states. Tool `running`/`pending` states should treat the agent as Busy until `completed` or a short grace timeout elapses.
+
+*Configurable items*: ignore-list (types to drop), grace timeout after `completed` tool events before downgrading to Free, and which event types should take precedence can be adjusted via CLI flags or a small YAML config (implementation notes in docs/dev/ooda_implementation_plan.md).
+
+
 
 * Reduction policy: keep latest event per `properties.agent` and use event `time`/`seq` for ordering.
 

@@ -13,6 +13,10 @@ const LOG_DIR_NAME = path.join('.opencode', 'logs');
 const LOG_FILE_NAME = 'events.jsonl';
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB simple size cap for rotation
 
+// Types of OpenCode events that are noisy and should be ignored by default.
+// Add more types here if needed (configurable in future iterations).
+const IGNORE_EVENT_TYPES = new Set(["session.diff", "file.watcher.updated", "message.updated", "message.part.updated", "permission.updated", "session.status"]);
+
 async function ensureLogDir(dir: string) {
   await mkdir(dir, { recursive: true });
 }
@@ -118,6 +122,9 @@ export const WaifOodaPlugin: Plugin = async (context) => {
       try {
         const ev = input.event as any;
         const etype = ev?.type || 'event';
+
+        // Filter noisy event types early to avoid writing diffs or watcher noise
+        if (IGNORE_EVENT_TYPES.has(etype)) return;
         const sessionID = ev?.properties?.sessionID || ev?.properties?.info?.sessionID || ev?.properties?.sessionID || undefined;
         // Attempt to compute a human title
         const summary = ev?.properties?.info?.summary;
