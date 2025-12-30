@@ -54,6 +54,35 @@ Packaging rules
 - For large but relevant files, produce an automated summary (see Summarization guidance) and include the summary with a path link.
 - Include file metadata lines for each included file: path, file-type, size in bytes, excerpt length, and a short relevance reason.
 
+Repository tracking metadata (Beads)
+
+Policy: include only minimal Beads metadata (id, title, status, labels, external_ref, updated_at and a trimmed notes line) when it helps traceability. Do not include the full .beads/issues.jsonl or verbose internal notes. Agents should prefer a live bd/CLI query for current state; if a snapshot is embedded, include an explicit timestamp and redact/truncate notes over 200 characters.
+
+Allowed (to include in a context pack)
+
+- Beads metadata items: id, title, status, priority, labels, external_ref (PR), updated_at, and a one-line summary or notes field (trimmed to ~200 chars).
+- Use these only as metadata lines (path: .beads/issues.jsonl pointer + small manifest), not the full JSONL blob.
+- Example manifest entry:
+
+  {"id":"wf-ba2.5.2","title":"Context selection strategy","status":"in_progress","labels":["milestone:M4"],"external_ref":"gh-PR: https://github.com/SorraTheOrc/waif/pull/84","updated_at":"2025-12-30T14:06:26Z","notes":"Opened PR https://github.com/SorraTheOrc/waif/pull/84 (docs-only)"}
+
+Disallowed
+
+- Full .beads/issues.jsonl dumps or copying all issues into the context pack.
+- Private notes, internal audit lines, or any content from beads that appears to be a secret.
+- Historical/verbose blobs that exceed per-file limits.
+
+How agents should consume beads state
+
+- Query live via bd/CLI or API to get current status; prefer live lookup rather than embedding a snapshot.
+- If a snapshot is embedded, limit to the allowed metadata fields and include an explicit timestamp and pointer to the source file or bd query used.
+- Respect redaction rules: trim notes >200 chars, redact any email/credentials discovered in notes, and mark redactions in the audit manifest.
+
+When to include beads metadata
+
+- During PR review, when generating PRD or context for an ongoing issue, or when requests explicitly reference a bead ID.
+- Avoid including beads metadata when building generic context packs for unrelated tasks (it adds noise).
+
 Redaction and safety rules
 
 - Never include credentials, private keys, tokens, or secrets. Apply automated redaction for common patterns:

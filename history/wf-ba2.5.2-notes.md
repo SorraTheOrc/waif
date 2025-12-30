@@ -12,3 +12,5 @@ Open questions
 - Confirm which maintainers should be PR reviewers for docs changes.
 
 Beads: wf-ba2.5.2
+
+Added Beads metadata guidance to docs/dev/context_selection_strategy.md (see PR #84).
