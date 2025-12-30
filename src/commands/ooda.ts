@@ -100,17 +100,31 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
     let buf = '';
     for await (const line of rl) {
       if (!line || !line.trim()) continue;
-      buf += line;
+
       let parsed: OpencodeAgentEvent | undefined;
-      try {
-        parsed = JSON.parse(buf) as OpencodeAgentEvent;
-        // Successfully parsed — clear buffer for next entry
-        buf = '';
-      } catch (e) {
-        // Not yet a complete JSON object — continue reading lines into buffer
-        // Protect against runaway buffers
-        if (buf.length > 200000) buf = '';
-        continue;
+
+      // Fast path: if buffer empty and line looks like a single-line JSON object/array, try parse directly
+      const trimmed = line.trim();
+      if (!buf && (trimmed[0] !== '{' && trimmed[0] !== '[')) {
+        // line doesn't start like JSON — attempt to parse directly and skip on failure
+        try {
+          parsed = JSON.parse(trimmed) as OpencodeAgentEvent;
+        } catch {
+          // not JSON — skip this noisy line
+          continue;
+        }
+      } else {
+        // Accumulate into buffer and try parsing (supports multi-line JSON)
+        buf += line;
+        try {
+          parsed = JSON.parse(buf) as OpencodeAgentEvent;
+          buf = '';
+        } catch (e) {
+          // Not yet a complete JSON object — continue reading lines into buffer
+          // Protect against runaway buffers
+          if (buf.length > 200000) buf = '';
+          continue;
+        }
       }
 
       // Prefer explicit agent fields when present
@@ -135,13 +149,9 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
         agent = sessionAgentMap[sessionID];
       }
 
-      // Attach resolved agent back onto the parsed event for downstream consumers
+      // Keep resolved agent in local variable for downstream logic; avoid mutating
+      // the parsed object to preserve original shape (tests expect top-level 'agent' absent).
       const resolvedAgent = agent || undefined;
-      try {
-        (parsed as any).agent = resolvedAgent;
-      } catch {
-        // ignore
-      }
 
       if (sessionID) {
         sessionEventsById[sessionID] = sessionEventsById[sessionID] || [];
@@ -293,10 +303,12 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
             // ignore file read errors
           }
 
-          if (!matched) {
-            const key = (ns as any).agent || ns?.properties?.agent || 'unknown';
-            if (!agentLatest[key]) agentLatest[key] = ns;
-          }
+            if (!matched) {
+              const key = (ns as any).agent || ns?.properties?.agent || 'unknown';
+              // Always keep the latest no-session event per agent (last one wins)
+              agentLatest[key] = ns;
+            }
+
         }
       }
     }
