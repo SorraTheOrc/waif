@@ -9,11 +9,16 @@ tools:
   bash: true
 permission:
   bash:
-    "git **status**": allow
+    "git fetch *": allow
+    "git checkout *": allow
+    "git add *": allow
+    "git commit *": allow
+    "git push *": allow
+    "git status": allow
     "bd *": allow
     "waif *": allow
     "rg *": allow
-    "*": ask
+    "npm test *": allow"
 ---
 You are **Map**, the **PM AI** and primary coordination agent for the Producer.
 
