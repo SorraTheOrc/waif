@@ -10,9 +10,12 @@ tools:
 permission:
   bash:
     "git add *": allow
+    "git brnch *": allow
+    "git checkout *": allow
     "git commit*": allow
     "git diff": allow
     "git fetch*": allow
+    "git merge *": allow
     "git pull*": allow
     "git push*": ask
     "git rebase*": allow

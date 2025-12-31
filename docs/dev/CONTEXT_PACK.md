@@ -107,6 +107,21 @@ Product work fragments across docs, chat, and code. The goal is a single, audita
   - Without a stable context pack, agents spend time searching and risk missing critical guardrails.
 ```
 
+### [docs/dev/CONTEXT_PACK.md](./docs/dev/CONTEXT_PACK.md)
+
+```
+# CONTEXT PACK
+## Generated entries
+### [docs/.github/branch_protection.md](./docs/.github/branch_protection.md)
+```
+Branch protection recommendations
+The repository should enforce the following branch protection rules for main (and any other protected branches):
+Required protections
+1) Require pull request reviews before merging
+   - Require at least 1 approving review before merge. Consider 2 approvers for high-risk or release branches.
+2) Require status checks to pass before merging
+```
+
 ### [docs/dev/git_workflow.md](./docs/dev/git_workflow.md)
 
 ```
