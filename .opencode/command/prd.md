@@ -48,12 +48,15 @@ Beads issue seed context (when `issueId` is provided):
 
 Process (must follow):
 
-1. Interview first: ask concise, high-signal questions (grouped to a soft-maximum of three questions in each iteration) until you have enough detail to draft or update a useful PRD.
-   - If anything is ambiguous, ask clarifying questions.
-   - Keep the interview efficient; prefer short multiple-choice options when helpful.
-2. Draft or update the PRD in Markdown using the PRD outline below.
-3. Confirm the exact file path(s) that will be written.
-4. Write the PRD file(s) to disk.
+1. Gather context: Read docs/dev/CONTEXT_PACK.md if present, otherwise scan `docs/`, `README.md`, and other high-level files for relevant context about the product/repo.
+2. Interview: ask concise, high-signal questions (grouped to a soft-maximum of three questions in each iteration) until you have enough detail to draft or update a useful PRD.
+   - If anything is ambiguous, ask clarifying questions without suggested answers.
+   - Keep the interview efficient; offer suggested answers when possible, prefer short multiple-choice options when helpful.
+   - Avoid open-ended questions unless absolutely necessary.
+   - Perform a deeper review of any provided beads issue content and context documents to extract help formulate meaningful questions and suggested responses.
+3. Draft or update the PRD in Markdown using the PRD outline below. Use the responses given and additional context gathered to fill in each section comprehensively.
+4. Confirm the exact file path(s) that will be written.
+5. Write the PRD file(s) to disk.
 
 Editing rules (when updating an existing PRD):
 
