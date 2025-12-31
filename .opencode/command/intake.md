@@ -6,219 +6,152 @@ tags:
 agent: build
 ---
 
-You are running **Workflow step 1: intake brief** (see `docs/Workflow.md`, step 1).
+You are running Workflow step 1: intake brief (see `docs/Workflow.md`, step 1).
 
-Goal:
+Purpose
 
 - Capture just enough context to decide whether the work needs:
   - a NEW PRD, or
   - an UPDATE to an existing PRD.
-- Create a Beads issue to track the intake brief.
-- Record all gathered information in the issue description.
+- Produce a concise, reviewable intake brief and create a Beads issue to track it.
+- Use an interview-driven approach to capture intent, constraints, success criteria, and related work.
 
-Hard requirements:
+Quick inputs
 
-- Use an **interview style**.
-- Ask concise, high-signal questions.
-- Soft-maximum of **three questions per iteration**.
-- Do not invent requirements or constraints; if unknown, ask.
-- Search the repo for related PRDs/specs and surface likely duplicates.
-- Search Beads for related issues.
-- Produce a short list of clarifying questions.
-- Create a Beads issue to track the brief.
+- The user may optionally provide a short working title or a single-line intake phrase as $ARGUMENTS.
+  - Example: `/intake As a product manager I need to add an onboarding tutorial so that new users complete setup faster`
+- If $ARGUMENTS is empty, the command must ask one brief question to obtain a working title before starting the interview.
 
-Argument handling:
+Argument parsing (must do)
 
-- The user may optionally provide a short topic/title as `$ARGUMENTS`.
-  - If provided, treat it as a working title for the intake brief.
-  - Do not attempt to parse flags/options.
-- If `$ARGUMENTS` is empty, ask the user for a short working title.
+- Treat $ARGUMENTS as a single freeform string (do not attempt to parse CLI flags).
+- From the string, attempt to detect an `issueId` token (first token matching `^bd-[A-Za-z0-9]+$` or `^beads-[A-Za-z0-9-]+$`) and a `targetPath` token (first token containing `/` or ending in `.md` or resolving to an existing file/dir).
+- If multiple plausible tokens exist, ask the user to confirm which to use.
 
-Process (must follow):
+Hard requirements
 
+- Use an interview style: concise, high-signal questions grouped to a soft-maximum of three per iteration.
+- Do not invent requirements or constraints; if unknown, ask the user.
+- Respect ignore boundaries: do not include or quote content from files excluded by `.gitignore` or OpenCode ignore rules.
+- Prefer short multiple-choice suggestions when helpful, but always allow freeform responses.
+- Keep interactions efficient: aim to finish the interview in 3–9 concise questions total unless the user requests more.
 
-1. Interview (human-provided content)
+Seed context (when an issueId is provided)
 
-   In multiple iterations (≤ 3 questions each), gather the following information (providing suggestions/examples informed by relevant context
-   sources where helpful):
+- Fetch issue details via beads: `bd show <issueId> --json` and surface at minimum: `title`, `description`, `acceptance`, and `design`.
+- Prepend a short "Seed Context" block to the interview and treat it as authoritative initial intent while still asking clarifying questions.
+- If `bd` is unavailable, fail fast and ask the user to paste the relevant issue content.
 
-   - Problem (one paragraph)
-     - What is the problem / opportunity?
-     - Who experiences it (user personas)?
-   - Success criteria (one paragraph)
-     - What outcomes define success?
-     - If possible, include a measurable target or a clear “done” test.
-   - Constraints (one paragraph)
-     - Compatibility expectations (what must not break)
+Process (must follow)
 
-   If the user indicates this is a change to something existing, also gather:
+1) Gather context (agent responsibility)
 
-   - What exists today (current behavior)
-   - What should change (desired behavior)
-   - Where it likely lives (paths, commands, APIs)
+- Read `docs/dev/CONTEXT_PACK.md` if present; otherwise scan `docs/`, `README.md`, and other high-level files for product context.
+- Derive 2–6 keywords from the user's working title and early answers to guide repository and Beads searches.
 
-2. Repo search (agent responsibility)
+2) Interview (human-provided content)
 
-   Use the user’s answers to derive 2–6 keywords. Then search for related artifacts.
+- In interview iterations (≤ 3 questions each) gather the following core fields, offering templates/examples informed by repo context where helpful:
+  - Problem (one paragraph): What is the problem or opportunity? Who experiences it?
+  - Success criteria (one paragraph): How will we know this work succeeded? Prefer measurable targets or a clear done-test.
+  - Constraints (one paragraph): Compatibility/compatibility expectations, non-goals, known blockers.
+  - What exists today / desired change (if this is an update): Briefly describe current behavior and the desired change.
+- If anything is ambiguous, ask for clarification rather than guessing.
 
-   - Search `docs/dev/CONTEXT_PACK.md` if present, Otherwise, scan `docs/`, `README.md`, and other high-level files for relevant context about the product/repo.
-     - Use ripgrep where available (where not available use an alternative, but ask the user to install ripgrep).
-     - Examples:
-       - `rg -n "Product Requirements Document|\bPRD\b" docs/`
-       - `rg -n "<keyword1>|<keyword2>" docs/ src/ README.md`
-   - Search for related Beads issues covering this topic (duplicates / precursors):
-     - Examples:
-       - `bd list --status open --json | rg -i "<keyword>"`
-       - `bd ready --json | rg -i "<keyword>"`
-     - If `rg` is unavailable, use a best-effort alternative and ask the user to install ripgrep.
-     - If you find candidates:
-       - List them as "Related issues" (ids + titles).
-       - If one clearly already represents this work, prefer updating that issue (or creating a child issue) instead of creating a duplicate.
-   - If you find candidates:
-     - List them as "Likely duplicates / related docs".
-     - Ask the user to confirm whether to update one of them.
+3) Repo & Beads search (agent responsibility)
 
-3. Beads search (agent responsibility)
+- Use derived keywords to search source and docs for related artifacts and to surface possible duplicates:
+  - Scan `docs/`, `README.md`, and `src/` (or equivalent top-level code folders).
+  - Use ripgrep (`rg`) where available. If `rg` is unavailable, use a best-effort scan and ask the user to install `rg` for future runs.
+- Search Beads for related issues (`bd list --status open --json | rg -i "<keyword>"`) and `bd ready` when appropriate.
+- Output clearly labelled lists:
+  - "Likely duplicates / related docs" (file paths)
+  - "Related issues" (ids + titles)
+- If a single existing artifact clearly represents the work, prefer UPDATE over NEW and ask the user to confirm.
 
-   Search existing issues for overlaps.
+4) Clarifying questions (agent responsibility)
 
-   - Use Beads as the source of truth.
-   - Suggested approaches (pick the simplest available in the environment):
-     - `bd list --status open --json | rg -i "<keyword>"`
-     - If `rg` is unavailable, ask the user whether you should do a broad manual scan (and suggest the user installs ripgrep).
+- Produce a short list (0–7) of clarifying questions that would unblock PRD creation or updating.
+- Keep questions actionable and specific. When possible, provide suggested short answers (Y/N or 3-option choices).
 
-   Output:
+5) Decide next step (agent + user confirmation)
 
-   - "Related issues" list (ids + titles) OR explicitly state "No obvious related issues found".
+- Recommend NEW PRD or UPDATE and confirm with the user.
+- If UPDATE: propose the PRD file path to update; if uncertain, ask the user to confirm the path.
+- If NEW: propose a PRD filename under `docs/dev/` using the convention `docs/dev/<feature>_PRD.md` and ask the user to confirm.
 
-4. Clarifying questions (agent responsibility)
+6) Draft "Key details" (agent responsibility)
 
-   Produce a short list (0–7) of clarifying questions that would unblock PRD creation/editing.
-   Keep them actionable and specific.
+- Produce a short, copy-pastable "Key details" draft suitable for the Beads issue description. Use this template:
+  - Problem
+  - Users
+  - Success criteria
+  - Constraints
+  - Existing state (if applicable)
+  - Desired change (if applicable)
+  - Likely duplicates / related docs
+  - Related issues (Beads ids)
+  - Clarifying questions
+  - Recommended next step (NEW PRD at: <path> OR UPDATE PRD at: <path>)
 
-5. Decide next step: NEW PRD vs UPDATE
+- Present the draft to the user and ask for any alterations or clarifications. Do not proceed until the user approves the draft or supplies edits.
 
-   Decide, then confirm with the user:
+7) Five mini-review stages (agent responsibility; must follow)
 
-   - If UPDATE: identify the file path to update (ask for confirmation if uncertain).
-   - If NEW: propose a PRD file path under `docs/dev/`.
-     - Convention: `docs/dev/<feature>_PRD.md`.
+- After the user approves the Key details draft, run five review iterations. Each review MUST print a clear "starting" and "finished" message using the exact pattern used by the PRD command: 
+  - "Starting <Stage Name> review..."
+  - "Finished <Stage Name> review: <brief notes of improvements>"
+  - If no improvements were made: "Finished <Stage Name> review: no changes needed"
 
-6. Feedback Gate
+- The five Intake review mini-prompts (names and intents):
+  1) Completeness review
+     - Ensure Problem, Success criteria, Constraints, and Suggested next step are present and actionable. Add missing bullets or concise placeholders when obvious.
+  2) Capture fidelity review
+     - Verify the user's answers are accurately and neutrally represented. Shorten or rephrase only for clarity; do not change meaning.
+  3) Related-work & traceability review
+     - Confirm related docs/issues are correctly referenced and that the recommended next step references the correct path/issue ids.
+  4) Risks & assumptions review
+     - Add missing risks, failure modes, and assumptions in short bullets. Do not invent mitigations beyond note-level comments.
+  5) Polish & handoff review
+     - Tighten language for reading speed, ensure copy-paste-ready commands, and produce the final 1–2 sentence summary used as the issue body headline.
 
-  Propose the description of the bead, priority level, parent, related isses etc.
+- For each review stage the agent should apply only conservative edits. If a proposed change could alter intent, add a clarifying question instead of changing content.
+- Record a one-line summary of edits made during each stage.
 
-  Ask the user if there are any clarifictions, changes or further research required before proceeding. Carry out any further instructtions before proceeding. 
+8) Present final artifact for approval (human step)
 
-  Only proceed to the next step if the user gives permission to do so.
+- After the five reviews, present:
+  - The 1–2 sentence headline summary for the issue
+  - The full intake brief (Key details) in Markdown
+  - A short list of the five review summaries (one line each)
+  - Any remaining Open Questions (if present)
 
-7. Draft the intake brief (agent responsibility)
+- Ask the user to approve the final artifact or request further changes. Do not create the Beads issue until the user gives explicit approval.
 
-   Compile all gathered information into a well-structured intake brief in Markdown format.
+9) Create or update the Beads issue (must do)
 
-   Use the following template:
+- When the user approves, create a Beads issue (or update an existing one). The issue must:
+  - Type: `feature`
+  - Priority: default `2` unless user indicates otherwise
+  - Title: the working title (confirm with user)
+  - Description: include the full intake brief (Key details) in Markdown
+- If creating a new issue and a parent is suitable, create it as a sub-issue (`--parent <id>`).
+- Link related issues/documents with `bd dep add` as appropriate.
+- Record the new issue id, a 1–2 sentence summary, and close by printing: "This completes the Intake process for <bd-id>".
 
-   - Problem
-   - Users
-   - Success criteria
-   - Constraints
-   - Existing state (if applicable)
-   - Desired change (if applicable)
-   - Likely duplicates / related docs (file paths)
-   - Related issues (Beads ids)
-   - Clarifying questions
-   - Proposed next step:
-     - `NEW PRD` at: `<path>` OR
-     - `UPDATE PRD` at: `<path>`
-     - Recommended next command: `/prd <path> <new-issue-id>`
+Traceability & idempotence
 
-8. Review 1 (agent responsibility)
+- When the agent updates or creates a Beads issue, it must do so idempotently: running the command again should not create duplicate links or duplicate clarifying-question entries.
+- If an `issueId` was provided as a seed, include a `Source issue: <issueId>` reference near the top of the issue description.
 
-  Complete the **first full draft** of this workflow artifact for the current work item.
-  - Be creative and propose strong defaults.
-  - If uncertain, present 2-3 alternatives and choose one, explaining why.
-  - Keep it actionable: concrete lists, commands, checklists, and examples.
-  - Assume the reader wants momentum; do not over-polish yet.
+Editing rules & safety
 
-  Output a summary of any changes made during this review.
+- Preserve author intent; where the agent is uncertain, add a clarifying question instead of making assumptions.
+- Keep edits minimal and conservative.
+- Respect `.gitignore` and other ignore rules when searching the repo.
+- If any automated step fails or is ambiguous, surface an explicit Open Question and pause for human guidance.
 
-9. Review 2 (agent responsibilitY)
+When finished
 
-  Review the full draft for completeness, clarity, and actionability.
-  - Ensure all required sections are present and well-structured.
-  - Verify that all user-provided content is accurately captured.
-  - Check for consistency in terminology and formatting.
-  - Refine language for clarity and conciseness.
-  - Ensure the proposed next steps are clear and actionable.
-
-  Output a summary of any changes made during this review.
-
-10. Review 3 (Agent responsibility)
-
-  Audit the current artifact for correctness and real-world usability.
-  - Add missing constraints, assumptions, and decision points.
-  - Add edge cases, failure modes, and "what could go wrong" notes.
-  - Ensure steps are testable/verifiable.
-  - Remove anything not serving the artifact purpose.
-
-  Output a summary of any changes made during this review.
-
-11. Review 4 (Agent responsibility)
-
-  Polish the artifact for clarity and fast reading.
-  - Rewrite unclear sections and tighten wording.
-  - Convert paragraphs into bullets/checklists where helpful.
-  - Normalize terminology and naming.
-  - Ensure examples/commands are copy-pastable and consistent.
-
-  Output a summary of any changes made during this review.
-
-12. Final Review (Agent responsibility)
-
-  Perform a final QA review of the artifact.
-  - Check for internal consistency and contradictions.
-  - Ensure it aligns with repo conventions and the Workflow doc.
-  - Ensure every requirement is actionable and measurable.
-  - Emit a final “ready” version with a small list of remaining open questions (if any).
-
-  Output a summary of any changes made during this review, followed by the final artifact content.
-
-13. Create or update the Beads issue (must do)
-
-   Create a new Beads issue, or update an existing issue, so that the description contains the full intake brief and links.
-
-   - Type: `feature`
-   - Priority: default to `2` unless the user indicates urgency/risk.
-   - Title: `<descriptive working title>`
-
-   The description must contain the final intake brief in Markdown format.
-
-   If there is a suitable parent issue then create the new issue as a sub-issue (use `--parent <id>`).
-
-   - Problem
-   - Users
-   - Success criteria
-   - Constraints
-   - Existing state (if applicable)
-   - Desired change (if applicable)
-   - Likely duplicates / related docs (file paths)
-   - Related issues (Beads ids)
-   - Clarifying questions
-   - Proposed next step:
-     - `NEW PRD` at: `<path>` OR
-     - `UPDATE PRD` at: `<path>`
-     - Recommended next command: `/prd <path> <new-issue-id>`
-
-   If there is a suitable parent issue then create the new issue as a sub-issue (use `--parent <id>`).
-
-   If there are `Related issues`, link them using `bd dep add [issue-id] [depends-on-id] --type related`.
-
-   If this issue is blocked by another then this should be recorded with `bd dep add [issue-id] [depends-on-id] --type blocks`.
-
-14. Finish
-
-   After creating the issue, print:
-
-   - The new Beads issue id
-   - A 1–2 sentence summary
-   - Close the response with "This completes the Intake process for <dead-id>"
+- Print the Beads issue id and a 1–2 sentence summary.
+- End with: "This completes the Intake process for <bd-id>".
