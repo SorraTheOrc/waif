@@ -10,7 +10,7 @@ tools:
 permission:
   bash:
     "git add *": allow
-    "git brnch *": allow
+    "git branch *": allow
     "git checkout *": allow
     "git commit*": allow
     "git diff": allow
