@@ -36,22 +36,19 @@ Argument handling:
 
 Process (must follow):
 
+
 1. Interview (human-provided content)
 
-   In iterations (≤ 3 questions each), gather the following information (providing suggestions/examples where helpful):
+   In multiple iterations (≤ 3 questions each), gather the following information (providing suggestions/examples informed by relevant context
+   sources where helpful):
 
    - Problem (one paragraph)
      - What is the problem / opportunity?
-     - Why now?
-   - Users (one paragraph)
-     - Who are the primary users?
-     - Who are the secondary stakeholders?
+     - Who experiences it (user personas)?
    - Success criteria (one paragraph)
      - What outcomes define success?
      - If possible, include a measurable target or a clear “done” test.
    - Constraints (one paragraph)
-     - Timeline / deadlines
-     - Risk tolerance
      - Compatibility expectations (what must not break)
 
    If the user indicates this is a change to something existing, also gather:
@@ -64,8 +61,7 @@ Process (must follow):
 
    Use the user’s answers to derive 2–6 keywords. Then search for related artifacts.
 
-   - Search for likely PRDs/specs:
-     - Prefer scanning `docs/` and filenames containing `PRD`.
+   - Search `docs/dev/CONTEXT_PACK.md` if present, Otherwise, scan `docs/`, `README.md`, and other high-level files for relevant context about the product/repo.
      - Use ripgrep where available (where not available use an alternative, but ask the user to install ripgrep).
      - Examples:
        - `rg -n "Product Requirements Document|\bPRD\b" docs/`
@@ -97,7 +93,7 @@ Process (must follow):
 
 4. Clarifying questions (agent responsibility)
 
-   Produce a short list (3–7) of clarifying questions that would unblock PRD creation/editing.
+   Produce a short list (0–7) of clarifying questions that would unblock PRD creation/editing.
    Keep them actionable and specific.
 
 5. Decide next step: NEW PRD vs UPDATE
@@ -116,7 +112,78 @@ Process (must follow):
 
   Only proceed to the next step if the user gives permission to do so.
 
-7. Create or update the Beads issue (must do)
+7. Draft the intake brief (agent responsibility)
+
+   Compile all gathered information into a well-structured intake brief in Markdown format.
+
+   Use the following template:
+
+   - Problem
+   - Users
+   - Success criteria
+   - Constraints
+   - Existing state (if applicable)
+   - Desired change (if applicable)
+   - Likely duplicates / related docs (file paths)
+   - Related issues (Beads ids)
+   - Clarifying questions
+   - Proposed next step:
+     - `NEW PRD` at: `<path>` OR
+     - `UPDATE PRD` at: `<path>`
+     - Recommended next command: `/prd <path> <new-issue-id>`
+
+8. Review 1 (agent responsibility)
+
+  Complete the **first full draft** of this workflow artifact for the current work item.
+  - Be creative and propose strong defaults.
+  - If uncertain, present 2-3 alternatives and choose one, explaining why.
+  - Keep it actionable: concrete lists, commands, checklists, and examples.
+  - Assume the reader wants momentum; do not over-polish yet.
+
+  Output a summary of any changes made during this review.
+
+9. Review 2 (agent responsibilitY)
+
+  Review the full draft for completeness, clarity, and actionability.
+  - Ensure all required sections are present and well-structured.
+  - Verify that all user-provided content is accurately captured.
+  - Check for consistency in terminology and formatting.
+  - Refine language for clarity and conciseness.
+  - Ensure the proposed next steps are clear and actionable.
+
+  Output a summary of any changes made during this review.
+
+10. Review 3 (Agent responsibility)
+
+  Audit the current artifact for correctness and real-world usability.
+  - Add missing constraints, assumptions, and decision points.
+  - Add edge cases, failure modes, and "what could go wrong" notes.
+  - Ensure steps are testable/verifiable.
+  - Remove anything not serving the artifact purpose.
+
+  Output a summary of any changes made during this review.
+
+11. Review 4 (Agent responsibility)
+
+  Polish the artifact for clarity and fast reading.
+  - Rewrite unclear sections and tighten wording.
+  - Convert paragraphs into bullets/checklists where helpful.
+  - Normalize terminology and naming.
+  - Ensure examples/commands are copy-pastable and consistent.
+
+  Output a summary of any changes made during this review.
+
+12. Final Review (Agent responsibility)
+
+  Perform a final QA review of the artifact.
+  - Check for internal consistency and contradictions.
+  - Ensure it aligns with repo conventions and the Workflow doc.
+  - Ensure every requirement is actionable and measurable.
+  - Emit a final “ready” version with a small list of remaining open questions (if any).
+
+  Output a summary of any changes made during this review, followed by the final artifact content.
+
+13. Create or update the Beads issue (must do)
 
    Create a new Beads issue, or update an existing issue, so that the description contains the full intake brief and links.
 
@@ -124,40 +191,7 @@ Process (must follow):
    - Priority: default to `2` unless the user indicates urgency/risk.
    - Title: `<descriptive working title>`
 
-   Use `bd create ... --json`.
-
-   Issue description template (must follow):
-
-   - Problem
-   - Users
-   - Success criteria
-   - Constraints
-   - Existing state (if applicable)
-   - Desired change (if applicable)
-   - Likely duplicates / related docs (file paths)
-   - Related issues (Beads ids)
-   - Clarifying questions
-   - Proposed next step:
-     - `NEW PRD` at: `<path>` OR
-     - `UPDATE PRD` at: `<path>`
-     - Recommended next command: `/prd <path> <new-issue-id>`
-
-   Cross-linking (must do):
-
-   - If you are creating a new PRD as part of intake, ensure two-way traceability:
-
-     - The PRD file must include `Source issue: <new-issue-id>`.
-     - The newly-created beads issue must include a line `Linked PRD: <path/to/PRD.md>` in its description.
-
-   - Preferred mechanism: after creating the issue and writing the PRD, call the beads CLI to update the issue description with the PRD link. Example sequence:
-
-     1. `bd create "<title>" -t feature -p 2 --description "<full intake body>" --json` -> captures `id` in output
-     2. Write PRD to `<path>` with `Source issue: <id>` inside
-     3. `bd update <id> --body-file - < <path>` to append or include `Linked PRD: <path>` in the issue description
-
-   - If `bd` is unavailable, provide a deterministic fallback and explicit manual instructions to the user (e.g., edit `.beads/issues.jsonl` to add the `Linked PRD` line), and do not silently fail to leave the issue unlinked.
-
-   - The cross-link must be idempotent: re-running intake/prd with the same PRD path and issue id must not add duplicate `Linked PRD` lines.
+   The description must contain the final intake brief in Markdown format.
 
    If there is a suitable parent issue then create the new issue as a sub-issue (use `--parent <id>`).
 
@@ -177,7 +211,11 @@ Process (must follow):
 
    If there is a suitable parent issue then create the new issue as a sub-issue (use `--parent <id>`).
 
-8. Finish
+   If there are `Related issues`, link them using `bd dep add [issue-id] [depends-on-id] --type related`.
+
+   If this issue is blocked by another then this should be recorded with `bd dep add [issue-id] [depends-on-id] --type blocks`.
+
+14. Finish
 
    After creating the issue, print:
 
