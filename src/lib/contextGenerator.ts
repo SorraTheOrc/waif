@@ -68,8 +68,15 @@ export async function scanDocs(root = process.cwd(), patterns: string[] = ['docs
     const abs = resolve(root, rel)
     try {
       const content = await fs.readFile(abs, 'utf8')
-      const firstLine = content.split('\n').find(l => l.trim().length > 0) || ''
-      entries.push({ path: rel, summary: firstLine.trim().slice(0, 200) })
+      const lines = content.split('\n').map(l => l.replace(/\r$/, ''))
+      const nonBlank: string[] = []
+      for (const line of lines) {
+        if (line.trim().length === 0) continue
+        nonBlank.push(line)
+        if (nonBlank.length >= 10) break
+      }
+      const excerpt = nonBlank.join('\n')
+      entries.push({ path: rel, summary: excerpt })
     } catch (e) {
       // skip
     }

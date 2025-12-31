@@ -18,9 +18,15 @@ async function buildGenerated(): Promise<string> {
   lines.push('## Generated entries')
   lines.push('')
   for (const e of entries) {
-    lines.push(`- ${e.path} — ${e.summary}`)
+    // file as a sub-heading with live link and excerpt
+    const link = `./${e.path}`
+    lines.push(`### [${e.path}](${link})`)
+    lines.push('')
+    lines.push('```')
+    lines.push(e.summary)
+    lines.push('```')
+    lines.push('')
   }
-  lines.push('')
   lines.push('## How to query live state')
   lines.push('')
   lines.push('- Beads issues: bd ready --json')
