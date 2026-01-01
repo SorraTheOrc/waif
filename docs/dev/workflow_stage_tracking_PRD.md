@@ -44,62 +44,49 @@ Add a persistent  signal to issues (and optionally a small structured worklog). 
 2) Single current stage vs historical worklog?
 3) Who can programmatically update stages?
 
-## Per-bead worklog & state
+## Per-bead workflow-stage recording (notes-only)
 
-To support clear, concise, and machine-friendly tracking of the current workflow state for an issue (bead) while preserving a lightweight human-readable audit trail, introduce a small, standardized convention for recording per-bead worklogs and the current workflow_state.
+Decision: record only transitions between canonical workflow stages (not every minor status change). The canonical place to record those stage transitions is the bead "notes" field. Updates MUST be made using the bd CLI notes flag, e.g.:
 
-Purpose
-- Provide a minimal, consistent history for actions taken against a bead (claims, handoffs, state changes) useful to PMs and agents.
-- Keep the primary, machine-consumable current state in issue metadata while offering a readable comment-based audit for humans.
+  bd update <bead-id> --notes "prd -> in_progress"
 
-Canonical fields and storage
-- Human-readable audit (preferred for manual review): use a bead comment block prefixed with the single-line token "WORKLOG:". Agents and humans can append short line-oriented entries to this comment.
-- Machine-consumable fields (preferred for tooling): add two optional fields in the bead metadata in .beads/issues.jsonl:
-  - "worklog": an array of line-oriented strings (the most recent entries first is recommended)
-  - "workflow_state": a single string representing the current canonical stage (e.g., idea, prd, planning, in_progress, review, done)
+Guiding principles
+- Only record stage transitions. Do not record every small status update or transient activity.
+- The notes field is the canonical source of truth for current stage transitions that humans will read.
+- Do not overwrite other notes present in the bead. Agents and humans must append or add a stage-only note; they must not delete or replace unrelated notes.
+- Use short, idempotent entries that name the canonical stage and (optionally) a short actor or reference.
 
-When to use comment vs metadata
-- Use metadata when agents or automated tooling need to read/write the current state or append entries programmatically.
-- Use the WORKLOG comment when a concise human-readable audit trail is required, when making short manual notes, or when preserving history for reviewers.
-- Both can be maintained in parallel: update metadata for tooling and append the same line to WORKLOG for human readers. Ensure entries are idempotent where possible.
+Recommended entry format
+- Single-line, UTF-8, recommended max 200 characters.
+- Recommended form: <stage> [@actor] [#reference]
+  - Examples:
+    - prd @alice #bd-wf-rjh
+    - in_progress @alice #gh-pr-93
+    - review @bob #gh-pr-123
 
-Line-oriented worklog entry format
-- Single-line entries, UTF-8, no newlines inside an entry.
-- Recommended format (pipe-free):
-  <ISO-8601-UTC> <actor> <action> -> <resulting_state> [#reference]
-
-- Example entry:
-  2025-12-31T20:00:00Z @alice claim -> in_progress #bd-wf-rjh
-
-Examples (three realistic entries)
+Examples of recording stage transitions
 - Claim / start work:
-  2025-12-31T20:00:00Z @alice claim -> in_progress #bd-wf-rjh
-- Handoff / reassign to another agent or person:
-  2025-12-31T22:10:03Z @alice handoff->@bob -> in_progress #note:awaiting-bob
-- Close / completed:
-  2026-01-02T09:15:00Z @bob close -> done #gh-pr-123
+  bd update bd-wf-rjh --notes "in_progress @alice #bd-wf-rjh"
+- Move to review:
+  bd update bd-wf-rjh --notes "review @alice #gh-pr-93"
+- Close / done:
+  bd update bd-wf-rjh --notes "done @bob #gh-pr-93"
 
-Sample WORKLOG comment block (multi-line, appended to bead comments)
+Agent behavior and constraints
+- Agents MUST use the bd CLI to append stage notes. They must not directly edit .beads/issues.jsonl to change the notes field outside of bd tooling.
+- When adding a stage note, ensure you do not overwrite existing notes. Use bd's notes update semantics (which appends or adds a note) rather than replacing freeform notes.
+- Agents may maintain local tooling caches or metadata for convenience, but these MUST be considered a non-authoritative cache. The bead notes are the human-facing record.
+- If an agent discovers new work, create the corresponding bd issue and add a discovered-from:<current-bead-id> dependency as usual.
 
-WORKLOG:
-2025-12-31T20:00:00Z @alice claim -> in_progress #bd-wf-rjh
-2025-12-31T22:10:03Z @alice handoff->@bob -> in_progress #note:awaiting-bob
-2026-01-02T09:15:00Z @bob close -> done #gh-pr-123
-
-Guidance and limits
-- Keep entries concise: recommended limit 200 characters per entry. Shorten links by using issue references (#bd-xxx or #gh-pr-123) when possible.
-- Privacy: never include secrets, credentials, or detailed PII in worklog entries. If a sensitive detail is necessary, redact and store an internal reference instead.
-- Retention: the WORKLOG comment and metadata should be kept as a short history. If an issue accumulates many entries over time, create a linked archival note (e.g., a history chore) and truncate the live WORKLOG to recent entries.
-
-Usage checklist for agents (always follow)
-1) When claiming or updating work, append a single-line worklog entry (metadata.worklog[] and WORKLOG comment) following the format above.
-2) Update metadata.workflow_state to the canonical stage string.
-3) If the change discovers new work or blockers, create a bd issue and add a discovered-from:<current-bead-id> dependency.
-4) Add a bead comment (not the WORKLOG) summarizing files edited or PR created (include PR URL) so humans can find artifacts quickly.
-5) Keep entries short and avoid sensitive data.
+Usage checklist for agents
+1) Decide canonical target stage for this transition (from the agreed stage list).
+2) Run: bd update <bead-id> --notes "<stage> [@actor] [#reference]"
+3) Do not modify or remove other notes in the bead. If you need to add more context, create a separate non-stage note.
+4) If the transition spawns new work, create a bd and link it discovered-from:<bead-id>.
+5) When making code/docs changes, add a normal bead comment (separate from stage notes) with files edited or PR URL so reviewers can find artifacts.
 
 Rationale
-This small convention balances machine-readability and human auditability: storing a single current state in metadata enables tools and agents to reason about workflow stage idempotently, while a short WORKLOG comment preserves an easy-to-scan trail for PMs and reviewers without requiring them to parse the full history database.
+Keeping a single, minimal record of stage transitions in the bead notes keeps the human-facing trail concise and reduces noise. Requiring updates through the bd CLI standardizes how changes are recorded and avoids accidental overwrites of unrelated notes or metadata that other tools rely on.
 
 ## Next steps
 
