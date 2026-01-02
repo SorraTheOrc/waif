@@ -13,7 +13,7 @@
 
 ## Problem
 
-It can be hard for humans to track what stage a feature is at (idea, PRD, plan, implementation, etc.). This problem will worsen as agents operate in parallel. We need a way to persist the current stage of work and expose it succinctly to PMs.
+It can be hard for humans to track what stage a feature is at across the named workflow steps (Project Definition, Define Milestones, Feature Decomposition, Vertical Slices) and the associated bead-stage tokens (idea, prd, milestone, planning, in_progress, review, done). This problem will worsen as agents operate in parallel. We need a way to persist the current stage of work and expose it succinctly to PMs.
 
 ## Users
 
@@ -46,7 +46,29 @@ Add a persistent  signal to issues (and optionally a small structured worklog). 
 
 ## Per-bead workflow-stage recording (notes-only)
 
-Decision: record only transitions between canonical workflow stages (not every minor status change). The canonical place to record those stage transitions is the bead "notes" field. Updates MUST be made using the bd CLI notes flag, e.g.:
+Decision: record only transitions between canonical workflow stages (not every minor status change). The canonical place to record those stage transitions is the bead "notes" field.
+
+Canonical bead-stage tokens (machine-friendly):
+- idea
+- prd
+- milestone
+- planning
+- in_progress
+- review
+- done
+
+Named workflow steps taken from docs/Workflow.md: Project Definition; Define Milestones; Feature Decomposition; Vertical Slices.
+
+Mapping (token -> Workflow.md step / meaning):
+- idea -> early proposal (pre-PRD)
+- prd -> Project Definition (PRD created)
+- milestone -> Define Milestones
+- planning -> Feature Decomposition
+- in_progress -> Vertical Slices (implementation)
+- review -> Review and sign-off
+- done -> Completed / released
+
+Updates MUST be made using the bd CLI notes flag, e.g.:
 
   bd update <bead-id> --notes "prd -> in_progress"
 
@@ -86,6 +108,7 @@ Usage checklist for agents
 5) When making code/docs changes, add a normal bead comment (separate from stage notes) with files edited or PR URL so reviewers can find artifacts.
 
 Rationale
+
 Keeping a single, minimal record of stage transitions in the bead notes keeps the human-facing trail concise and reduces noise. Requiring updates through the bd CLI standardizes how changes are recorded and avoids accidental overwrites of unrelated notes or metadata that other tools rely on.
 
 ## Next steps
@@ -93,3 +116,5 @@ Keeping a single, minimal record of stage transitions in the bead notes keeps th
 - Gather canonical stage list and permissions.
 - Prototype with issue  field + linked chore for history.
 - Implement  CLI and tests.
+
+End of new content.
