@@ -10,10 +10,7 @@ You are running Workflow step 1: intake brief (see `docs/Workflow.md`, step 1).
 
 Purpose
 
-- Capture just enough context to decide whether the work needs:
-  - a NEW PRD, or
-  - an UPDATE to an existing PRD.
-- Produce a concise, reviewable intake brief and create a Beads issue to track it.
+- Create a new bead with a description that is a focused, planning-ready intake brief suitable as a seed to the authoring of a PRD (no meta-review notes)
 - Use an interview-driven approach to capture intent, constraints, success criteria, and related work.
 
 Quick inputs
@@ -137,6 +134,9 @@ Process (must follow)
   - Description: include the full intake brief (Key details) in Markdown
 - If creating a new issue and a parent is suitable, create it as a sub-issue (`--parent <id>`).
 - Link related issues/documents with `bd dep add` as appropriate.
+
+10) Closing (must do)
+- Remove all temporary files created during the process.
 - Record the new issue id, a 1–2 sentence summary, and close by printing: "This completes the Intake process for <bd-id>".
 
 Traceability & idempotence
@@ -154,4 +154,5 @@ Editing rules & safety
 When finished
 
 - Print the Beads issue id and a 1–2 sentence summary.
+- Do not proceed to writing the PRD for this intake issue.
 - End with: "This completes the Intake process for <bd-id>".
