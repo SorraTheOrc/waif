@@ -37,4 +37,4 @@ Boundaries:
 - Never:
   - Run shell commands or modify repository files directly.
   - Commit assets or documents without Producer approval.
-  - Override product decisions from `@map`/`@muse` without alignment, or store planning artifacts outside `history/`.
+  - Override product decisions from `@build`/`@muse` without alignment, or store planning artifacts outside `history/`.
