@@ -1,7 +1,13 @@
 ---
 description: Implement a beads issue by id
-agent: build
-#model: GPT-5.1-Codex-max
+agent: patch
+#model: github-copilot/GPT-5.1-Codex-max
+permission:
+  bash:
+    "git status*": allow
+    "git rev-parse*": allow  
+    "git switch*": allow
+    "bd*": allow
 ---
 
 You are implementing a Beads issue in this repository.
@@ -10,12 +16,13 @@ Argument handling:
 
 - The user should run this as `/implement <bd-id>`.
 - Use `$1` as the Beads ID.
+- the Beads ID is provided will either be and implementation task or a feature bead. The implementation bead will be a child of the feature bead. Both types of beads are valid inputs and both ids will be needed during implementation.
 - If `$1` is empty/undefined, ask for the missing id and stop.
 
 Project rules (must follow):
 
 - Use `bd` for ALL task tracking; do not create markdown TODOs.
-- Keep changes minimal and scoped to the issue.
+- Keep changes between `git push` invocations minimal and scoped to the issue.
 - Validate changes with the most relevant tests/commands available.
 - Use a git branch + PR workflow (no direct-to-main changes).
 - Ensure the working branch is pushed to `origin` before you finish.
@@ -50,8 +57,9 @@ Process:
 1. Understand the issue
 
    - Restate the acceptance criteria and constraints from the issue JSON.
-   - Identify dependencies/blockers; if blocked, explain what is missing and ask the user how to proceed.
+   - If there are any open or in-progress dependencies/blockers in the beads explain what is missing and ask the user how to proceed.
    - Review the issue `description`, `notes`, and any `comments` for references to PRDs, implementation plans, or other linked docs; if present, open and read those sources before proceeding.
+   - Pay special attention to the test and docs beads that will be children of the feature bead (siblings of the implementation bead).
 
 1.1 Definition gate (must do before implementation)
 
@@ -90,29 +98,70 @@ Process:
 4. Implement
 
    - Identify the smallest set of files to change.
+   - Review the current souurce code and scenes to understand where the changes need to be made.
    - Make the code changes.
    - If you discover additional required work, create new linked issues using `bd create ... --deps discovered-from:$1 --json`.
-   - Author appropriate tests that validate the intended behaviour
-   - Document the changes in the project documentation
 
 5. Validate
 
+   - Author appropriate tests that validate the intended behaviour (see the sibling test beads for guidance).
+   - Identify the most relevant tests/validation commands for this issue from the project context and/or issue notes.
    - Run the most specific checks available for the changed area (tests/lint/build).
+   - If tests fail, fix the issues before proceeding.
+   - Once tests pass pause for user confirmation before proceeding to the next step.
 
 6. Update the docs
 
    - If the issue has linked PRDs or design docs, update them with a summary of the work done, and references to imprtant files altered during the work.
-   - Update the `docs/workflow.md` if the issue changes any part of the development workflow.
    - Update any relevant README.md files to reflect changes in usage, setup, or configuration.
-   - Update any documents linked from `workflow.md` that are affected by the changes made in this issue.
 
-7. Commit
+7) Automated code review stages (must follow; no human intervention required)
+
+- After implementing the change (before final summary/commit), run five self-review passes on the code. Each review may make small changes to the code, but should not be changing functionality: "Finished <Stage Name> review: <brief notes of improvements>"
+
+- General requirements for the automated reviews:
+   - Run without human intervention.
+   - Each stage runs sequentially in the order listed below.
+   - Keep edits minimal and scoped to the stage; avoid reworking intent or scope.
+   - If a change would alter intent (e.g., new behaviour, scope expansion), do NOT apply it automatically; log it as an Open Question instead.
+- If any stage identifies significant issues that cannot be fixed automatically, log them as Open Questions for human review.
+
+- Review stages and expected behavior:
+
+   1) Completeness review
+      - Purpose: Ensure the implementation covers the acceptance criteria and all necessary files (code, tests, docs) are touched.
+      - Actions: Add obviously missing test/doc updates; note uncertain gaps as Open Questions.
+
+   2) Dependencies & safety review
+      - Purpose: Check correctness risks from dependencies (init order, null checks, threading, feature flags, config) and build impact.
+      - Actions: Add minimal guards or TODOs when clearly required; flag uncertain risks as Open Questions.
+
+   3) Scope & regression review
+      - Purpose: Ensure the diff is minimal, avoids unrelated changes, and does not introduce likely regressions.
+      - Actions: Remove stray debug code/unrelated edits; note suspected regressions or needed split work as Open Questions.
+
+   4) Tests & acceptance review
+      - Purpose: Ensure tests exist and are pass/fail-clear for the change, including representative negative/edge cases when implied.
+      - Actions: Tighten assertions; add small missing cases only when obvious; record ambiguous test gaps as Open Questions.
+
+   5) Polish & handoff review
+      - Purpose: Make the change ready for handoff/PR: readable code, consistent naming/logging/comments, and updated docs/changelog if applicable.
+      - Actions: Standardize formatting/structure; clarify terse comments; ensure instructions for reviewers/runners are present when needed.
+   
+8. Commit, push and create PR
 
    - Commit your code changes on the branch (include the Beads id in the commit message).
    - Ensure the commit message is clear and descriptive.
+   - Push the branch to `origin`.
+   - Create a Pull Request against the default branch of the origin remote.
+   - In the PR description, include:
+      - A summary of the changes made.
+      - A reference to the Beads issue (e.g., `Closes bd#$1`).
+      - Any special instructions for reviewers or testers.  
 
-8. Update Beads (do not close)
+9. Update Beads (do not close)
 
+   - On the parent bead add a Label: "Status: Implementation Committed" ` bd update <bead-id> --add-label "Status: PR Created" --json`
    - Update the issue to include the PR URL using `--external-ref` and/or `--notes`.
    - Keep the issue in `in_progress` until the PR is merged.
    - Run `bd sync` before ending the session.

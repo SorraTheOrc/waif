@@ -74,7 +74,7 @@ Agent Commands:
 
 Summary: features make epics executable and testable in small increments.
 
-### Vertical Slices
+### Implement Milestones/Epics
 
 Implement each milestone/epicas vertical, end-to-end slices: each iteration delivers a working path from UI/CLI through backend, infra, tests, docs, and observability.
 
