@@ -77,37 +77,33 @@ function formatCronError(job: Job, idx: number, err: unknown): ValidationError {
 function validateCronExpressions(config: Config): ValidationError[] {
   const cronErrors: ValidationError[] = [];
   // Resolve parse function robustly to handle ESM/CJS interop variations in test runtimes
-  const tryParse = (() => {
+  const parseCron = (() => {
     const anyParser = cronParser as any;
-    if (typeof anyParser.parseExpression === 'function') return anyParser.parseExpression.bind(anyParser);
-    if (anyParser && typeof anyParser.default === 'function') return anyParser.default;
-    if (anyParser && typeof anyParser.default?.parseExpression === 'function') return anyParser.default.parseExpression.bind(anyParser.default);
-    if (typeof anyParser === 'function') return anyParser;
+    if (typeof anyParser?.parse === 'function') return (expr: string) => anyParser.parse(expr, { strict: false });
+    if (typeof anyParser?.parseExpression === 'function') return anyParser.parseExpression.bind(anyParser);
+    if (typeof anyParser?.default?.parse === 'function') return (expr: string) => anyParser.default.parse(expr, { strict: false });
+    if (typeof anyParser?.default?.parseExpression === 'function') return anyParser.default.parseExpression.bind(anyParser.default);
+    if (typeof anyParser === 'function') {
+      return (expr: string) => {
+        try {
+          return anyParser(expr);
+        } catch (callErr: any) {
+          const msg = String(callErr?.message || '');
+          if (msg.includes("cannot be invoked without 'new'") || msg.includes('Class constructor')) {
+            // eslint-disable-next-line new-cap
+            return new anyParser(expr);
+          }
+          throw callErr;
+        }
+      };
+    }
     return null;
   })();
 
   config.jobs.forEach((job, idx) => {
     try {
-      if (!tryParse) throw new Error('cron-parser parse function not found in runtime');
-      // call the resolved parser; some runtimes export a class that must be constructed with `new`
-      try {
-        // First attempt: call as a function
-        tryParse(job.schedule);
-      } catch (callErr: any) {
-        // If callErr indicates the export is a class, try constructing
-        const msg = String(callErr?.message || '');
-        if (msg.includes("cannot be invoked without 'new'") || msg.includes('Class constructor')) {
-          // try construct
-          try {
-            // eslint-disable-next-line new-cap
-            new (tryParse as any)(job.schedule);
-          } catch (newErr) {
-            throw newErr;
-          }
-        } else {
-          throw callErr;
-        }
-      }
+      if (!parseCron) throw new Error('cron-parser parse function not found in runtime');
+      parseCron(job.schedule);
     } catch (e) {
       cronErrors.push(formatCronError(job, idx, e));
     }
