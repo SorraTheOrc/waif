@@ -1,0 +1,7 @@
+jobs:
+  - id: "retention-test"
+    name: "Retention test"
+    command: "echo ok"
+    schedule: "* * * * *"
+    retention:
+      keep_last: 0
