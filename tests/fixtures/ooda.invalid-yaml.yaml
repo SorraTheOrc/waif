@@ -1,0 +1,14 @@
+jobs:
+  - id: "yaml-error"
+    name: "YAML error"
+    command: "echo ok"
+    schedule: "* * * * *"
+    capture:
+      - stdout
+      - stderr
+    env:
+      KEY: value
+    retention:
+      keep_last: 10
+    # Missing closing quote below triggers YAML syntax error
+    note: "unterminated
