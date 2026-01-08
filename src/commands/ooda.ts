@@ -454,6 +454,7 @@ export function createOodaCommand() {
     .option('--interval <seconds>', 'Poll interval in seconds', (v) => parseInt(v, 10), 5)
     .option('--log <path>', 'Log path (default history/ooda_probe_<ts>.txt)')
     .option('--no-log', 'Disable logging (still reads .opencode/logs/events.jsonl)')
+    .option('--events <path>', 'OpenCode events log path (default .opencode/logs/events.jsonl)')
     .option('--sample', 'Use built-in sample data (no OpenCode)')
     .action(async (options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
@@ -461,7 +462,7 @@ export function createOodaCommand() {
       const useSample = Boolean(options.sample);
       const once = Boolean(options.once);
 
-      const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
+      const opencodeLogPath = options.events ? path.resolve(String(options.events)) : path.join('.opencode', 'logs', 'events.jsonl');
 
       let lastPrintedTableLines = 0;
       const runCycle = async () => {
