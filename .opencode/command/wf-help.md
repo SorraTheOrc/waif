@@ -10,7 +10,7 @@ agent: plan
 This command emits a concise Markdown summary of docs/dev/Workflow.md focused on the four core workflow steps and the specific OpenCode commands used in each step. It is intended as a quick reference for contributors working with beads and PRDs.
 
 Usage
-- `/help` — No arguments accepted. The command always prints the same concise markdown summary.
+- `/wf-help` — No arguments accepted. The command always prints the same concise markdown summary.
 
 Behavior
 - Locate and read docs/dev/Workflow.md in the repository root. Treat that file as the authoritative source.
