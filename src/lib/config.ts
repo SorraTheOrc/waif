@@ -34,10 +34,25 @@ const validate = ajv.compile(schema) as ValidateFunction<Config>;
 
 export function validateConfig(obj: unknown): { valid: boolean; errors?: ValidationError[] } {
   const ok = validate(obj);
-  if (ok) return { valid: true };
+  const errors: ValidationError[] = [];
 
-  const errors = ((validate.errors ?? []) as ErrorObject[]).map((err) => formatAjvError(err, obj));
-  return { valid: false, errors };
+  if (!ok) {
+    errors.push(...(((validate.errors ?? []) as ErrorObject[]).map((err) => formatAjvError(err, obj))));
+  }
+
+  if (obj && typeof obj === 'object' && Array.isArray((obj as Config).jobs)) {
+    (obj as Config).jobs.forEach((job, idx) => {
+      const schedule = (job as Job | undefined)?.schedule;
+      if (typeof schedule !== 'string' || schedule.trim() === '') {
+        const jobId = (job as Job | undefined)?.id;
+        const path = jobId ? `jobs[${idx}] (id:${jobId}).schedule` : `jobs[${idx}].schedule`;
+        errors.push({ path, message: 'schedule is required' });
+      }
+    });
+  }
+
+  if (errors.length > 0) return { valid: false, errors };
+  return { valid: true };
 }
 
 function formatAjvError(err: ErrorObject, root: unknown): ValidationError {
@@ -103,6 +118,9 @@ function validateCronExpressions(config: Config): ValidationError[] {
   config.jobs.forEach((job, idx) => {
     try {
       if (!parseCron) throw new Error('cron-parser parse function not found in runtime');
+      if (!job.schedule || typeof job.schedule !== 'string' || job.schedule.trim() === '') {
+        throw new Error('schedule is required');
+      }
       parseCron(job.schedule);
     } catch (e) {
       cronErrors.push(formatCronError(job, idx, e));
@@ -110,6 +128,7 @@ function validateCronExpressions(config: Config): ValidationError[] {
   });
   return cronErrors;
 }
+
 
 export async function loadConfig(configPath = path.resolve('.waif/ooda-scheduler.yaml')): Promise<Config> {
   const file = await readFile(configPath, 'utf8');
