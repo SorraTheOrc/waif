@@ -1,0 +1,11 @@
+jobs:
+  - id: daily-health
+    name: "Daily health probe"
+    schedule: "0 6 * * *"
+    command: "echo OK"
+    cwd: "."
+    capture: ["stdout","stderr"]
+    redact: true
+    timeout_seconds: 60
+    retention:
+      keep_last: 100
