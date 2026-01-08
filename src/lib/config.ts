@@ -76,9 +76,21 @@ function formatCronError(job: Job, idx: number, err: unknown): ValidationError {
 
 function validateCronExpressions(config: Config): ValidationError[] {
   const cronErrors: ValidationError[] = [];
+  // Resolve parse function robustly to handle ESM/CJS interop variations in test runtimes
+  const tryParse = (() => {
+    const anyParser = cronParser as any;
+    if (typeof anyParser.parseExpression === 'function') return anyParser.parseExpression.bind(anyParser);
+    if (anyParser && typeof anyParser.default === 'function') return anyParser.default;
+    if (anyParser && typeof anyParser.default?.parseExpression === 'function') return anyParser.default.parseExpression.bind(anyParser.default);
+    if (typeof anyParser === 'function') return anyParser;
+    return null;
+  })();
+
   config.jobs.forEach((job, idx) => {
     try {
-      (cronParser as any).parseExpression(job.schedule);
+      if (!tryParse) throw new Error('cron-parser parse function not found in runtime');
+      // call the resolved parser
+      tryParse(job.schedule);
     } catch (e) {
       cronErrors.push(formatCronError(job, idx, e));
     }
