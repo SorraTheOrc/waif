@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, writeFileSync } from 'fs';
-import { dirname, resolve } from 'path';
+import { dirname, relative, resolve } from 'path';
 import { Command } from 'commander';
 import { CliError } from '../types.js';
 import { logStdout } from '../lib/io.js';
@@ -10,8 +10,10 @@ function ensureParent(outPath: string) {
   if (!existsSync(parent)) mkdirSync(parent, { recursive: true });
 }
 
-async function buildGenerated(): Promise<string> {
-  const entries = await scanDocs(process.cwd(), ['docs'])
+async function buildGenerated(outPath: string): Promise<string> {
+  const cwd = process.cwd();
+  const outRel = relative(cwd, outPath).replace(/\\/g, '/');
+  const entries = (await scanDocs(cwd, ['docs'])).filter((e) => e.path.replace(/\\/g, '/') !== outRel);
   const lines: string[] = []
   lines.push('# CONTEXT PACK')
   lines.push('')
@@ -19,7 +21,8 @@ async function buildGenerated(): Promise<string> {
   lines.push('')
   for (const e of entries) {
     // file as a sub-heading with live link and excerpt
-    const link = `./${e.path}`
+    const relLink = relative(dirname(outPath), resolve(cwd, e.path)).replace(/\\/g, '/');
+    const link = relLink.startsWith('.') ? relLink : `./${relLink}`;
     lines.push(`### [${e.path}](${link})`)
     lines.push('')
     lines.push('```')
@@ -46,9 +49,8 @@ export function createContextCommand() {
       // Default behavior: write to canonical path and overwrite on every run
       const outOpt = (options.out as string | undefined) ?? 'docs/dev/CONTEXT_PACK.md';
       const force = Boolean(options.force);
-      const content = await buildGenerated();
-
       const out = resolve(outOpt);
+      const content = await buildGenerated(out);
 
       // If user explicitly provided --out, preserve overwrite protection unless --force supplied
       if (options.out && !force && existsSync(out)) {
@@ -59,6 +61,7 @@ export function createContextCommand() {
       writeFileSync(out, content, { encoding: 'utf8' });
       logStdout(`Wrote context pack to ${out}`);
     });
+
 
   return cmd;
 }
