@@ -1,0 +1,6 @@
+jobs:
+  - id: "capture-test"
+    name: "Capture test"
+    command: "echo ok"
+    schedule: "* * * * *"
+    capture: ["stdout", "log"]
