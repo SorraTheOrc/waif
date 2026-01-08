@@ -17,6 +17,7 @@ describe('wf-e6r.2.12 - Config file not found', () => {
   it('throws a clear error when default config is missing', async () => {
     await ensureTempDir();
     const missingPath = tempPath('no-ooda-file.yaml');
+    await fs.rm(missingPath, { force: true });
 
     await expect(loadConfig(missingPath)).rejects.toThrowError(/ooda-scheduler\.yaml|ENOENT|not\s+found/i);
   });
