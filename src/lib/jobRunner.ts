@@ -5,6 +5,9 @@ import type { Job } from './config.js';
 export interface JobRunResult {
   timedOut: boolean;
   exitCode: number | null;
+  // aliases for different consumer shapes
+  code?: number | null;
+  exit_code?: number | null;
   stdout: string;
   stderr: string;
   status: 'success' | 'failure' | 'timeout';
