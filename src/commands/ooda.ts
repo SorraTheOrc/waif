@@ -494,15 +494,17 @@ export function createOodaCommand() {
       const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
 
       const runJob = async (job: Job) => {
-        const result = await runJobCommand(job);
-        const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
-        if (snapshotPath) {
-          writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
-          enforceRetention(snapshotPath, job.retention?.keep_last);
-        }
-        if (jsonOutput) {
-          emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
-        }
+      const result = await runJobCommand(job);
+      const r: any = result;
+      const code = r.code ?? r.exitCode ?? null;
+      const status: SnapshotStatus = (r.status as SnapshotStatus) ?? (r.timedOut ? 'timeout' : code === 0 ? 'success' : 'failure');
+      if (snapshotPath) {
+        __writeJobSnapshot(snapshotPath, job, result);
+        __enforceRetention(snapshotPath, job.retention?.keep_last);
+      }
+      if (jsonOutput) {
+        emitJson({ jobId: job.id, status, code, stdout: r.stdout, stderr: r.stderr });
+      }
       };
 
       // eslint-disable-next-line no-constant-condition
@@ -534,8 +536,14 @@ export function createOodaCommand() {
       const job = cfg.jobs.find((j) => j.id === options.job);
       if (!job) throw new Error(`job not found: ${options.job}`);
       const result = await runJobCommand(job);
-      const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
-      if (jsonOutput) emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
+      const r: any = result as any;
+      const code = r.code ?? r.exitCode ?? null;
+      const status: SnapshotStatus = (r.status as SnapshotStatus) ?? (r.timedOut ? 'timeout' : code === 0 ? 'success' : 'failure');
+      if (jsonOutput) emitJson({ jobId: job.id, status, code, stdout: r.stdout, stderr: r.stderr });
+      // Also write default snapshot to history
+      const defaultLog = path.join('history', `ooda_${job.id}.jsonl`);
+      __writeJobSnapshot(defaultLog, job, result);
+      __enforceRetention(defaultLog, job.retention?.keep_last);
     });
 
   return cmd;

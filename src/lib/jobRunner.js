@@ -24,6 +24,18 @@ export async function runJobCommand(job) {
   const timeoutMs = Math.max(1, Math.floor((job.timeout_seconds ?? DEFAULT_TIMEOUT_MS / 1000) * 1000));
 
   return await new Promise((resolve) => {
+    let resolved = false;
+    const finish = (codeVal, timedOutVal) => {
+      if (resolved) return;
+      resolved = true;
+      clearTimeout(timer);
+      const stdout = captureStdout ? Buffer.concat(stdoutChunks).toString('utf8').slice(0, MAX_CAPTURE) : undefined;
+      const stderr = captureStderr ? Buffer.concat(stderrChunks).toString('utf8').slice(0, MAX_CAPTURE) : undefined;
+      const exitCode = typeof codeVal === 'number' ? codeVal : null;
+      const status = timedOutVal ? 'timeout' : exitCode === 0 ? 'success' : 'failure';
+      resolve({ code: exitCode, exitCode, stdout: redactSecrets(stdout || ''), stderr: redactSecrets(stderr || ''), timedOut: timedOutVal, status });
+    };
+
     const timer = setTimeout(() => {
       timedOut = true;
       try {
@@ -31,20 +43,16 @@ export async function runJobCommand(job) {
       } catch (e) {
         // ignore
       }
+      // resolve even if child never emits close
+      finish(null, true);
     }, timeoutMs);
 
     child.on('error', () => {
-      clearTimeout(timer);
-      const stdout = captureStdout ? Buffer.concat(stdoutChunks).toString('utf8').slice(0, MAX_CAPTURE) : undefined;
-      const stderr = captureStderr ? Buffer.concat(stderrChunks).toString('utf8').slice(0, MAX_CAPTURE) : undefined;
-      resolve({ code: null, stdout: redactSecrets(stdout || ''), stderr: redactSecrets(stderr || ''), timedOut });
+      finish(null, timedOut);
     });
 
     child.on('close', (code) => {
-      clearTimeout(timer);
-      const stdout = captureStdout ? Buffer.concat(stdoutChunks).toString('utf8').slice(0, MAX_CAPTURE) : undefined;
-      const stderr = captureStderr ? Buffer.concat(stderrChunks).toString('utf8').slice(0, MAX_CAPTURE) : undefined;
-      resolve({ code: typeof code === 'number' ? code : null, stdout: redactSecrets(stdout || ''), stderr: redactSecrets(stderr || ''), timedOut });
+      finish(typeof code === 'number' ? code : null, timedOut);
     });
   });
 }
