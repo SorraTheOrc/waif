@@ -1,4 +1,4 @@
- .npm-global/
+.npm-global/
 node_modules/
 dist/
 
@@ -13,3 +13,5 @@ __pycache__/
 # opencode logs
 .opencode/logs
 
+# Editor settings
+.vscode/

@@ -6,5 +6,6 @@ describe('wf-e6r.2.9 - Invalid capture value', () => {
     await expect(loadConfig('tests/fixtures/ooda.invalid-capture.yaml')).rejects.toThrowError(
       /capture/i,
     );
+    await expect(loadConfig('tests/fixtures/ooda.missing-command.yaml')).rejects.toThrowError(/command/i);
   });
 });

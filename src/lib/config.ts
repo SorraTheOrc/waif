@@ -48,6 +48,13 @@ export function validateConfig(obj: unknown): { valid: boolean; errors?: Validat
         const path = jobId ? `jobs[${idx}] (id:${jobId}).schedule` : `jobs[${idx}].schedule`;
         errors.push({ path, message: 'schedule is required' });
       }
+
+      const command = (job as Job | undefined)?.command;
+      if (typeof command !== 'string' || command.trim() === '') {
+        const jobId = (job as Job | undefined)?.id;
+        const path = jobId ? `jobs[${idx}] (id:${jobId}).command` : `jobs[${idx}].command`;
+        errors.push({ path, message: 'command is required' });
+      }
     });
   }
 

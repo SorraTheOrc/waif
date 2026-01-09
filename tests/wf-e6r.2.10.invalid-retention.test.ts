@@ -7,4 +7,8 @@ describe('wf-e6r.2.10 - Invalid retention value', () => {
       /retention.*keep_last/i,
     );
   });
+
+  it('still fails when command missing regardless of retention', async () => {
+    await expect(loadConfig('tests/fixtures/ooda.missing-command.yaml')).rejects.toThrowError(/command/i);
+  });
 });

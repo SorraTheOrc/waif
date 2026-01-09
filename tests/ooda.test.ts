@@ -61,8 +61,8 @@ describe('ooda snapshots', () => {
     // ensure file does not exist
     try { require('fs').unlinkSync(tmp); } catch (e) {}
     const rows = [
-      { pane: 'agent-a', title: 'doing secret run sk-abcdef1234567890', status: 'Busy', reason: 'opencode-event' },
-      { pane: 'agent-b', title: 'idle', status: 'Free', reason: 'opencode-event' },
+      { pane: 'agent-a', title: 'doing secret run sk-abcdef1234567890', status: 'Busy' as const, reason: 'opencode-event' },
+      { pane: 'agent-b', title: 'idle', status: 'Free' as const, reason: 'opencode-event' },
     ];
     writeSnapshots(tmp, rows);
     const content = require('fs').readFileSync(tmp, 'utf8').trim().split('\n');

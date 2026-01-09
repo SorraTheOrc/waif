@@ -1,0 +1,2 @@
+{"time":"2026-01-09T05:00:45.289Z","job_id":"y","name":"y","command":"echo","exit_code":3,"status":"failure","summary":"o3","sanitized_output":"o3"}
+{"time":"2026-01-09T05:00:45.289Z","job_id":"y","name":"y","command":"echo","exit_code":4,"status":"failure","summary":"o4","sanitized_output":"o4"}
