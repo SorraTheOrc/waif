@@ -1,8 +1,11 @@
 import { Command } from 'commander';
 import { readFileSync, createReadStream, appendFileSync, mkdirSync } from 'node:fs';
+import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import path from 'node:path';
+import cronParser from 'cron-parser';
 import { emitJson, logStdout } from '../lib/io.js';
+import { loadConfig, type Job } from '../lib/config.js';
 import { redactSecrets } from '../lib/redact.js';
 
 interface PaneRow {
@@ -423,7 +426,7 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
   });
 }
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
@@ -446,96 +449,178 @@ export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   }
 }
 
+type SnapshotStatus = 'success' | 'failure' | 'timeout';
+const DEFAULT_TIMEOUT_MS = 60_000;
+
+export async function runJobCommand(job: Job): Promise<{ code: number | null; stdout?: string; stderr?: string; timedOut?: boolean }> {
+  const captureStdout = (job.capture ?? []).includes('stdout');
+  const captureStderr = (job.capture ?? []).includes('stderr');
+  const stdoutChunks: Buffer[] = [];
+  const stderrChunks: Buffer[] = [];
+  let timedOut = false;
+
+  const child = spawn(job.command, {
+    shell: true,
+    cwd: job.cwd || process.cwd(),
+    env: { ...process.env, ...(job.env ?? {}) },
+    stdio: ["ignore", captureStdout ? "pipe" : "ignore", captureStderr ? "pipe" : "ignore"],
+  });
+
+  if (captureStdout && child.stdout) child.stdout.on('data', (c: Buffer) => stdoutChunks.push(c));
+  if (captureStderr && child.stderr) child.stderr.on('data', (c: Buffer) => stderrChunks.push(c));
+
+  const timeoutMs = Math.max(1, Math.floor((job.timeout_seconds ?? DEFAULT_TIMEOUT_MS / 1000) * 1000));
+
+  return await new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      timedOut = true;
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // ignore
+      }
+    }, timeoutMs);
+
+    child.on('error', () => {
+      clearTimeout(timer);
+      resolve({ code: null, stdout: captureStdout ? Buffer.concat(stdoutChunks).toString('utf8') : undefined, stderr: captureStderr ? Buffer.concat(stderrChunks).toString('utf8') : undefined, timedOut });
+    });
+
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({
+        code: typeof code === 'number' ? code : null,
+        stdout: captureStdout ? Buffer.concat(stdoutChunks).toString('utf8') : undefined,
+        stderr: captureStderr ? Buffer.concat(stderrChunks).toString('utf8') : undefined,
+        timedOut,
+      });
+    });
+  });
+}
+
+export function writeJobSnapshot(
+  filePath: string,
+  job: Job,
+  status: SnapshotStatus,
+  code: number | null,
+  stdout?: string,
+  stderr?: string,
+  redact = false,
+) {
+  if (!filePath) return;
+  try {
+    const dir = path.dirname(filePath);
+    if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
+    const time = new Date().toISOString();
+    const sanitize = (val?: string) => (val && redact ? redactSecrets(val) : val);
+    const snapshot: Record<string, unknown> = {
+      time,
+      job_id: job.id,
+      name: job.name,
+      command: job.command,
+      status,
+      exit_code: code,
+    };
+    if (typeof stdout === 'string') snapshot.stdout = sanitize(stdout);
+    if (typeof stderr === 'string') snapshot.stderr = sanitize(stderr);
+    appendFileSync(filePath, JSON.stringify(snapshot) + '\n', 'utf8');
+  } catch (e) {
+    // best-effort
+  }
+}
+
+export function enforceRetention(filePath: string, keepLast?: number) {
+  if (!filePath || !keepLast || keepLast <= 0) return;
+  try {
+    const content = readFileSync(filePath, 'utf8');
+    const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const trimmed = lines.slice(Math.max(0, lines.length - keepLast));
+    const dir = path.dirname(filePath);
+    if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
+    require('node:fs').writeFileSync(filePath, trimmed.map((l) => `${l}\n`).join(''), 'utf8');
+  } catch (e) {
+    // best-effort
+  }
+}
+
 export function createOodaCommand() {
   const cmd = new Command('ooda');
+  cmd.description('OODA scheduler and job runner (cron-based)');
+
   cmd
-    .description('Monitor OpenCode events and summarize agent state (tmux-free)')
-    .option('--once', 'Run a single probe and exit')
-    .option('--interval <seconds>', 'Poll interval in seconds', (v) => parseInt(v, 10), 5)
-    .option('--log <path>', 'Log path (default history/ooda_probe_<ts>.txt)')
-    .option('--no-log', 'Disable logging (still reads .opencode/logs/events.jsonl)')
-    .option('--sample', 'Use built-in sample data (no OpenCode)')
+    .command('scheduler')
+    .description('Run the OODA scheduler loop')
+    .option('--config <path>', 'Path to ooda scheduler config', '.waif/ooda-scheduler.yaml')
+    .option('--interval <seconds>', 'Poll interval in seconds', (v) => parseInt(v, 10), 30)
+    .option('--log <path>', 'Snapshot log path (default history/ooda_snapshot_<ts>.jsonl)')
     .action(async (options, command) => {
-      const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
-      const interval = Number(options.interval ?? 5) || 5;
-      const useSample = Boolean(options.sample);
-      const once = Boolean(options.once);
+      const jsonOutput = Boolean(options.json ?? command.parent?.parent?.getOptionValue('json'));
+      const configPath = path.resolve(options.config ?? '.waif/ooda-scheduler.yaml');
+      const interval = Number(options.interval ?? 30) || 30;
+      const cfg = await loadConfig(configPath);
 
-      const opencodeLogPath = path.join('.opencode', 'logs', 'events.jsonl');
-
-      let lastPrintedTableLines = 0;
-      const runCycle = async () => {
-        const latest = useSample ? [] : await readOpencodeEvents(opencodeLogPath);
-        const rows = useSample && latest.length === 0 ? sampleRows() : eventsToRows(latest);
-        const table = renderTable(rows);
-        if (jsonOutput) {
-          emitJson({
-            rows,
-            opencodeEventsRaw: latest,
-            opencodeEventsLatest: latest,
-          });
-        } else {
-          // If we're attached to a TTY, move the cursor up to the start of the
-          // previously-printed table and clear that region so the table appears
-          // to update in-place instead of scrolling. This is less disruptive
-          // than clearing the whole screen.
-          if (process.stdout.isTTY) {
-            try {
-              if (lastPrintedTableLines > 0) {
-                // Move cursor up by the number of previously printed lines
-                process.stdout.write(`\x1b[${lastPrintedTableLines}A`);
-                // Clear from cursor to end of screen
-                process.stdout.write('\x1b[J');
-              }
-            } catch {
-              // ignore any stdout errors
-            }
-          }
-          logStdout(table);
-          // Record how many lines we just printed so we can erase them next time
-          try {
-            lastPrintedTableLines = table.split('\n').length;
-          } catch {
-            lastPrintedTableLines = 0;
-          }
-        }
-
-        // If logging is enabled via --log <path>, append sanitized snapshots
-        if (options.log && options.log !== false) {
-          const lp = typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
-          writeSnapshots(lp, rows);
-        }
-
-        return rows;
+      const parseCron = (expr: string) => {
+        const anyParser = cronParser as any;
+        if (typeof anyParser?.parseExpression === 'function') return anyParser.parseExpression(expr, { strict: false });
+        if (typeof anyParser?.parse === 'function') return anyParser.parse(expr, { strict: false });
+        if (typeof anyParser?.default?.parseExpression === 'function') return anyParser.default.parseExpression(expr, { strict: false });
+        if (typeof anyParser?.default?.parse === 'function') return anyParser.default.parse(expr, { strict: false });
+        throw new Error('cron-parser parse function not found');
       };
 
-      if (once) {
-        await runCycle();
-        return;
-      }
+      const scheduleEntries = cfg.jobs.map((job) => {
+        const iter = parseCron(job.schedule);
+        const next = iter.next().toDate();
+        return { job, iter, next };
+      });
 
-      let stableCycles = 0;
-      let lastFingerprint = '';
-      let currentInterval = interval;
-      const maxBackoff = 60;
-      const backoffCycles = 12;
-      const jitterMax = 1;
+      const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
+
+      const runJob = async (job: Job) => {
+        const result = await runJobCommand(job);
+        const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
+        if (snapshotPath) {
+          writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
+          enforceRetention(snapshotPath, job.retention?.keep_last);
+        }
+        if (jsonOutput) {
+          emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
+        }
+      };
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        const rows = await runCycle();
-        const fingerprint = rows.map((r) => `${r.pane}|${r.status}|${r.title}|${r.reason}`).join(';');
-        if (fingerprint === lastFingerprint) {
-          stableCycles += 1;
-          if (stableCycles >= backoffCycles) currentInterval = maxBackoff;
-        } else {
-          stableCycles = 0;
-          currentInterval = interval;
-          lastFingerprint = fingerprint;
+        const now = new Date();
+        for (const entry of scheduleEntries) {
+          try {
+            if (now >= entry.next) {
+              await runJob(entry.job);
+              entry.next = entry.iter.next().toDate();
+            }
+          } catch {
+            // ignore per-loop errors to keep scheduler alive
+          }
         }
-        const jitter = Math.floor(Math.random() * (jitterMax + 1));
-        await new Promise((resolve) => setTimeout(resolve, (currentInterval + jitter) * 1000));
+        await new Promise((resolve) => setTimeout(resolve, interval * 1000));
       }
     });
+
+  cmd
+    .command('run-job')
+    .description('Run a configured job once by id (debug)')
+    .option('--config <path>', 'Path to ooda scheduler config', '.waif/ooda-scheduler.yaml')
+    .requiredOption('--job <id>', 'Job id to run')
+    .action(async (options, command) => {
+      const jsonOutput = Boolean(options.json ?? command.parent?.parent?.getOptionValue('json'));
+      const configPath = path.resolve(options.config ?? '.waif/ooda-scheduler.yaml');
+      const cfg = await loadConfig(configPath);
+      const job = cfg.jobs.find((j) => j.id === options.job);
+      if (!job) throw new Error(`job not found: ${options.job}`);
+      const result = await runJobCommand(job);
+      const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
+      if (jsonOutput) emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
+    });
+
   return cmd;
 }
+
