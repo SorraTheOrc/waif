@@ -12,8 +12,8 @@ References:
 
 CI should use a deterministic test that:
 
-1) points `waif ooda` at a **small, committed events fixture** (via `--events`),
-2) runs a single probe cycle (`--once`),
+1) sets the test job's `job.command` to a small, deterministic command (a committed fixture script, or a script that reads a committed fixture),
+2) executes the command handler deterministically (either by running the configured `job.command` or by invoking the command handler in-process with injected fixtures),
 3) asserts on the JSON output or on a single written snapshot JSONL line.
 
 This is preferred over using a real OpenCode server.
@@ -53,17 +53,13 @@ Run full tests:
 npm test
 ```
 
-Run a single deterministic OODA probe locally (example):
+Run a single deterministic command locally (example):
 
 ```bash
-waif ooda --once --events tests/fixtures/opencode/events.small.jsonl --log history/ooda_snapshot_test.jsonl
+./tests/fixtures/ooda/emit_snapshot_fixture.sh tests/fixtures/opencode/events.small.jsonl
 ```
 
-If running against the scheduler config path:
-
-```bash
-waif ooda run --config .waif/ooda-scheduler.yaml --job probe-map --once
-```
+Alternatively, run the same command your test config sets as `job.command`.
 
 ## Minimal GitHub Actions snippet
 
@@ -84,9 +80,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm test
-      - name: Deterministic OODA probe
+      - name: Deterministic OODA E2E
         run: |
-          node dist/index.js ooda --once --events tests/fixtures/opencode/events.small.jsonl --log history/ooda_snapshot_ci.jsonl
+          # Option A: run a small fixture-backed command (recommended)
+          ./tests/fixtures/ooda/emit_snapshot_fixture.sh tests/fixtures/opencode/events.small.jsonl > history/ooda_snapshot_ci.jsonl
+
+          # Option B: invoke the command handler in-process with injected fixtures
+          # (use your project's existing npm script/test entrypoint)
+          npm run test:e2e:ooda
 ```
 
 Notes:

@@ -4,7 +4,7 @@
 
 Make the **Cron-style OODA Scheduler** the canonical way to run `waif ooda` in an automated, repeatable way.
 
-The scheduler loads a single YAML config file (default: `.waif/ooda-scheduler.yaml`), validates it, then runs one or more OODA jobs on a cron schedule. Each job typically runs `waif ooda --once` against a chosen OpenCode events source and writes JSONL snapshot lines for audit/debugging.
+The scheduler loads a single YAML config file (default: `.waif/ooda-scheduler.yaml`), validates it, then runs one or more OODA jobs on a cron schedule. Each job is a configured shell command that the scheduler runs on the job's schedule. Commands can be any executable available to the runtime (for example: scripts, health checks, or a waif probe). The scheduler is a long-running process; it invokes the job.command at each scheduled time, sanitizes the command output using src/lib/redact.ts, and appends a JSONL snapshot line to the configured history/log path.
 
 This PRD describes operator-visible behavior and the config surface. Implementation lives in:
 
@@ -17,8 +17,8 @@ Canonical commands:
 
 - **Run a scheduler loop** (uses config):
   - `waif ooda scheduler --config .waif/ooda-scheduler.yaml`
-- **Run a single scheduled job once** (for CI and debugging):
-  - `waif ooda run --config .waif/ooda-scheduler.yaml --job <jobId> --once`
+- **Run the scheduler loop** (uses config):
+  - `waif ooda scheduler --config .waif/ooda-scheduler.yaml`
 
 Operationally, the scheduler should be run as a long-lived process (systemd/user service, tmux, or CI step). Jobs always execute in a bounded manner (one probe cycle) and exit with a non-zero status on validation errors.
 
@@ -39,7 +39,7 @@ High-level fields (summary only):
   - `id` (string): stable id, used for selection (`--job`).
   - `name` (string): human label.
   - `cron` (string): cron schedule expression.
-  - `events` (string): path to the OpenCode JSONL events source (used by `--events`).
+  - `command` (string): shell command to execute for this job at runtime.
   - `snapshot` (object): snapshot writer settings.
     - `path` (string): JSONL output path (recommend under `history/`).
     - `mode` (`append`|`rotate`): write strategy.
@@ -93,6 +93,6 @@ Operator rules:
 - Legacy removal note: existing tmux-based or ad-hoc probe scripts should be removed or deprecated once the scheduler config is adopted.
 - Create `.waif/ooda-scheduler.yaml` from an operator-approved template.
 - Validate config locally:
-  - `waif ooda run --config .waif/ooda-scheduler.yaml --job <jobId> --once`
+  - `waif ooda scheduler --config .waif/ooda-scheduler.yaml` (start it and observe one run)
 - Enable the long-running scheduler in your chosen process supervisor.
 - Confirm snapshots are being written and pruned per retention.

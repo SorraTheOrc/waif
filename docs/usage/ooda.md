@@ -1,6 +1,6 @@
 # OODA Scheduler (Quickstart)
 
-The OODA scheduler runs `waif ooda` probes on a cron schedule using a validated YAML config.
+The OODA scheduler runs configured jobs on a cron schedule using a validated YAML config. Each job is an arbitrary shell command (`job.command`) executed by the long-running scheduler process at runtime.
 
 Schema and loader:
 
@@ -23,32 +23,26 @@ jobs:
   - id: probe-map
     name: Map status probe
     cron: "*/1 * * * *"
-    events: .opencode/logs/events.jsonl
+    command: ./scripts/health_check.sh
     snapshot:
       path: history/ooda_snapshot.jsonl
       mode: append
-    capture:
-      includeRawEvents: false
 ```
 
-2) Run a single job one time (debug/CI):
-
-```bash
-waif ooda run --config .waif/ooda-scheduler.yaml --job probe-map --once
-```
-
-3) Start the scheduler loop:
+2) Start the scheduler loop (long-running process):
 
 ```bash
 waif ooda scheduler --config .waif/ooda-scheduler.yaml
 ```
 
-## Running a single probe (no scheduler)
+The scheduler invokes each `job.command` at the scheduled times.
 
-For ad-hoc use you can still run the underlying probe:
+## Running a job command directly (no scheduler)
+
+For ad-hoc debugging you can run the same command you configured in `job.command`:
 
 ```bash
-waif ooda --once --events .opencode/logs/events.jsonl --log history/ooda_snapshot.jsonl
+./scripts/health_check.sh
 ```
 
 ## Snapshot JSONL (one line)
