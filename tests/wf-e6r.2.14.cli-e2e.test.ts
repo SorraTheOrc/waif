@@ -1,6 +1,13 @@
 import { test, expect, vi } from 'vitest';
 import { tmpdir } from 'os';
 import { join } from 'path';
+// Ensure we mock writeSnapshots before the module under test is imported so
+// dynamic imports inside the module observe the mocked function.
+vi.mock('../src/commands/ooda.js', async () => {
+  const mod = await vi.importActual('../src/commands/ooda.js');
+  return { ...mod, writeSnapshots: vi.fn() };
+});
+
 import * as ooda from '../src/commands/ooda.js';
 
 test('cli e2e: programmatic run writes snapshots (mocked)', async () => {
