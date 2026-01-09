@@ -1,0 +1,5 @@
+jobs:
+  - id: missing-command
+    name: "Missing command"
+    schedule: "*/5 * * * *"
+    command: ""

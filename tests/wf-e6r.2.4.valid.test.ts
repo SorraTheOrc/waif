@@ -7,6 +7,8 @@ describe('wf-e6r.2.4 - Valid config loads', () => {
     expect(cfg).toBeDefined();
     expect(cfg.jobs).toBeInstanceOf(Array);
     expect(cfg.jobs.length).toBeGreaterThan(0);
-    expect(cfg.jobs[0].id).toBe('daily-health');
+     expect(cfg.jobs[0].id).toBe('daily-health');
+     expect(cfg.jobs[0].command).toBeDefined();
+
   });
 });

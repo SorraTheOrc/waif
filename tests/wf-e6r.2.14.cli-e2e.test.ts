@@ -11,11 +11,12 @@ describe('wf-e6r.2.14 - CLI integration', () => {
   it('exits 0 with valid config and non-zero with invalid config', async () => {
     // Mock OpenCode event reader to avoid filesystem/long-running behavior
     const readSpy = vi.spyOn(__test__, 'readOpencodeEvents').mockResolvedValue([]);
+    const runSpy = vi.spyOn(__test__, 'runJobCommand').mockResolvedValue({ code: 0, stdout: 'ok' });
 
     const runCli = async (cfgPath: string) => {
       const cmd = createOodaCommand();
-      // Avoid hitting the real OpenCode log by using sample data
-      const args = ['--once', '--sample', '--events', 'tests/fixtures/opencode.events.empty.jsonl', '--no-log'];
+      // Avoid scheduler loop by invoking run-job subcommand against the fixture config
+      const args = ['run-job', '--config', cfgPath, '--job', 'daily-health', '--json'];
 
       // Simulate config validation (ensures parity with loader behavior)
       try {
@@ -35,5 +36,6 @@ describe('wf-e6r.2.14 - CLI integration', () => {
     expect(bad).not.toBe(0);
 
     readSpy.mockRestore();
+    runSpy.mockRestore();
   });
 });
