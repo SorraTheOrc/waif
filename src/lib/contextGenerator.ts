@@ -50,38 +50,42 @@ async function walkDir(dir: string, root: string, out: string[]) {
 }
 
 export async function scanDocs(root = process.cwd(), patterns: string[] = ['docs']): Promise<ContextEntry[]> {
-  const gitignore = await loadGitignore(root)
-  const paths: string[] = []
+  // Exclude generated output files (like docs/dev/CONTEXT_PACK.md) from the scan
+  const generatedPaths = new Set(['docs/dev/CONTEXT_PACK.md', 'docs/dev/TMP_TEST.md']);
+  const gitignore = await loadGitignore(root);
+  const paths: string[] = [];
 
   for (const p of patterns) {
-    const dir = resolve(root, p)
+    const dir = resolve(root, p);
     try {
-      await walkDir(dir, root, paths)
+      await walkDir(dir, root, paths);
     } catch (e) {
       // ignore missing dirs
     }
   }
 
-  const entries: ContextEntry[] = []
+  const entries: ContextEntry[] = [];
   for (const rel of paths) {
-    if (isIgnored(rel, gitignore)) continue
-    const abs = resolve(root, rel)
+    // Skip generated files to keep output idempotent
+    if (generatedPaths.has(rel)) continue;
+    if (isIgnored(rel, gitignore)) continue;
+    const abs = resolve(root, rel);
     try {
-      const content = await fs.readFile(abs, 'utf8')
-      const lines = content.split('\n').map(l => l.replace(/\r$/, ''))
-      const nonBlank: string[] = []
+      const content = await fs.readFile(abs, 'utf8');
+      const lines = content.split('\n').map((l) => l.replace(/\r$/, ''));
+      const nonBlank: string[] = [];
       for (const line of lines) {
-        if (line.trim().length === 0) continue
-        nonBlank.push(line)
-        if (nonBlank.length >= 10) break
+        if (line.trim().length === 0) continue;
+        nonBlank.push(line);
+        if (nonBlank.length >= 10) break;
       }
-      const excerpt = nonBlank.join('\n')
-      entries.push({ path: rel, summary: excerpt })
+      const excerpt = nonBlank.join('\n');
+      entries.push({ path: rel, summary: excerpt });
     } catch (e) {
       // skip
     }
   }
 
-  entries.sort((a, b) => a.path.localeCompare(b.path))
-  return entries
+  entries.sort((a, b) => a.path.localeCompare(b.path));
+  return entries;
 }
