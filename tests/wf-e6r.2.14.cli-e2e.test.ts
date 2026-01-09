@@ -1,24 +1,24 @@
-import { test, expect, vi } from 'vitest';
+import { test, expect } from 'vitest';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import * as fs from 'fs';
+import { readFileSync, unlinkSync } from 'fs';
 import * as ooda from '../src/commands/ooda.js';
 
-test('cli e2e: programmatic run writes snapshots (mocked)', async () => {
+test('cli e2e: programmatic run writes snapshots to file', async () => {
   const tmpPath = join(tmpdir(), `ooda-e2e-${Date.now()}.jsonl`);
-
-  // Spy on fs.appendFileSync which writeSnapshots uses under the hood
-  const spy = vi.spyOn(fs, 'appendFileSync').mockImplementation(() => {});
 
   try {
     const cmd = ooda.createOodaCommand();
     // Use sample data and run once to avoid reading .opencode logs or long loops
     await cmd.parseAsync(['--sample', '--once', '--log', tmpPath], { from: 'user' });
 
-    // Ensure appendFileSync was invoked with the tmpPath
-    const called = spy.mock.calls.some((c: any[]) => c[0] === tmpPath);
-    expect(called).toBe(true);
+    const content = readFileSync(tmpPath, 'utf8').trim();
+    expect(content.length).toBeGreaterThan(0);
+    const lines = content.split('\n');
+    const first = JSON.parse(lines[0]);
+    expect(first).toHaveProperty('agent');
+    expect(['map', 'forge']).toContain(first.agent);
   } finally {
-    spy.mockRestore();
+    try { unlinkSync(tmpPath); } catch (e) {}
   }
 }, 20000);
