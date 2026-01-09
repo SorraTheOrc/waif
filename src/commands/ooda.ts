@@ -426,7 +426,10 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
   });
 }
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention };
+import { runJobCommand as __runJobCommand } from '../lib/jobRunner.js';
+import { writeJobSnapshot as __writeJobSnapshot, enforceRetention as __enforceRetention } from '../lib/snapshotWriter.js';
+
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand: __runJobCommand, writeJobSnapshot: __writeJobSnapshot, enforceRetention: __enforceRetention };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
@@ -450,101 +453,15 @@ export function writeSnapshots(logPath: string, rows: PaneRow[]) {
 }
 
 type SnapshotStatus = 'success' | 'failure' | 'timeout';
-const DEFAULT_TIMEOUT_MS = 60_000;
 
-export async function runJobCommand(job: Job): Promise<{ code: number | null; stdout?: string; stderr?: string; timedOut?: boolean }> {
-  const captureStdout = (job.capture ?? []).includes('stdout');
-  const captureStderr = (job.capture ?? []).includes('stderr');
-  const stdoutChunks: Buffer[] = [];
-  const stderrChunks: Buffer[] = [];
-  let timedOut = false;
-
-  const child = spawn(job.command, {
-    shell: true,
-    cwd: job.cwd || process.cwd(),
-    env: { ...process.env, ...(job.env ?? {}) },
-    stdio: ["ignore", captureStdout ? "pipe" : "ignore", captureStderr ? "pipe" : "ignore"],
-  });
-
-  if (captureStdout && child.stdout) child.stdout.on('data', (c: Buffer) => stdoutChunks.push(c));
-  if (captureStderr && child.stderr) child.stderr.on('data', (c: Buffer) => stderrChunks.push(c));
-
-  const timeoutMs = Math.max(1, Math.floor((job.timeout_seconds ?? DEFAULT_TIMEOUT_MS / 1000) * 1000));
-
-  return await new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      timedOut = true;
-      try {
-        child.kill('SIGKILL');
-      } catch {
-        // ignore
-      }
-    }, timeoutMs);
-
-    child.on('error', () => {
-      clearTimeout(timer);
-      resolve({ code: null, stdout: captureStdout ? Buffer.concat(stdoutChunks).toString('utf8') : undefined, stderr: captureStderr ? Buffer.concat(stderrChunks).toString('utf8') : undefined, timedOut });
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      resolve({
-        code: typeof code === 'number' ? code : null,
-        stdout: captureStdout ? Buffer.concat(stdoutChunks).toString('utf8') : undefined,
-        stderr: captureStderr ? Buffer.concat(stderrChunks).toString('utf8') : undefined,
-        timedOut,
-      });
-    });
-  });
-}
-
-export function writeJobSnapshot(
-  filePath: string,
-  job: Job,
-  status: SnapshotStatus,
-  code: number | null,
-  stdout?: string,
-  stderr?: string,
-  redact = false,
-) {
-  if (!filePath) return;
-  try {
-    const dir = path.dirname(filePath);
-    if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
-    const time = new Date().toISOString();
-    const sanitize = (val?: string) => (val && redact ? redactSecrets(val) : val);
-    const snapshot: Record<string, unknown> = {
-      time,
-      job_id: job.id,
-      name: job.name,
-      command: job.command,
-      status,
-      exit_code: code,
-    };
-    if (typeof stdout === 'string') snapshot.stdout = sanitize(stdout);
-    if (typeof stderr === 'string') snapshot.stderr = sanitize(stderr);
-    appendFileSync(filePath, JSON.stringify(snapshot) + '\n', 'utf8');
-  } catch (e) {
-    // best-effort
-  }
-}
-
-export function enforceRetention(filePath: string, keepLast?: number) {
-  if (!filePath || !keepLast || keepLast <= 0) return;
-  try {
-    const content = readFileSync(filePath, 'utf8');
-    const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    const trimmed = lines.slice(Math.max(0, lines.length - keepLast));
-    const dir = path.dirname(filePath);
-    if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
-    require('node:fs').writeFileSync(filePath, trimmed.map((l) => `${l}\n`).join(''), 'utf8');
-  } catch (e) {
-    // best-effort
-  }
-}
+// Delegate runJobCommand and snapshot helpers to new modules
+export const runJobCommand = __runJobCommand;
+export const writeJobSnapshot = __writeJobSnapshot;
+export const enforceRetention = __enforceRetention;
 
 export function createOodaCommand() {
   const cmd = new Command('ooda');
+  cmd.option('--json', 'Output JSON');
   cmd.description('OODA scheduler and job runner (cron-based)');
 
   cmd
