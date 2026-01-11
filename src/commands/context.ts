@@ -11,8 +11,14 @@ function ensureParent(outPath: string) {
 }
 
 async function buildGenerated(): Promise<string> {
-  const entries = await scanDocs(process.cwd(), ['docs'])
+  const generatedPath = 'docs/dev/CONTEXT_PACK.md'
+  const entries = (await scanDocs(process.cwd(), ['docs']))
+    // stabilize ordering for deterministic output
+    .filter(e => !e.path.split('/').pop()?.startsWith('TMP_'))
+    .filter(e => e.path !== generatedPath)
+    .sort((a, b) => a.path.localeCompare(b.path))
   const lines: string[] = []
+
   lines.push('# CONTEXT PACK')
   lines.push('')
   lines.push('## Generated entries')
