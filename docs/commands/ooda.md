@@ -212,6 +212,53 @@ Notes
 - The implementation treats `command` as a single shell string. If you need complex argument handling, prefer wrapper scripts checked into the repo and reference them from `command`.
 - Changes to job definitions should be code-reviewed and treated like any other config change.
 
+Running the hello-5s example
+
+This repository includes a small example fixture that prints the current time every 5 seconds: `tests/fixtures/ooda.hello-5s.yaml`.
+
+Scheduler mode
+
+Run the scheduler loop with the example config at 5 second intervals and persist snapshots to a file:
+
+```bash
+waif ooda scheduler --config tests/fixtures/ooda.hello-5s.yaml --interval 5 --log history/ooda_snapshot_hello.jsonl
+```
+
+What to expect:
+
+- Every ~5 seconds the scheduler will execute the `hello-5s` job and append a JSONL snapshot line to `history/ooda_snapshot_hello.jsonl` (or the path you pass with `--log`).
+- Each snapshot contains fields such as `time`, `job_id`, `name`, `command`, `stdout`, `stderr`, `exit_code`, and `status`.
+- Stop the scheduler with Ctrl-C.
+
+Run-job mode (single-run / debug)
+
+You can execute the job once with `run-job` (useful for debugging or iterating on the command):
+
+```bash
+waif ooda run-job --config tests/fixtures/ooda.hello-5s.yaml --job hello-5s --log history/ooda_snapshot_hello.jsonl
+```
+
+If you want to mimic the scheduler cadence using `run-job`, run it in a simple shell loop:
+
+```bash
+while true; do
+  waif ooda run-job --config tests/fixtures/ooda.hello-5s.yaml --job hello-5s --log history/ooda_snapshot_hello.jsonl
+  sleep 5
+done
+```
+
+Viewing snapshots
+
+Tail the snapshot file to observe new runs as they are appended:
+
+```bash
+tail -f history/ooda_snapshot_hello.jsonl
+```
+
+Portability note
+
+- The fixture uses the `date` command with a format string (`date '+Hello, the time is now %H:%M:%S'`). On GNU/Linux this form works; on some BSD/macOS versions of `date` the format may differ. If you encounter portability issues, replace the `command` with a small Node/POSIX-compatible script checked into the repo and reference that script instead.
+
 Related bd issues:
 
 - `wf-e6r.2.1.1` (implementation work for updated CLI + `run-job`)
