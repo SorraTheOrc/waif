@@ -39,9 +39,10 @@ export async function runJobCommand(job: Job, options?: { timeoutMs?: number; cw
     const onFinish = (code: number | null, signal: string | null) => {
       if (finished) return;
       finished = true;
+      clearTimeout(timer);
       const durationMs = Date.now() - start;
       const sanitized = redactSecrets((capture ? stdout : '') + (stderr ? `\n${stderr}` : ''));
-      resolve({ exitCode: code, signal, stdout: capture ? stdout : '', stderr, sanitized_output: sanitized, durationMs });
+      wrappedResolve({ exitCode: code, signal, stdout: capture ? stdout : '', stderr, sanitized_output: sanitized, durationMs });
     };
 
     child.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
