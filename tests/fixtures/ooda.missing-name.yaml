@@ -1,0 +1,5 @@
+jobs:
+  - id: missing-name
+    name: ""
+    command: "echo hello"
+    schedule: "*/5 * * * *"

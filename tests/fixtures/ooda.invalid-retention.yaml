@@ -1,0 +1,7 @@
+jobs:
+  - id: invalid-retention
+    name: "Invalid retention"
+    command: "echo hello"
+    schedule: "*/5 * * * *"
+    retention:
+      keep_last: 0

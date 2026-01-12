@@ -1,0 +1,5 @@
+jobs:
+  - id: ""
+    name: "Invalid ID"
+    command: "echo hello"
+    schedule: "*/5 * * * *"
