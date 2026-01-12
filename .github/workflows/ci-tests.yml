@@ -26,6 +26,11 @@ jobs:
           node-version: ${{ matrix.node-version }}
           cache: 'npm'
 
+      - name: Prepare environment
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y direnv
+
       - name: Install dependencies
         run: npm ci
 
