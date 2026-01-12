@@ -70,6 +70,38 @@ Machine-readable output (when supported by your top-level invocation):
 waif --json ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
 ```
 
+#### Quick examples for `run-job`
+
+One-shot run (human mode). Captured output is printed to stdout/stderr when *not* using JSON output:
+
+```bash
+waif ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+```
+
+What to expect:
+
+- If the job config enables capture, the job's captured `stdout` is printed to your terminal (and `stderr` if captured).
+- A snapshot line is appended to `history/ooda_snapshot_<ts>.jsonl` unless `--log false` is provided.
+
+JSON output (automation). Use the top-level `--json` flag:
+
+```bash
+waif --json ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+```
+
+Example output:
+
+```json
+{"jobId":"daily-health","status":"success","code":0,"stdout":"ok\n","stderr":""}
+```
+
+Fields:
+
+- `jobId`: job `id` from the scheduler config
+- `status`: `success` | `failure` | `timeout`
+- `code`: process exit code (or `null` if unavailable)
+- `stdout`/`stderr`: captured output (only present when capture is enabled for that stream)
+
 ## Manual testing
 
 These steps are intended for contributors/reviewers running locally.
@@ -95,10 +127,10 @@ These steps are intended for contributors/reviewers running locally.
 
 ### 2) Run the deterministic CLI E2E test
 
-Run the deterministic integration test that exercises the command handler directly:
+Run the deterministic E2E test for `run-job`:
 
 ```bash
-npm test -- tests/wf-e6r.2.14.cli-e2e.test.ts
+npx vitest tests/run-job.e2e.test.ts
 ```
 
 ### 3) Run unit tests for `runJobCommand`
@@ -106,14 +138,57 @@ npm test -- tests/wf-e6r.2.14.cli-e2e.test.ts
 The unit tests live in `tests/ooda-run-job.test.ts`. Run only those tests:
 
 ```bash
-npm test -- tests/ooda-run-job.test.ts
+npx vitest tests/ooda-run-job.test.ts
 ```
 
 Or run just the `runJobCommand` describe block:
 
 ```bash
-npm test -- tests/ooda-run-job.test.ts -t runJobCommand
+npx vitest tests/ooda-run-job.test.ts -t runJobCommand
 ```
+
+## Snapshot format (JSONL)
+
+Snapshots are appended as **one JSON object per line**. The current implementation (see `writeJobSnapshot` in `src/commands/ooda.ts`) writes these fields:
+
+- `time`: ISO timestamp (UTC), e.g. `"2026-01-12T12:34:56.789Z"`
+- `job_id`: job id from config
+- `name`: job name from config (may be omitted)
+- `command`: job command string
+- `status`: `success` | `failure` | `timeout`
+- `exit_code`: numeric exit code, or `null`
+- `stdout`: captured stdout (only if capture enabled for stdout)
+- `stderr`: captured stderr (only if capture enabled for stderr)
+
+Example record (single line):
+
+```json
+{"time":"2026-01-12T12:34:56.789Z","job_id":"daily-health","name":"Daily health check","command":"echo ok","status":"success","exit_code":0,"stdout":"ok\n"}
+```
+
+Notes:
+
+- Output redaction (when enabled via `job.redact`) is applied before writing `stdout`/`stderr`.
+- The following fields are **not currently written** by `writeJobSnapshot` (despite being useful): `timestamp` (ms since epoch), `jobName`/`jobId` (camelCase), `signal`, `durationMs`, `sanitized` (boolean), `retentionKeepLast`, `redactionHints`.
+
+## Retention / `keep_last`
+
+Retention is enforced after each write via `enforceRetention(snapshotPath, job.retention?.keep_last)`.
+
+Example config fragment:
+
+```yaml
+jobs:
+  - id: daily-health
+    command: "echo ok"
+    retention:
+      keep_last: 10
+```
+
+Behavior:
+
+- When `keep_last` is set (and > 0), the snapshot log file is trimmed down to the **last N non-empty lines**.
+- Retention is best-effort; failures to read/write the snapshot file do not fail the job run.
 
 ## Security notes
 
@@ -131,14 +206,47 @@ Redaction is best-effort and pattern-based; it reduces accidental leakage but is
 `job.command` is executed via a shell (`spawn(..., { shell: true })`). This is powerful and risky:
 
 - A malicious or unreviewed config can execute arbitrary commands.
-- Shell injection is possible if command strings are constructed unsafely.
+- Shell injection is possible if command strings are constructed from untrusted input.
 
-Actionable guidance:
+Pragmatic mitigations:
 
 - Treat scheduler configs as code: review changes and avoid running untrusted configs.
-- Prefer running in a sandboxed environment (container/VM) when iterating on new or risky commands.
-- Use a dedicated, least-privileged working directory and environment for jobs.
-- Avoid passing secrets via command strings; prefer environment variables, and still assume output may leak unless redaction is enabled.
+- Prefer a command allowlist (or wrapper scripts checked into the repo) rather than interpolated strings.
+- Keep output capture opt-in (and consider disabling capture for risky jobs).
+- Limit capture size and retention to reduce accidental data persistence.
+- Run jobs in a sandbox (container/VM) and under a dedicated, least-privileged account.
+- Consider adding a `--dry-run` / sandbox mode when iterating on new commands.
+- Redaction is applied to captured output when `job.redact: true`.
+
+## Examples
+
+Non-JSON run (prints captured output to your terminal):
+
+```bash
+waif ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+```
+
+JSON run (does not print the raw output; output is in the JSON object):
+
+```bash
+waif --json ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+```
+
+Redaction example (what a snapshot line can look like when `redact: true`):
+
+```json
+{"time":"2026-01-12T12:34:56.789Z","job_id":"fetch-data","status":"success","exit_code":0,"stdout":"token=[REDACTED]\n","stderr":""}
+```
+
+## How to test locally
+
+Run the deterministic E2E test for `run-job`:
+
+```bash
+npx vitest tests/run-job.e2e.test.ts
+```
+
+Tests should pass before requesting review.
 
 ## Development notes
 
