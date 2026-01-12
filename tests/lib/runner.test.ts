@@ -53,6 +53,9 @@ test('runJobCommand: sanitize and truncate', async () => {
   const { spawn } = await import('child_process');
   (spawn as any).mockImplementation(() => makeFakeChildProcess({ stdoutData: long, stderrData: '' }));
   const res = await runJobCommand({ id: 'j4', name: 't', command: 'echo big' });
-  expect(res.sanitized_output).toContain('[REDACTED]');
+  // redact.ts currently prefers HEX redaction for long repeated 'a' sequences;
+  // assert we have some redaction token and truncation
+  expect(res.sanitized_output).toMatch(/\[REDACTED(_(BASE64|HEX))?/);
+  expect(res.sanitized_output).toMatch(/\[TRUNCATED/);
   expect(res.sanitized_output.length).toBeLessThan(1200);
 });
