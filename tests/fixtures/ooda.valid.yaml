@@ -1,0 +1,10 @@
+jobs:
+  - id: daily-health
+    name: "Daily health check"
+    command: "echo ok"
+    schedule: "*/5 * * * *"
+    capture:
+      - stdout
+    timeout_seconds: 5
+    retention:
+      keep_last: 3

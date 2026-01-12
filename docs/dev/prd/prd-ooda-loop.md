@@ -53,8 +53,9 @@
   * Terminal-friendly: handle narrow terminals and wrap or truncate titles gracefully.
 
 * Integrations
-  * OpenCode plugin writing to `.opencode/logs/events.jsonl` (primary integration).
-  * Local filesystem for snapshots (`history/`).
+   * OpenCode plugin writing to `.opencode/logs/events.jsonl` (primary integration).
+   * Local filesystem for snapshots (`history/`). See [`docs/commands/ooda.md`](../../commands/ooda.md) for CLI usage and examples.
+
 
 * Security & privacy
    * Do not persist full message bodies or raw terminal buffers. Plugin and reader MUST limit persisted fields to the minimal set: event `type`, `time`, and selected `properties` (e.g., `agent`, `title`, `seq`). Full message bodies must never be written to history/ snapshots.

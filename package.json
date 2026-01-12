@@ -14,11 +14,15 @@
   },
   "dependencies": {
     "@opencode-ai/sdk": "^1.0.182",
+    "ajv": "^8.17.1",
     "commander": "^12.1.0",
+    "cron-parser": "^5.4.0",
     "fuse.js": "^7.1.0",
+    "js-yaml": "^4.1.1",
     "yaml": "^2.8.2"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.9.1",
     "execa": "^9.4.0",
     "remark-cli": "^12.0.1",

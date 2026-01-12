@@ -1,0 +1,12 @@
+# Run with: waif ooda scheduler --config tests/fixtures/ooda.hello-5s.yaml --interval 5 (or invoke run-job repeatedly)
+# NOTE: capture must be an array and schedule is required for the scheduler. Use a cron expression with seconds to match 5s cadence.
+jobs:
+  - id: hello-5s
+    name: "Hello every 5s"
+    command: "date '+Hello, the time is now %H:%M:%S'"
+    schedule: "*/5 * * * * *"
+    capture: ['stdout']
+    redact: false
+    timeout_seconds: 10
+    retention:
+      keep_last: 20
