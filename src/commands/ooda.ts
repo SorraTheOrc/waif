@@ -554,6 +554,22 @@ export function createOodaCommand() {
   const cmd = new Command('ooda');
   cmd.description('OODA scheduler and job runner (cron-based)');
 
+  // helper to print captured output to console in non-json runs
+  function printJobResult(job: Job, result: { stdout?: string; stderr?: string; timedOut?: boolean }, jsonOutput: boolean) {
+    if (jsonOutput) return;
+    try {
+      if ((job.capture ?? []).includes('stdout') && result.stdout) {
+        // preserve raw newlines
+        process.stdout.write(String(result.stdout));
+      }
+      if ((job.capture ?? []).includes('stderr') && result.stderr) {
+        process.stderr.write(String(result.stderr));
+      }
+    } catch (e) {
+      // best-effort: do not throw while printing
+    }
+  }
+
   cmd
     .command('scheduler')
     .description('Run the OODA scheduler loop')
@@ -565,6 +581,10 @@ export function createOodaCommand() {
       const configPath = path.resolve(options.config ?? '.waif/ooda-scheduler.yaml');
       const interval = Number(options.interval ?? 30) || 30;
       const cfg = await loadConfig(configPath);
+
+      // expose helper for tests: print captured output to console in non-json runs
+      (cmd as any).__internals = (cmd as any).__internals || {};
+      (cmd as any).__internals.printJobResult = printJobResult;
 
       const parseCron = (expr: string) => {
         const anyParser = cronParser as any;
@@ -586,6 +606,8 @@ export function createOodaCommand() {
       const runJob = async (job: Job) => {
         const result = await runJobCommand(job);
         const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
+        // print captured output to console when not in json mode
+        printJobResult(job, result, jsonOutput);
         if (snapshotPath) {
           writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
           enforceRetention(snapshotPath, job.retention?.keep_last);
@@ -612,6 +634,8 @@ export function createOodaCommand() {
       }
     });
 
+
+
   cmd
     .command('run-job')
     .description('Run a configured job once by id (debug)')
@@ -626,6 +650,8 @@ export function createOodaCommand() {
       if (!job) throw new Error(`job not found: ${options.job}`);
       const result = await runJobCommand(job);
       const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
+      // print captured output to console when not in json mode
+      printJobResult(job, result, jsonOutput);
       const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
       if (snapshotPath) {
         writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
