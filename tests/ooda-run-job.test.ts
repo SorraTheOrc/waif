@@ -1,9 +1,25 @@
-import { describe, it, expect } from 'vitest';
-import { runJobCommand, enforceRetention, writeJobSnapshot } from '../src/commands/ooda.js';
-import { readFileSync, unlinkSync } from 'node:fs';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createOodaCommand, runJobCommand, enforceRetention, writeJobSnapshot } from '../src/commands/ooda.js';
+import { readFileSync, unlinkSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 const tmp = (name: string) => path.join('/tmp', `waif-ooda-${name}-${Date.now()}.jsonl`);
+const fixtureConfig = path.join(process.cwd(), 'tests', 'fixtures', 'ooda.valid.yaml');
+
+let tmpDir: string;
+
+beforeEach(() => {
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'waif-ooda-test-'));
+});
+
+afterEach(() => {
+  try {
+    rmSync(tmpDir, { recursive: true, force: true });
+  } catch {
+    // ignore
+  }
+});
 
 describe('runJobCommand', () => {
   it('captures and redacts stdout when configured', async () => {
@@ -19,6 +35,23 @@ describe('runJobCommand', () => {
     expect(result.stdout).toBeDefined();
     expect(result.stdout).not.toMatch(/sk-[A-Za-z0-9]{16,}/);
     expect(result.stdout).toContain('sk-[REDACTED]');
+  });
+
+  it('returns exit code 2 on timeout via CLI wrapper', async () => {
+    const cmd = createOodaCommand();
+    const cfg = path.join(tmpDir, 'ooda.yaml');
+    writeFileSync(cfg, readFileSync(fixtureConfig, 'utf8'), 'utf8');
+
+    const runnerSpy = vi
+      .spyOn(await import('../src/lib/runner.js'), 'runJobCommand')
+      .mockResolvedValue({ exitCode: null, signal: 'SIGKILL', stdout: '', stderr: '' } as any);
+
+    await cmd.parseAsync(['run-job', '--config', cfg, '--job', 'daily-health'], { from: 'user' });
+    const exitCode = process.exitCode ?? 0;
+
+    expect(exitCode).toBe(2);
+
+    runnerSpy.mockRestore();
   });
 
   it('honors timeout_seconds and reports timedOut', async () => {

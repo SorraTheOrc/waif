@@ -11,7 +11,7 @@ describe('wf-e6r.2.14 - CLI integration', () => {
   it('exits 0 with valid config and non-zero with invalid config', async () => {
     // Mock OpenCode event reader to avoid filesystem/long-running behavior
     const readSpy = vi.spyOn(__test__, 'readOpencodeEvents').mockResolvedValue([]);
-    const runSpy = vi.spyOn(__test__, 'runJobCommand').mockResolvedValue({ code: 0, stdout: 'ok' });
+    const runSpy = vi.spyOn(__test__, 'runJobCommand').mockResolvedValue({ code: 0, stdout: 'ok' } as any);
 
     const runCli = async (cfgPath: string) => {
       const cmd = createOodaCommand();

@@ -6,6 +6,7 @@ import path from 'node:path';
 import cronParser from 'cron-parser';
 import { emitJson, logStdout } from '../lib/io.js';
 import { loadConfig, type Job } from '../lib/config.js';
+import { runJobCommand as runnerRunJobCommand } from '../lib/runner.js';
 import { redactSecrets } from '../lib/redact.js';
 
 
@@ -427,6 +428,26 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
   });
 }
 
+type RunJobResult = { code: number | null; stdout?: string; stderr?: string; timedOut?: boolean };
+
+const runJobCommandImpl = async (job: Job): Promise<RunJobResult> => {
+  try {
+    const res = await runnerRunJobCommand(job as any);
+    if (res && typeof res === 'object' && 'exitCode' in res) {
+      return {
+        code: (res as any).exitCode ?? null,
+        stdout: (res as any).stdout,
+        stderr: (res as any).stderr,
+        timedOut: (res as any).signal === 'SIGKILL',
+      } satisfies RunJobResult;
+    }
+  } catch {
+    // fall back to legacy implementation
+  }
+  const legacy = await runJobCommand(job);
+  return legacy as RunJobResult;
+};
+
 export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
@@ -644,17 +665,43 @@ export function createOodaCommand() {
       const configPath = path.resolve(options.config ?? '.waif/ooda-scheduler.yaml');
       const cfg = await loadConfig(configPath);
       const job = cfg.jobs.find((j) => j.id === options.job);
-      if (!job) throw new Error(`job not found: ${options.job}`);
-      const result = await runJobCommand(job);
-      const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
+      if (!job) {
+        console.error(`job not found: ${options.job}`);
+        process.exitCode = 1;
+        return;
+      }
+      const result = await runJobCommandImpl(job);
+      const status: SnapshotStatus = (result as any).timedOut ? 'timeout' : (result as any).code === 0 ? 'success' : 'failure';
       // print captured output to console when not in json mode
-      printJobResult(job, result, jsonOutput);
-      const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
+      printJobResult(job, result as any, jsonOutput);
+      if (!jsonOutput && (result as any).stderr && !(job.capture ?? []).includes('stderr')) {
+        process.stderr.write(String((result as any).stderr));
+      }
+
+      const logOpt = options.log;
+      const snapshotPath =
+        logOpt === false || logOpt === 'false'
+          ? null
+          : typeof logOpt === 'string'
+            ? logOpt
+            : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
+
       if (snapshotPath) {
-        writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
+        writeJobSnapshot(snapshotPath, job, status, (result as any).code, (result as any).stdout, (result as any).stderr, Boolean(job.redact));
         enforceRetention(snapshotPath, job.retention?.keep_last);
       }
-      if (jsonOutput) emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
+      if (jsonOutput) {
+        emitJson({ jobId: job.id, status, code: (result as any).code, stdout: (result as any).stdout, stderr: (result as any).stderr });
+      }
+      if ((result as any).timedOut) {
+        process.exitCode = 2;
+      } else if (typeof (result as any).code === 'number') {
+        process.exitCode = (result as any).code;
+      } else if (status === 'failure') {
+        process.exitCode = 1;
+      } else {
+        process.exitCode = 0;
+      }
     });
 
   return cmd;

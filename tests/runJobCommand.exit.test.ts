@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { runJobCommand } from '../src/commands/ooda.js';
 
+// Note: runJobCommand here refers to the legacy runner return shape (code/timedOut)
+
 describe('runJobCommand exit codes', () => {
   it('returns the process exit code when not timed out', async () => {
     const job = {
