@@ -8,9 +8,6 @@ on:
       - 'wf-mtc.*'
       - 'wf-mtc.4/*'
       - 'wf-mtc.4/tests-runner-snapshots'
-  pull_request:
-    branches:
-      - main
 
 jobs:
   test:
