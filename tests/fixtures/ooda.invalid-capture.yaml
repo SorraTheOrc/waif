@@ -1,0 +1,8 @@
+jobs:
+  - id: invalid-capture
+    name: "Invalid capture"
+    command: "echo hello"
+    schedule: "*/5 * * * *"
+    capture:
+      - stdout
+      - invalid

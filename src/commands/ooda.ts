@@ -8,6 +8,7 @@ import { emitJson, logStdout } from '../lib/io.js';
 import { loadConfig, type Job } from '../lib/config.js';
 import { redactSecrets } from '../lib/redact.js';
 
+
 interface PaneRow {
   pane: string;
   title: string;
@@ -471,6 +472,12 @@ export async function runJobCommand(job: Job): Promise<{ code: number | null; st
 
   const timeoutMs = Math.max(1, Math.floor((job.timeout_seconds ?? DEFAULT_TIMEOUT_MS / 1000) * 1000));
 
+  const toOutput = (chunks: Buffer[], redact?: boolean) => {
+    if (chunks.length === 0) return undefined;
+    const text = Buffer.concat(chunks).toString('utf8');
+    return redact ? redactSecrets(text) : text;
+  };
+
   return await new Promise((resolve) => {
     const timer = setTimeout(() => {
       timedOut = true;
@@ -483,15 +490,15 @@ export async function runJobCommand(job: Job): Promise<{ code: number | null; st
 
     child.on('error', () => {
       clearTimeout(timer);
-      resolve({ code: null, stdout: captureStdout ? Buffer.concat(stdoutChunks).toString('utf8') : undefined, stderr: captureStderr ? Buffer.concat(stderrChunks).toString('utf8') : undefined, timedOut });
+      resolve({ code: null, stdout: captureStdout ? toOutput(stdoutChunks, job.redact) : undefined, stderr: captureStderr ? toOutput(stderrChunks, job.redact) : undefined, timedOut });
     });
 
     child.on('close', (code) => {
       clearTimeout(timer);
       resolve({
         code: typeof code === 'number' ? code : null,
-        stdout: captureStdout ? Buffer.concat(stdoutChunks).toString('utf8') : undefined,
-        stderr: captureStderr ? Buffer.concat(stderrChunks).toString('utf8') : undefined,
+        stdout: captureStdout ? toOutput(stdoutChunks, job.redact) : undefined,
+        stderr: captureStderr ? toOutput(stderrChunks, job.redact) : undefined,
         timedOut,
       });
     });
@@ -610,6 +617,7 @@ export function createOodaCommand() {
     .description('Run a configured job once by id (debug)')
     .option('--config <path>', 'Path to ooda scheduler config', '.waif/ooda-scheduler.yaml')
     .requiredOption('--job <id>', 'Job id to run')
+    .option('--log <path>', 'Snapshot log path (default history/ooda_snapshot_<ts>.jsonl)')
     .action(async (options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.parent?.getOptionValue('json'));
       const configPath = path.resolve(options.config ?? '.waif/ooda-scheduler.yaml');
@@ -618,6 +626,11 @@ export function createOodaCommand() {
       if (!job) throw new Error(`job not found: ${options.job}`);
       const result = await runJobCommand(job);
       const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
+      const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
+      if (snapshotPath) {
+        writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
+        enforceRetention(snapshotPath, job.retention?.keep_last);
+      }
       if (jsonOutput) emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
     });
 

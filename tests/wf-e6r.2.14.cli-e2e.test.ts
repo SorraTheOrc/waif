@@ -16,18 +16,20 @@ describe('wf-e6r.2.14 - CLI integration', () => {
     const runCli = async (cfgPath: string) => {
       const cmd = createOodaCommand();
       // Avoid scheduler loop by invoking run-job subcommand against the fixture config
-      const args = ['run-job', '--config', cfgPath, '--job', 'daily-health', '--json'];
+      const args = ['run-job', '--config', cfgPath, '--job', 'daily-health'];
 
-      // Simulate config validation (ensures parity with loader behavior)
+      // Simulate config validation (parity with loader behavior)
       try {
         await loadConfig(cfgPath);
       } catch (err: any) {
         return 1;
       }
 
-      await cmd.parseAsync(args, { from: 'user' });
-      return 0;
+      const exit = await cmd.parseAsync(args, { from: 'user' }).then(() => 0).catch(() => 1);
+      return exit;
     };
+
+
 
     const ok = await runCli(validConfig);
     expect(ok).toBe(0);

@@ -42,18 +42,24 @@ export function validateConfig(obj: unknown): { valid: boolean; errors?: Validat
 
   if (obj && typeof obj === 'object' && Array.isArray((obj as Config).jobs)) {
     (obj as Config).jobs.forEach((job, idx) => {
+      const jobId = (job as Job | undefined)?.id;
+
       const schedule = (job as Job | undefined)?.schedule;
       if (typeof schedule !== 'string' || schedule.trim() === '') {
-        const jobId = (job as Job | undefined)?.id;
         const path = jobId ? `jobs[${idx}] (id:${jobId}).schedule` : `jobs[${idx}].schedule`;
         errors.push({ path, message: 'schedule is required' });
       }
 
       const command = (job as Job | undefined)?.command;
       if (typeof command !== 'string' || command.trim() === '') {
-        const jobId = (job as Job | undefined)?.id;
         const path = jobId ? `jobs[${idx}] (id:${jobId}).command` : `jobs[${idx}].command`;
         errors.push({ path, message: 'command is required' });
+      }
+
+      const name = (job as Job | undefined)?.name;
+      if (typeof name !== 'string' || name.trim() === '') {
+        const path = jobId ? `jobs[${idx}] (id:${jobId}).name` : `jobs[${idx}].name`;
+        errors.push({ path, message: 'name is required' });
       }
     });
   }
