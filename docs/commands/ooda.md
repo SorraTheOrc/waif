@@ -11,6 +11,14 @@ Use `run-job` when you want a deterministic “run this one thing now” workflo
 
 ## CLI usage
 
+### Example fixtures
+
+- `tests/fixtures/ooda.hello-5s.yaml` — run the scheduler every 5 seconds:
+
+  ```bash
+  waif ooda scheduler --config tests/fixtures/ooda.hello-5s.yaml --interval 5
+  ```
+
 ### Scheduler
 
 Run the scheduler loop:
