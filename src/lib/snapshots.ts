@@ -13,10 +13,18 @@ export type Snapshot = {
 export function writeJobSnapshot(dir: string, snapshot: Snapshot, options?: { retention?: number }) {
   const retention = options?.retention ?? 10;
   const outDir = dir || 'history';
+  // Ensure directory exists
   try {
-    // Ensure dir exists
     writeFileSync(join(outDir, '.keep'), '');
-  } catch (e) {}
+  } catch (e) {
+    try {
+      // attempt to create the directory by writing a file in it
+      writeFileSync(join(outDir, '.keep'), '', { flag: 'w' });
+    } catch (e2) {
+      // try to create using mkdir fallback
+      try { require('fs').mkdirSync(outDir, { recursive: true }); } catch (e3) {}
+    }
+  }
 
   const file = join(outDir, `${snapshot.job_id}.jsonl`);
   const line = JSON.stringify(snapshot) + '\n';
