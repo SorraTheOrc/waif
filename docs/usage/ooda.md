@@ -9,6 +9,8 @@ See also: `docs/dev/prd-ooda-loop.md`.
 
 ## Quickstart
 
+> Note on safety defaults: command execution is potentially dangerous. Keep `capture` opt-in, prefer short per-job timeouts, and run in a restricted environment (unprivileged user / container) for anything high-risk.
+
 ### 1) Create a config
 
 Create `.waif/ooda-scheduler.yaml`:
@@ -33,10 +35,22 @@ Config validation references:
 
 ### 2) Run one job now (deterministic)
 
-Human-readable run:
+Human mode (operator interactive run):
+
+```bash
+waif ooda schedule run daily-health
+```
+
+CI/compat mode (deterministic one-shot runner):
 
 ```bash
 waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
+```
+
+Write a snapshot JSONL line (recommended for CI evidence):
+
+```bash
+waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log history/ooda_snapshot.jsonl
 ```
 
 Machine-readable run (top-level `--json`):
@@ -75,6 +89,13 @@ waif ooda schedule run daily-health
 
 This is the operator-friendly way to trigger a run (e.g., to validate that a scheduled job still works) without changing the schedule.
 
+## Output capture, redaction, and snapshots
+
+- Output capture is **opt-in** per job via `capture: [stdout]` and/or `capture: [stderr]`.
+- `redact: true` applies best-effort redaction to captured streams before printing and before writing snapshots.
+- Snapshots are JSONL lines written when `--log <path>` is provided (or defaulted) by `run-job`/`scheduler`.
+  - Default snapshot location is under `history/` (see `src/commands/ooda.ts`).
+
 ## Output modes
 
 ### Non-JSON run (default)
@@ -98,10 +119,16 @@ Use this for automation:
 waif --json ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
 ```
 
-Example JSON (shape may include only captured streams you requested):
+Example JSON (shape matches `src/commands/ooda.ts` emitJson call; streams only appear when captured):
 
 ```json
-{"jobId":"daily-health","status":"success","code":0,"stdout":"ok\n","stderr":""}
+{
+  "jobId": "daily-health",
+  "status": "success",
+  "code": 0,
+  "stdout": "ok\n",
+  "stderr": null
+}
 ```
 
 ## Operator troubleshooting

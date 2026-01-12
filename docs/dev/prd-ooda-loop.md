@@ -24,16 +24,36 @@ This PRD describes the CLI surface, config schema, snapshot JSONL format, retent
 - Automatic secret management beyond best-effort redaction.
 - Replacing existing agent/event OODA monitoring. (This PRD is specifically about the **Cron-style scheduler**.)
 
+## Users
+
+- **Operators (humans)**: need a safe, repeatable way to schedule and manually trigger health/maintenance jobs.
+- **CI / Release engineers**: need deterministic, non-flaky validation of job execution, logging, redaction, and retention.
+- **Developers**: need a local reproduction path for failures seen in CI and prod.
+
+## Success criteria
+
+- A repo can define jobs in `.waif/ooda-scheduler.yaml` and validation failures are clear.
+- Operators can start the scheduler and trigger a job run by id.
+- Developers/CI can run a job once deterministically without starting a long-lived loop.
+- Snapshot JSONL records are written in a stable format and retention behaves as configured.
+- Safety-by-default guidance is followed (capture opt-in, retention, timeouts, least privilege).
+
 ## CLI surface (canonical commands)
 
-Canonical scheduling commands live under `waif ooda schedule`:
+Canonical commands:
 
 ```bash
-waif ooda schedule start
-waif ooda schedule stop
-waif ooda schedule run <id>
-waif ooda schedule status
+# long-lived cron-style loop
+waif ooda scheduler --config .waif/ooda-scheduler.yaml
+
+# deterministic one-shot runner (used by CI)
+waif ooda run-job --config .waif/ooda-scheduler.yaml --job <id>
+
+# optional: write snapshots somewhere specific
+waif ooda run-job --config .waif/ooda-scheduler.yaml --job <id> --log history/ooda_snapshot.jsonl
 ```
+
+Note: the CLI presently implements `ooda scheduler` and `ooda run-job`. If we also want an alias surface like `ooda schedule start|stop|run|status`, track that as a follow-up.
 
 Notes:
 
@@ -47,6 +67,21 @@ waif ooda run-job --config <path> --job <id>
 See usage docs: `docs/usage/ooda.md`.
 
 ## Configuration
+
+### Example config snippet (.waif/ooda-scheduler.yaml)
+
+```yaml
+jobs:
+  - id: daily-health
+    name: Daily health check
+    command: "echo ok"
+    schedule: "0 7 * * *"
+    capture: [stdout]
+    redact: true
+    timeout_seconds: 30
+    retention:
+      keep_last: 10
+```
 
 ### Config file
 
@@ -102,16 +137,28 @@ Scheduler and run-job can append snapshots to a JSONL file. Exact wiring is impl
 
 ### Fields
 
-- `time` (string, ISO-8601 UTC): snapshot timestamp
+Per `src/commands/ooda.ts` (`writeJobSnapshot`), each JSONL line currently includes:
+
+- `time` (string, ISO-8601): snapshot timestamp
 - `job_id` (string): job id
-- `name` (string, optional): job name
+- `name` (string): job name
 - `command` (string): executed command string
 - `status` (string): `success | failure | timeout`
 - `exit_code` (number|null): exit code
-- `stdout` (string, optional): captured stdout (only when configured)
-- `stderr` (string, optional): captured stderr (only when configured)
+- `stdout` (string, optional): captured stdout (sanitized if `job.redact: true`)
+- `stderr` (string, optional): captured stderr (sanitized if `job.redact: true`)
 
-Implementation reference: the writer is currently described in `docs/commands/ooda.md` and implemented in the OODA command module (see repository source).
+Fields this PRD calls out as desirable but **not currently present** in the snapshot line (follow-ups):
+
+- `timestamp` (alias of `time`)
+- `id/name` duplication (it includes `job_id` and `name` already)
+- `summary` (short)
+- explicit `truncated`/`sanitized` flags
+
+Implementation references:
+
+- Snapshot writer: `src/commands/ooda.ts` (`writeJobSnapshot`, `enforceRetention`)
+- Alternate snapshot helper type (not used by CLI snapshot format): `src/lib/snapshots.ts`
 
 ## Retention
 
@@ -136,6 +183,15 @@ Operational guidance:
 
 - Use retention in CI to prevent snapshot logs from growing without bound.
 - Use per-job snapshot files for high-volume jobs to reduce contention.
+
+## Safety-by-default (recommended)
+
+- **Capture is opt-in** (`capture: [...]`). Default to no capture.
+- **Prefer array-form commands** (follow-up): current schema/implementation uses `command: <string>` with `shell: true`; prefer a future `command: ["cmd", "arg"]` form to reduce shell-injection risk.
+- **Per-job timeouts** (`timeout_seconds`) to constrain hangs.
+- **Retention** (`retention.keep_last`) to bound snapshot growth.
+- **Run as an unprivileged user** (especially on self-hosted runners).
+- **Use a containerized sandbox** for high-risk jobs (network + filesystem isolation).
 
 ## Safety, redaction, and operator guidance
 
