@@ -1,1 +1,0 @@
-{"time":"2026-01-12T08:10:59.098Z","job_id":"daily-health","name":"Daily health check","command":"echo ok","status":"success","exit_code":0,"stdout":"ok\n"}
