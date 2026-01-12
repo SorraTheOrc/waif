@@ -1,15 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import path from 'node:path';
 import { loadConfig } from '../src/lib/config.js';
-import { createOodaCommand } from '../src/commands/ooda.js';
+import { createOodaCommand, printJobResult } from '../src/commands/ooda.js';
 
 describe('printJobResult helper', () => {
   it('does not print when jsonOutput is true', async () => {
-    const cmd = createOodaCommand() as any;
-    const print = cmd.__internals?.printJobResult;
-    expect(typeof print).toBe('function');
-
     const job = { capture: ['stdout'] } as any;
+    const print = printJobResult;
     const result = { stdout: 'hello\n' } as any;
 
     const spyOut = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as any);
@@ -25,11 +22,8 @@ describe('printJobResult helper', () => {
   });
 
   it('prints stdout/stderr when jsonOutput is false', async () => {
-    const cmd = createOodaCommand() as any;
-    const print = cmd.__internals?.printJobResult;
-    expect(typeof print).toBe('function');
-
     const job = { capture: ['stdout', 'stderr'] } as any;
+    const print = printJobResult;
     const result = { stdout: 'hello\n', stderr: 'err\n' } as any;
 
     const spyOut = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as any);

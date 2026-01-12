@@ -550,25 +550,26 @@ export function enforceRetention(filePath: string, keepLast?: number) {
   }
 }
 
+export function printJobResult(job: Job, result: { stdout?: string; stderr?: string; timedOut?: boolean }, jsonOutput: boolean) {
+  if (jsonOutput) return;
+  try {
+    if ((job.capture ?? []).includes('stdout') && result.stdout) {
+      // preserve raw newlines
+      process.stdout.write(String(result.stdout));
+    }
+    if ((job.capture ?? []).includes('stderr') && result.stderr) {
+      process.stderr.write(String(result.stderr));
+    }
+  } catch (e) {
+    // best-effort: do not throw while printing
+  }
+}
+
 export function createOodaCommand() {
   const cmd = new Command('ooda');
   cmd.description('OODA scheduler and job runner (cron-based)');
 
   // helper to print captured output to console in non-json runs
-  function printJobResult(job: Job, result: { stdout?: string; stderr?: string; timedOut?: boolean }, jsonOutput: boolean) {
-    if (jsonOutput) return;
-    try {
-      if ((job.capture ?? []).includes('stdout') && result.stdout) {
-        // preserve raw newlines
-        process.stdout.write(String(result.stdout));
-      }
-      if ((job.capture ?? []).includes('stderr') && result.stderr) {
-        process.stderr.write(String(result.stderr));
-      }
-    } catch (e) {
-      // best-effort: do not throw while printing
-    }
-  }
 
   cmd
     .command('scheduler')
@@ -581,10 +582,6 @@ export function createOodaCommand() {
       const configPath = path.resolve(options.config ?? '.waif/ooda-scheduler.yaml');
       const interval = Number(options.interval ?? 30) || 30;
       const cfg = await loadConfig(configPath);
-
-      // expose helper for tests: print captured output to console in non-json runs
-      (cmd as any).__internals = (cmd as any).__internals || {};
-      (cmd as any).__internals.printJobResult = printJobResult;
 
       const parseCron = (expr: string) => {
         const anyParser = cronParser as any;
