@@ -533,8 +533,7 @@ export function writeJobSnapshot(
   code: number | null,
   stdout?: string,
   stderr?: string,
-  redact = false,
-) {
+  redact = false) {
   if (!filePath) return;
   try {
     const dir = path.dirname(filePath);
@@ -586,6 +585,30 @@ export function printJobResult(job: Job, result: { stdout?: string; stderr?: str
   }
 }
 
+export function formatTime(d: Date) {
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+export function printJobHeader(job: Job) {
+  try {
+    const now = new Date();
+    const ts = formatTime(now);
+    const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;
+    const line = '-'.repeat(Math.max(0, cols - 1));
+    const green = '\u001b[32m';
+    const reset = '\u001b[0m';
+    // top separator, header line with green timestamp, bottom separator
+    process.stdout.write(`${green}${line}${reset}\n`);
+    process.stdout.write(`${green}${ts}${reset} ${job.name} (${job.id})\n`);
+    process.stdout.write(`${green}${line}${reset}\n`);
+  } catch {
+    // best-effort
+  }
+}
+
 export function createOodaCommand() {
   const cmd = new Command('ooda');
   cmd.description('OODA scheduler and job runner (cron-based)');
@@ -604,6 +627,22 @@ export function createOodaCommand() {
       const interval = Number(options.interval ?? 30) || 30;
       const cfg = await loadConfig(configPath);
 
+      // Print OODA loop start timestamp (non-json mode only)
+      if (!jsonOutput) {
+        try {
+          const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;
+          const line = '-'.repeat(Math.max(0, cols - 1));
+          const green = '\u001b[32m';
+          const reset = '\u001b[0m';
+          const ts = formatTime(new Date());
+          process.stdout.write(`${green}${line}${reset}\n`);
+          process.stdout.write(`${green}${ts}${reset} OODA Loop Started\n`);
+          process.stdout.write(`${green}${line}${reset}\n`);
+        } catch {
+          // best-effort
+        }
+      }
+
       const parseCron = (expr: string) => {
         const anyParser = cronParser as any;
         if (typeof anyParser?.parseExpression === 'function') return anyParser.parseExpression(expr, { strict: false });
@@ -613,15 +652,38 @@ export function createOodaCommand() {
         throw new Error('cron-parser parse function not found');
       };
 
-      const scheduleEntries = cfg.jobs.map((job) => {
-        const iter = parseCron(job.schedule);
-        const next = iter.next().toDate();
-        return { job, iter, next };
-      });
+      // Use a map keyed by job id so we can reload config each loop and preserve iter state when possible
+      const scheduleEntriesMap: Record<string, { job: Job; iter: any; next: Date }> = {};
+      const initScheduleEntries = (jobs: Job[]) => {
+        for (const job of jobs) {
+          try {
+            if (scheduleEntriesMap[job.id]) {
+              // job exists: update job metadata but keep iter/next where possible
+              scheduleEntriesMap[job.id].job = job;
+            } else {
+              const iter = parseCron(job.schedule);
+              const next = iter.next().toDate();
+              scheduleEntriesMap[job.id] = { job, iter, next };
+            }
+          } catch {
+            // ignore individual job parse failures
+          }
+        }
+        // remove entries for jobs that no longer exist
+        for (const id of Object.keys(scheduleEntriesMap)) {
+          if (!jobs.find((j) => j.id === id)) delete scheduleEntriesMap[id];
+        }
+      };
 
-      const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
+      initScheduleEntries(cfg.jobs);
+
+      const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', 'ooda_snapshot_' + Date.now() + '.jsonl');
+
+      const headerAndTimestamp = printJobHeader;
 
       const runJob = async (job: Job) => {
+        // print header before running
+        headerAndTimestamp(job);
         const result = await runJobCommand(job);
         const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
         // print captured output to console when not in json mode
@@ -637,22 +699,40 @@ export function createOodaCommand() {
 
       // eslint-disable-next-line no-constant-condition
       while (true) {
+        // reload config each loop to pick up changes
+        try {
+          const latestCfg = await loadConfig(configPath);
+          initScheduleEntries(latestCfg.jobs);
+        } catch {
+          // ignore reload errors and continue with existing schedule entries
+        }
+
         const now = new Date();
-        for (const entry of scheduleEntries) {
+        for (const id of Object.keys(scheduleEntriesMap)) {
+          const entry = scheduleEntriesMap[id];
           try {
             if (now >= entry.next) {
               await runJob(entry.job);
-              entry.next = entry.iter.next().toDate();
+              // advance iterator safely
+              try {
+                entry.next = entry.iter.next().toDate();
+              } catch (e) {
+                // if iterator fails (e.g., schedule changed), recreate iterator from job.schedule
+                try {
+                  entry.iter = parseCron(entry.job.schedule);
+                  entry.next = entry.iter.next().toDate();
+                } catch {
+                  // give up advancing this job for now
+                }
+              }
             }
           } catch {
-            // ignore per-loop errors to keep scheduler alive
+            // ignore per-job errors
           }
         }
         await new Promise((resolve) => setTimeout(resolve, interval * 1000));
       }
     });
-
-
 
   cmd
     .command('run-job')
@@ -670,6 +750,7 @@ export function createOodaCommand() {
         process.exitCode = 1;
         return;
       }
+      printJobHeader(job);
       const result = await runJobCommandImpl(job);
       const status: SnapshotStatus = (result as any).timedOut ? 'timeout' : (result as any).code === 0 ? 'success' : 'failure';
       // print captured output to console when not in json mode
@@ -684,7 +765,7 @@ export function createOodaCommand() {
           ? null
           : typeof logOpt === 'string'
             ? logOpt
-            : path.join('history', `ooda_snapshot_${Date.now()}.jsonl`);
+            : path.join('history', 'ooda_snapshot_' + Date.now() + '.jsonl');
 
       if (snapshotPath) {
         writeJobSnapshot(snapshotPath, job, status, (result as any).code, (result as any).stdout, (result as any).stderr, Boolean(job.redact));
