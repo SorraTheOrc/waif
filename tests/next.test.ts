@@ -117,6 +117,28 @@ describe('waif next', () => {
     expect(stdout).not.toContain('== Recommended Summary ==');
   });
 
+  it('filters by assignee before ranking and returns only matches', async () => {
+    const tmpIssues = join(tmpdir(), `issues-${Date.now()}-assignee.jsonl`);
+    makeIssues(tmpIssues, [
+      { id: 'wf-1', title: 'First', status: 'open', priority: 1, assignee: 'alice' },
+      { id: 'wf-2', title: 'Second', status: 'open', priority: 0, assignee: 'bob' },
+      { id: 'wf-3', title: 'Third', status: 'open', priority: 2, assignee: 'bob' },
+    ]);
+
+    const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'next', '--assignee', 'bob', '--json'], {
+      env: {
+        WAIF_ISSUES_PATH: tmpIssues,
+        WAIF_CLIPBOARD_CMD: process.execPath,
+        PATH: '',
+      },
+    });
+
+    expect(exitCode).toBe(0);
+    const payload = JSON.parse(stdout.trim());
+    expect(payload.assignee).toBe('bob');
+    expect(payload.id).toBe('wf-2');
+  });
+
   it('falls back to priority/created_at when no bv score', async () => {
     const tmpIssues = join(tmpdir(), `issues-${Date.now() + 1}.jsonl`);
     makeIssues(tmpIssues, [
@@ -145,5 +167,46 @@ describe('waif next', () => {
 
     expect(exitCode).toBe(1);
     expect(stderr).toMatch(/No eligible issues/);
+  });
+
+  it('returns error when assignee filter has no matches', async () => {
+    const tmpIssues = join(tmpdir(), `issues-${Date.now() + 3}.jsonl`);
+    makeIssues(tmpIssues, [
+      { id: 'wf-1', title: 'First', status: 'open', priority: 1, assignee: 'alice' },
+    ]);
+
+    const { exitCode, stderr } = await execa(CLI[0], [...CLI.slice(1), 'next', '--assignee', 'bob'], {
+      env: { WAIF_ISSUES_PATH: tmpIssues, PATH: '' },
+      reject: false,
+    });
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain('assignee "bob"');
+  });
+
+  it('applies search within filtered assignee set and stays deterministic', async () => {
+    const tmpIssues = join(tmpdir(), `issues-${Date.now() + 4}.jsonl`);
+    makeIssues(tmpIssues, [
+      { id: 'wf-1', title: 'UI polish', description: 'buttons', status: 'open', priority: 1, assignee: 'alice' },
+      { id: 'wf-2', title: 'Backend fix', description: 'db bug', status: 'open', priority: 1, assignee: 'alice' },
+      { id: 'wf-3', title: 'UI bug critical', description: 'layout bug', status: 'open', priority: 1, assignee: 'bob' },
+    ]);
+
+    const runOnce = async () => {
+      const { stdout } = await execa(CLI[0], [...CLI.slice(1), 'next', '--assignee', 'alice', 'UI'], {
+        env: {
+          WAIF_ISSUES_PATH: tmpIssues,
+          PATH: '',
+        },
+      });
+      return stdout.trim();
+    };
+
+    const first = await runOnce();
+    const second = await runOnce();
+
+    expect(first).toBe(second);
+    expect(first).toContain('wf-1');
+    expect(first).not.toContain('wf-3');
   });
 });
