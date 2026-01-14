@@ -623,6 +623,15 @@ export function createOodaCommand() {
       const interval = Number(options.interval ?? 30) || 30;
       const cfg = await loadConfig(configPath);
 
+      // Print OODA loop start timestamp (non-json mode only)
+      if (!jsonOutput) {
+        try {
+          process.stdout.write(formatTime(new Date()) + ' OODA Loop Started\n\n');
+        } catch {
+          // best-effort
+        }
+      }
+
       const parseCron = (expr: string) => {
         const anyParser = cronParser as any;
         if (typeof anyParser?.parseExpression === 'function') return anyParser.parseExpression(expr, { strict: false });
