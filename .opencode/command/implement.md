@@ -1,7 +1,7 @@
 ---
 description: Implement a beads issue by id
 agent: patch
-#model: github-copilot/GPT-5.1-Codex-max
+model: github-copilot/gpt-5.1-codex-max
 permission:
   bash:
     "git status*": allow
@@ -12,12 +12,12 @@ permission:
 
 You are implementing a Beads issue in this repository.
 
-Argument handling:
+## Argument parsing
 
-- The user should run this as `/implement <bd-id>`.
-- Use `$1` as the Beads ID.
-- the Beads ID is provided will either be and implementation task or a feature bead. The implementation bead will be a child of the feature bead. Both types of beads are valid inputs and both ids will be needed during implementation.
-- If `$1` is empty/undefined, ask for the missing id and stop.
+- Pattern: If the raw input begins with a slash-command token (a leading token that starts with `/`, e.g., `/implement`), strip that token first.
+- Pattern: If the raw input begins with a slash-command token (a leading token that starts with `/`, e.g., `/implement`), strip that token first.
+- The first meaningful token after any leading slash-command is available as `$1` (the first argument). `$ARGUMENTS` contains the full arguments string (everything after the leading command token, if present).
+- This command expects a single beads id as the first argument. Validate that `$1` is present and that `$2` is empty; if not, ask the user to re-run with a single bead id argument.
 
 Project rules (must follow):
 

@@ -20,12 +20,6 @@ You are coordinating an intake brief as part of the [development workflow](docs/
   - Example: `/intake As a product manager I need to add an onboarding tutorial so that new users complete setup faster`
 - If $ARGUMENTS is empty, the command must ask one brief question to obtain a brief description of the product/epic/feature before starting the interview.
 
-## Argument parsing (must do)
-
-- Treat $ARGUMENTS as a single freeform string (do not attempt to parse CLI flags).
-- From the string derive a concise working title (≤ 7 words) suitable for the bead title.
-- If multiple plausible titles exist, ask the user to confirm which to use.
-
 ## Hard requirements:
 
 - Use an interview style: concise, high-signal questions grouped to a soft-maximum of three per iteration.
@@ -84,13 +78,16 @@ You are coordinating an intake brief as part of the [development workflow](docs/
   - Related issues (Beads ids)
   - Recommended next step (NEW PRD at: <path> OR UPDATE PRD at: <path>)
 
+- Save the draft to a temporary Markdown file at `.opencode/tmp/intake-draft-<title>.md`.
 - Present the draft to the user and ask for any alterations or clarifications. Do not proceed until the user approves the draft or supplies edits.
 
 5) Five mini-review stages (agent responsibility; must follow)
 
-After the user approves the Key details draft, run five review iterations. Each review MUST provide a new draft if any changes are recommended and then print a clear "finished" message as follows: 
-- "Finished <Stage Name> review: <brief notes of improvements>"
-- If no improvements were made: "Finished <Stage Name> review: no changes needed"
+After the user approves the Key details draft, run five review iterations. Each review will make any necessary changes to `.opencode/tmp/intake-draft-<title>.md`. 
+
+- Each review stage the agent should apply only conservative edits. If a proposed change could alter intent, ask a clarifying question instead of changing content.
+
+- After each stage print a clear "finished" message as follows: "Finished <Stage Name> review: <brief notes of improvements>" or "Finished <Stage Name> review: no changes needed"
 
 - The five Intake review mini-prompts (names and intents):
   1) Completeness review
@@ -103,8 +100,6 @@ After the user approves the Key details draft, run five review iterations. Each 
      - Add missing risks, failure modes, and assumptions in short bullets. Do not invent mitigations beyond note-level comments.
   5) Polish & handoff review
      - Tighten language for reading speed, ensure copy-paste-ready commands, and produce the final 1–2 sentence summary used as the issue body headline.
-
-- For each review stage the agent should apply only conservative edits. If a proposed change could alter intent, ask a clarifying question instead of changing content.
 
 6) Present final artifact for approval (human step)
 
@@ -120,13 +115,20 @@ After the user approves the Key details draft, run five review iterations. Each 
   - Type: `epic` or `feature`
   - Priority: Prioritise according to your review of related content and your understanding of the work.
   - Title: the working title
-  - Description: include the full key details document in Markdown
+  - Description: include the full contents of `.opencode/tmp/intake-draft-<title>.md`
+  - Assignee: "Build"
+  - Labels: "Status: Intake Completed"
+
 - If creating a new issue and a parent has been identified, create it as a sub-issue (`--parent <id>`).
-- Link related issues with `bd dep add` as appropriate.
+- Add dependencies with `bd dep add` as appropriate.
 
 8) Closing (must do)
-- Remove all temporary files created during the process.
-- Record the new issue id, a 1–2 sentence summary, and close by printing: "This completes the Intake process for <bd-id>".
+- Run `bd sync` to sync bead changes.
+- Run `bd show <bead-id>` (not --json) to show the entire bead.
+- End with: "This completes the Intake process for <bd-id>".
+- Remove all temporary files created during the process, including `.opencode/tmp/intake-draft-<title>.md`.
+- Output the new issue id, a 1–2 sentence summary
+- Finish with "This completes the Intake process for <bd-id>"
 
 ## Traceability & idempotence
 
@@ -139,9 +141,3 @@ After the user approves the Key details draft, run five review iterations. Each 
 - Respect `.gitignore` and other ignore rules when searching the repo.
 - If any automated step fails or is ambiguous, surface an explicit Open Question and pause for human guidance.
 
-## Finishing steps (must do)
-
-- Add a Label: "Intake: Completed" ` bd update bd <bead-id> --add-label "Status: Intake Completed" --json`
-- Run `bs sync` to sync bead changes.
-- Run `bd show <bead-id>` (not --json) to show the entire bead.
-- End with: "This completes the Intake process for <bd-id>".

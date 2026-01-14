@@ -7,14 +7,22 @@ You are helping create or update a Product Requirements Document (PRD) for an ar
 
 ## Quick inputs
 
-  - The user *must* provide a beads issue id as the FIRST word in $ARGUMENTS.
+  - The user *must* provide a beads issue id as the FIRST argument.
     - Example input: `/prd id-ab1`
-      - Issue id: `id-ab1`
-  - The user *may* provide additional freeform arguments AFTER the issue id in $ARGUMENTS.
-    - Example Input: `id-ab2 Add user authentication feature`
-      - Issue id: `id-ab2`
-      - Example context: `Add user authentication feature`
-  - If $ARGUMENTS does not contain an issue id, print "I cannot parse the issue id from your input '$ARGUMENTS'" and ask for the user to provide a seed issue ID in your first interview question (see below).
+      - Issue id: `id-ab1` (accessed via $1)
+    - $ARGUMENTS contains all arguments passed to the command
+    - $1 contains the first argument (the beads issue id)
+  - The user *may* provide additional freeform arguments AFTER the issue id.
+    - Example Input: `/prd id-ab2 Add user authentication feature`
+      - Issue id: `id-ab2` (accessed via $1)
+      - Example context: `Add user authentication feature` (can be extracted from $ARGUMENTS)
+  - If $1 is empty, print "I cannot parse the issue id from your input '$ARGUMENTS'" and ask for the user to provide a seed issue ID in your first interview question (see below).
+
+## Argument parsing
+
+- Pattern: If the raw input begins with a slash-command token (a leading token that starts with `/`, e.g., `/prd`), strip that token first.
+- The first meaningful token after any leading slash-command is available as `$1` (the first argument). `$ARGUMENTS` contains the full arguments string (everything after the leading command token, if present).
+- This command expects a single beads id as the first argument. Validate that `$1` is present and that `$2` is empty; otherwise, ask the user to re-run with a single bead id argument.
 
 ## Hard requirements
 
