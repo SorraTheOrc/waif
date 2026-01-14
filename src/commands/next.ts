@@ -232,15 +232,25 @@ export function createNextCommand() {
     .option('--verbose', 'Emit debug logs to stderr')
     .option('--no-clipboard', 'Disable copying the recommended issue id to clipboard')
     .option('-n, --number <n>', 'Number of suggestions to return (default 1)')
+    .option('-a, --assignee <name>', 'Only consider issues assigned to <name>')
     .action((search: string | undefined, options, command) => {
       const jsonOutput = Boolean(options.json ?? command.parent?.getOptionValue('json'));
       const verbose = Boolean(options.verbose ?? command.parent?.getOptionValue('verbose'));
       const numberRaw = options.number ?? command.parent?.getOptionValue('number');
       const n = numberRaw ? Math.max(1, parseInt(String(numberRaw), 10) || 1) : 1;
+      const assignee = typeof options.assignee === 'string' ? options.assignee.trim() : undefined;
 
       const { issues, source } = loadIssues(verbose);
+      const candidateIssues = assignee
+        ? issues.filter((issue) => (issue.assignee ?? '').trim() === assignee)
+        : issues;
+
+      if (assignee && candidateIssues.length === 0) {
+        throw new CliError(`No eligible issues found for assignee "${assignee}"`, 1);
+      }
+
       const bv = loadBvScores(verbose);
-      const selected = selectTopN(issues, bv, n, verbose);
+      const selected = selectTopN(candidateIssues, bv, n, verbose);
 
       // If search provided, re-rank selected candidates by fuzzy match
       let finalSelection = selected;
@@ -249,8 +259,9 @@ export function createNextCommand() {
       if (search && search.trim().length > 0) {
         searchApplied = true;
         const topN = n || 10;
-        const candidates = selectTopN(issues, bv, topN, verbose);
+        const candidates = selectTopN(candidateIssues, bv, topN, verbose);
         const items = candidates.map((c) => c.issue);
+
 
         const titleFuse = new Fuse(items, { keys: ['title'], includeScore: true, threshold: 0.4 });
         const descFuse = new Fuse(items, { keys: ['description'], includeScore: true, threshold: 0.6 });
@@ -292,7 +303,7 @@ export function createNextCommand() {
       }
 
       // Copy only the first recommended id to clipboard when enabled
-      const clipboardEnabled = Boolean(options.clipboard ?? true);
+      const clipboardEnabled = Boolean(options.clipboard ?? true) && !jsonOutput;
       if (clipboardEnabled && finalSelection.length > 0) {
         const clipboardResult = copyToClipboard(finalSelection[0].issue.id);
         if (!clipboardResult.ok && verbose) {

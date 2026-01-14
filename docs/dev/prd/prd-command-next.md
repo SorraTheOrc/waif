@@ -36,7 +36,7 @@
 
 * Functional requirements (MVP)
 
-1. `waif next` lists eligible candidates (open and unblocked) and returns the top-ranked issue.
+1. `waif next` lists eligible candidates (open and unblocked) and returns the top-ranked issue. When `--assignee <name>` is provided, eligible candidates are limited to issues whose `assignee` matches the provided name (after trim), and the existing selection/ranking logic is applied to that filtered set.
 2. `waif next` prints human-readable output as:
    - a one-row recommendation table
    - a blank line
@@ -45,7 +45,7 @@
 3. When `bd` is not available, `# Details` falls back to: `<id>: <title>` (no selection rationale line is printed in human output).
 3. `waif next --json` prints a JSON object with full issue details plus computed score and ranking metadata.
 4. Ranking uses existing bv prioritization scores as the primary signal; tie-break deterministically by computed numeric score and, if equal, by `id` (lexicographic).
-5. CLI flags: `--json`, `--verbose` (debug logs), `--no-clipboard`.
+5. CLI flags: `--json`, `--verbose` (debug logs), `--no-clipboard`, `--assignee <name>` (alias `-a`) to filter eligible candidates by exact assignee name (string compare after trim).
 6. On success, `waif next` copies the recommended issue id to the OS clipboard (best-effort).
 7. Read-only operation: the command must not modify issue state.
 
@@ -99,9 +99,9 @@ Primary: Producer (user running `waif next`). No secondary stakeholders identifi
 3. Matching model: fuzzy matching (recommendation: fuse.js) applied over issue title and description.
 4. Weighting model (hard-coded defaults): title match = +20% score multiplier, description match = +10% score multiplier. These weights are configurable in follow-ups but hard-coded for the initial implementation.
 5. Fallback behavior: if no candidate in the top N rises above the top non-matching candidate after weighting, the command should fall back to the existing selection process and clearly indicate a "no-match" result in the human output.
-6. CLI UX: search string is a positional argument (e.g., `waif next "ui bug"`).
-7. `waif next --json` must preserve its existing JSON contract and must NOT include additional match metadata in v1.
-8. Tests: unit tests for title vs description weighting and an integration test verifying top_n re-ranking and fallback behavior.
+6. CLI UX: search string is a positional argument (e.g., `waif next "ui bug"`). Optional `--assignee <name>` applies a hard filter first; the positional search then re-ranks within the filtered set.
+7. `waif next --json` must preserve its existing JSON contract and must NOT include additional match metadata in v1. JSON error path for `--assignee` no-match should return `{ "error": { "message", "code" } }` aligned with other commands.
+8. Tests: unit tests for title vs description weighting and an integration test verifying top_n re-ranking and fallback behavior. Add cases covering assignee filtering, no-match error, and assignee+search determinism.
 
 ### Constraints
 - Must be a no-op when no search string is provided.
