@@ -11,11 +11,12 @@ You are helping the team define a clear, actionable milestone plan for work trac
 
 ## Quick inputs
 
-- The user *must* provide a beads issue id as the FIRST word in $ARGUMENTS.
-  - Example input: `/milestones prefix-id`
-    - Issue id: `prefix-id`
-- The user *may* provide optional context after the issue id in $ARGUMENTS to seed the milestone planning. Example: `/milestones prefix-id Target Q2 launch`
-- If $ARGUMENTS does not contain an issue id, print: "I cannot parse the issue id from your input '$ARGUMENTS'" and ask the user for a valid bead id in your first interview question.
+- The user *must* provide a beads issue id as the FIRST meaningful token.
+  - Parsing rule: If the raw input begins with a slash-command token (a leading token that starts with `/`, for example `/milestones` or `/mmilestones`), strip that leading token first. Then take the first whitespace-separated token after that as the bead id.
+  - Accept bead id tokens that match the pattern `/^[a-z]{1,6}-[0-9A-Za-z-]+$/` (examples: `bd-123`, `ge-abc123`). Treat placeholders like `<bead-id>` as invalid. On invalid/missing id respond: "Please provide a valid beads id as the first argument (examples: bd-123, ge-abc123)."
+  - Behavior: remaining tokens after the bead id are optional freeform context passed to the milestone flow.
+- The user *may* provide optional context after the issue id to seed the milestone planning. Example: `/milestones beadId Target Q2 launch`
+  - Additional context after $1 can be extracted from $ARGUMENTS (or by taking the raw input, removing any leading slash-command token, and then removing the first token).
 
 ## Hard requirements
 
@@ -29,21 +30,15 @@ You are helping the team define a clear, actionable milestone plan for work trac
 ## Seed context
 
 - Read `docs/dev/CONTEXT_PACK.md` if present; otherwise scan `docs/` (excluding `docs/dev`), `README.md`, and other high-level files for context to help estimate scope.
-- Fetch and read the bead details using beads CLI: `bd show <beadId> --json` and treat the bead description and any referenced artifacts as authoritative seed intent.
+- Fetch and read the bead details using beads CLI: `bd show $1 --json` and treat the bead description and any referenced artifacts as authoritative seed intent.
 - If `bd` is unavailable or the issue cannot be found, fail fast and ask the user to provide a valid bead id or paste the bead content.
 - Prepend a short “Seed Context” block to the interview that includes the fetched bead title, type, current labels, and one-line description.
-
-## Argument parsing (must do)
-
-- Treat $ARGUMENTS as a freeform string; extract the first token as the bead id and everything after as optional seed context.
-- If the first token is not a valid-looking bead id, ask the user to confirm/enter a valid bead id immediately.
-- When the user provides dates, accept common formats (YYYY-MM-DD, MM/DD/YYYY, or relative phrases like "in 3 weeks") but always echo back the parsed date and ask for confirmation.
 
 ## Process (must follow)
 
 1) Fetch & summarise (agent responsibility)
 
-- Run `bd show <beadId> --json` and summarise the bead in one paragraph: title, type (epic/feature/task), headline, and any existing milestone/roadmap info.
+- Run `bd show $1 --json` and summarise the bead in one paragraph: title, type (epic/feature/task), headline, and any existing milestone/roadmap info.
 - Derive 3–6 keywords from the bead title/description to search the repo and beads for related work. Present any likely duplicates or parent/child relationships.
 
 2) Interview
@@ -106,11 +101,13 @@ After the user approves the milestone list, run five review iterations. Each rev
 5) Create beads (agent)
 
 - Create child beads (type: epic) for each milestone with a parent link to the original bead:
-  - `bd create "<Short Title>" --description "Description>" --parent <beadId> -t epic --json --labels "milestone" --priority P1 --validate`
+  - `bd create "<Short Title>" --description "Description>" --parent $1 -t epic --json --labels "milestone" --priority P1 --assignee Build --validate`
+
+  Note: milestone epics are assigned to Build by default per repository conventions. If a different owner is requested, update the bead after creation with `bd update`.
 - Creating blocking relationship between each milestone as appropriate, this will be a "chain" of dependencies (e.g. M3 blocked by M2 blocked by M1).
   - `bd dep add <Bead ID> <Previous Milestone Bead ID>`
 - Update the parent bead description to add or update a "Milestones" section with the agreed list (minimal, non-destructive). Identify the Milestone epic ID.
-- When creating child beads, ensure idempotence: if a child bead with the same canonical name, or a child bead previously created by this command exists, reuse it instead of creating a duplicate. Use `bd list --parent <beadId> --json` or equivalent to detect existing children.
+- When creating child beads, ensure idempotence: if a child bead with the same canonical name, or a child bead previously created by this command exists, reuse it instead of creating a duplicate. Use `bd list --parent $1 --json` or equivalent to detect existing children.
 - When updating the parent bead, append or replace only a well-marked "Milestones" block; if a previous generated block exists, replace it rather than appending.
 
 ## Traceability & idempotence

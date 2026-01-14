@@ -11,10 +11,18 @@ You are helping the team decompose a Beads epic (or other Beads issue) into **fe
 
 ## Quick inputs
 
-- The user *must* provide a beads issue id as the FIRST word in $ARGUMENTS.
+- The user *must* provide a beads issue id as the FIRST argument.
   - Example input: `/plan bd-123`
-    - Issue id: `bd-123`
-- If $ARGUMENTS does not contain an issue id, print: "I cannot parse the issue id from your input '$ARGUMENTS'" and ask the user for a valid bead id in your first interview question.
+    - Issue id: `bd-123` (accessed via $1)
+  - $ARGUMENTS contains all arguments passed to the command
+  - $1 contains the first argument (the beads issue id)
+- If $1 is empty, print: "I cannot parse the issue id from your input '$ARGUMENTS'" and ask the user for a valid bead id in your first interview question.
+
+## Argument parsing
+
+- Pattern: If the raw input begins with a slash-command token (a leading token that starts with `/`, e.g., `/plan`), strip that token first.
+- The first meaningful token after any leading slash-command is available as `$1` (the first argument). `$ARGUMENTS` contains the full arguments string (everything after the leading command token, if present).
+- This command expects a single beads id as the first argument. Validate that `$1` is present and that `$2` is empty; if not, ask the user to re-run with a single bead id argument.
 
 ## Hard requirements
 
@@ -108,9 +116,11 @@ Keep asking questions until the breakdown into features is clear.
   - `bd create "<Short Title>" --description "<Full feature description>" --parent <beadId> -t feature --json --labels "feature" --priority P2 --validate`
 
 - For each created/reused feature bead, create implementation tasks as children (minimum set):
-  - `bd create "Docs: <Short Title>" --description "<Docs task notes>" --parent <featureBeadId> -t task --json --labels "docs" --priority P2 --validate`
-  - `bd create "Tests: <Short Title>" --description "<Test task notes>" --parent <featureBeadId> -t task --json --labels "test" --priority P1 --validate`
-  - `bd create "Implement: <Short Title>" --description "<Implementation task notes>" --parent <featureBeadId> -t task --json --labels "task" --priority P1 --validate`
+  - `bd create "Docs: <Short Title>" --description "<Docs task notes>" --parent <featureBeadId> -t task --json --labels "docs" --priority P2 --assignee Scribbler --validate`
+  - `bd create "Tests: <Short Title>" --description "<Test task notes>" --parent <featureBeadId> -t task --json --labels "test" --priority P1 --assignee Probe --validate`
+  - `bd create "Implement: <Short Title>" --description "<Implementation task notes>" --parent <featureBeadId> -t task --json --labels "task" --priority P1 --assignee Patch --validate`
+
+  Note: These child beads include default assignees following repository conventions (Docs → Scribbler, Tests → Probe, Implementation → Patch). If you need a different owner, update the bead after creation with `bd update`.
   - Add optional tasks (only if needed): Infra/Ops, UX, Security review.
 
 - Create dependency edges between feature beads where the plan specifies dependencies:
