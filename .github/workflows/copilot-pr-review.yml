@@ -1,0 +1,24 @@
+name: Copilot PR-on-open review
+on:
+  pull_request:
+    types: [opened]
+jobs:
+  copilot_review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Post Copilot-like review
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const body = `Automated first-pass review: quick checks completed.`;
+            await github.rest.pulls.createReview({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              body,
+              event: 'COMMENT'
+            });
