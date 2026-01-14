@@ -596,10 +596,14 @@ export function printJobHeader(job: Job) {
   try {
     const now = new Date();
     const ts = formatTime(now);
-    // print blank line, header, blank line
-    process.stdout.write('\n');
-    process.stdout.write(`${ts} ${job.name} (${job.id})\n`);
-    process.stdout.write('\n');
+    const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;
+    const line = '-'.repeat(Math.max(0, cols - 1));
+    const green = '\u001b[32m';
+    const reset = '\u001b[0m';
+    // top separator, header line with green timestamp, bottom separator
+    process.stdout.write(`${green}${line}${reset}\n`);
+    process.stdout.write(`${green}${ts}${reset} ${job.name} (${job.id})\n`);
+    process.stdout.write(`${green}${line}${reset}\n`);
   } catch {
     // best-effort
   }
@@ -626,7 +630,14 @@ export function createOodaCommand() {
       // Print OODA loop start timestamp (non-json mode only)
       if (!jsonOutput) {
         try {
-          process.stdout.write(formatTime(new Date()) + ' OODA Loop Started\n\n');
+          const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;
+          const line = '-'.repeat(Math.max(0, cols - 1));
+          const green = '\u001b[32m';
+          const reset = '\u001b[0m';
+          const ts = formatTime(new Date());
+          process.stdout.write(`${green}${line}${reset}\n`);
+          process.stdout.write(`${green}${ts}${reset} OODA Loop Started\n`);
+          process.stdout.write(`${green}${line}${reset}\n`);
         } catch {
           // best-effort
         }
