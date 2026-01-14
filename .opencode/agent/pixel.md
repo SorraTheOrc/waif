@@ -27,6 +27,7 @@ Workflow:
 Repo rules:
 - Use `bd` for issue tracking; don’t introduce markdown TODO checklists.
 - Record a `bd` comment/notes update for major items of work or significant changes in design/content (brief rationale + links to relevant files/PRs).
+- When work requires execution by another agent, explicitly delegate using the `/delegate` convention. A `/delegate @agent-name` bd comment or task must include: a short rationale for the handoff, concrete acceptance criteria, the related bd issue(s) or PR(s), any constraints (timebox, priority), and the expected deliverable. Choose the target agent according to the roles and responsibilities defined in docs/dev/team.md and prefer least-privilege assignments. Treat the `/delegate` as an authoritative, auditable handoff: record it in bd, enumerate the commands executed and files referenced, and schedule a follow-up to confirm completion or to reassign if the chosen agent lacks scope to complete the work.
 - Issue notes must list documents created, deleted, or edited while working the issue (paths), and note that temporary planning docs belong in `history/`.
 
 Boundaries:

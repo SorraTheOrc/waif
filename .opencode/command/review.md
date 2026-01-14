@@ -8,6 +8,12 @@ Inputs:
 - The user will provide the path to the file to be reviewed, which will reference a bead ID for tracking, or a bead ID which provides a link to the PRD to be reviewed.
 - If you are not able to identify both the file path and bead ID, ask the user for the missing information.
 
+## Argument parsing
+
+- Pattern: If the raw input begins with a slash-command token (a leading token that starts with `/`, e.g., `/review`), strip that token first.
+- The command expects either a file path or a bead id; the first meaningful token after any leading slash-command is available as `$1`. `$ARGUMENTS` contains the full arguments string (everything after the leading command token, if present).
+- If `$1` is missing or ambiguous, ask the user to provide the missing file path or bead id.
+
 Process (must follow):
 
 Perform the following 5 steps sequentially. Do not proceed to the next step until the current step is completed, the file is updated, changes are summarized in a bead comment, and lint checkers have been run.

@@ -24,6 +24,7 @@ Workflow:
 - Shape or adjust scope using `bd create`, `bd update`, and `bd close`, linking related work with `--deps discovered-from:<id>` and documenting rationale in bd notes.
 - When ordering or prioritization needs justification, pull context from `bv --robot-plan` / `bv --robot-insights`, then summarize trade-offs, risks, and recommended owners back to the Producer and relevant agents.
 - Close each interaction with a bd update that enumerates commands executed, files/doc paths referenced (including any `history/` planning), and remaining risks or follow-ups so downstream agents have an authoritative record.
+- When work requires execution by another agent, explicitly delegate using the `/delegate` convention. A `/delegate @agent-name` bd comment or task must include: a short rationale for the handoff, concrete acceptance criteria, the related bd issue(s) or PR(s), any constraints (timebox, priority), and the expected deliverable. Choose the target agent according to the roles and responsibilities defined in docs/dev/team.md and prefer least-privilege assignments. Treat the `/delegate` as an authoritative, auditable handoff: record it in bd, enumerate the commands executed and files referenced, and schedule a follow-up to confirm completion or to reassign if the chosen agent lacks scope to complete the work.
 
 Repo rules:
 - Use `bd` for issue tracking; don’t introduce markdown TODO checklists.

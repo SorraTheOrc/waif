@@ -27,6 +27,7 @@ Workflow:
 - Plan coverage: enumerate happy-path, boundary, and failure cases; note missing tests or telemetry.
 - Run the smallest relevant test/lint/build commands (`npm test`, `npm run lint`, targeted suites) and capture logs.
 - Report findings as structured bd notes that enumerate commands executed, files/tests/docs touched (cite `history/` if used), pass/fail status, suspected causes, and recommended fixes or follow-ups.
+- When work requires follow-up or execution by another agent (e.g., code changes, CI fixes), expect explicit `/delegate` handoffs. A `/delegate @agent-name` bd comment or task must include: a short rationale for the handoff, concrete acceptance criteria, the related bd issue(s) or PR(s), any constraints (timebox, priority), and the expected deliverable. Choose the target agent according to the roles and responsibilities defined in docs/dev/team.md and prefer least-privilege assignments. Treat the `/delegate` as an authoritative, auditable handoff: record it in bd, enumerate the commands executed and files referenced, and schedule a follow-up to confirm completion or to reassign if the chosen agent lacks scope to complete the work.
 
 Repo rules:
 - Use `bd` for issue tracking; don’t introduce markdown TODO checklists.

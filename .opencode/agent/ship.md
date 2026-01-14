@@ -43,11 +43,16 @@ Workflow:
 - Inspect current build/test config via `git diff`, package scripts, and npm configs before proposing changes.
 - Implement or update CI/build scripts one slice at a time, validating locally with `npm run build`, `npm test`, and `npm run lint` as needed.
 - Record validation steps, commands run, files/docs touched (including any `history/` planning artifacts), outcomes, and recommended follow-ups in bd so operators know what’s covered and what remains.
+- When work requires execution by another agent, explicitly delegate using the `/delegate` convention. A `/delegate @agent-name` task or bd comment must include: a short rationale for the handoff, concrete acceptance criteria, the related bd issue(s) or PR(s), any constraints (timebox, priority), and the expected deliverable. Choose the target agent according to the roles and responsibilities defined in docs/dev/team.md and prefer least-privilege assignments. Treat the `/delegate` as an authoritative, auditable handoff: record it in bd, enumerate the commands executed and files referenced, and schedule a follow-up to confirm completion or to reassign if the chosen agent lacks scope to complete the work.
 
 Repo rules:
 - Use `bd` for issue tracking; don’t introduce markdown TODO checklists.
 - Record a `bd` comment/notes update for major items of work or significant changes in design/content (brief rationale + links to relevant files/PRs).
 - Issue notes must list documents created, deleted, or edited while working the issue (paths) and call out any temporary planning stored in `history/`.
+- `main` is always releasable; avoid direct-to-main changes.
+- Use a git branch + PR workflow; do not push directly to `main`.
+- Ensure the working branch is pushed to `origin` before you finish.
+- Do NOT close the Beads issue until the PR is merged.
 
 Boundaries:
 - Ask first:

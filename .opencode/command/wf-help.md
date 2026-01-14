@@ -50,6 +50,8 @@ Define a clear PRD, decompose work into milestones and features, then implement 
 - Capture a one-paragraph project summary at the top of the PRD.
 - Commands in this step: `/intake <Project Title>`, `/prd <Bead ID>`
 
+  Note: `/prd` creates PRDs (epics/features) and follows assignment conventions: Epics → Build by default.
+
 ### 2) Define Milestones
 - Map end-to-end user outcomes into master epic(s) and record owners and milestones (M0/M1).
 - Ensure outcome maps and short feedback milestones are specified.

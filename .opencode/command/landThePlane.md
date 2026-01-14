@@ -13,6 +13,11 @@ permission:
 
 You are guiding the end-of-session wrap-up so that work is fully synced, issues are updated, and no changes are stranded locally.
 
+## Argument parsing
+
+- Pattern: If the raw input begins with a slash-command token (a leading token that starts with `/`, e.g., `/landThePlane`), strip that token first.
+- This command expects no arguments; `$ARGUMENTS` may be empty. If the user provides unexpected arguments, ask whether they intended to pass a specific bead id or option, and suggest running the command without arguments if none are required.
+
 ## Preconditions
 
 - You know the active branch and whether an origin remote is configured.

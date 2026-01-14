@@ -7,13 +7,11 @@ agent: build
 
 You are creating or improving the **design notes** for a single Beads issue.
 
-Argument handling (strict):
+## Argument parsing
 
-- The user should run this as `/design <bd-id>`.
-- Use `$1` as the Beads ID.
-- No other options/arguments are supported.
-  - If `$1` is empty/undefined, ask for the missing id and stop.
-  - If additional arguments are provided (e.g. `$2` exists), ask the user to re-run with exactly one argument and stop.
+- Pattern: If the raw input begins with a slash-command token (a leading token that starts with `/`, e.g., `/design`), strip that token first.
+- The first meaningful token after any leading slash-command is available as `$1` (the first argument). `$ARGUMENTS` contains the full arguments string (everything after the leading command token, if present).
+- This command expects a single beads id as the first argument. Validate that `$1` is present and that `$2` is empty; if not, ask the user to re-run with a single bead id argument.
 
 Beads context (must do):
 
