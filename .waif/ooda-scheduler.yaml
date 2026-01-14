@@ -1,0 +1,20 @@
+jobs:
+  - id: daily-health
+    name: Daily health check (example)
+    command: "node -e \"console.log('ok')\""
+    schedule: "0 7 * * *"
+    capture:
+      - stdout
+    timeout_seconds: 30
+    retention:
+      keep_last: 3
+
+  - id: hello-5s
+    name: Hello every 5s (dev fixture)
+    command: "node -e \"console.log('hello')\""
+    schedule: "*/5 * * * * *"
+    capture:
+      - stdout
+    timeout_seconds: 5
+    retention:
+      keep_last: 2
