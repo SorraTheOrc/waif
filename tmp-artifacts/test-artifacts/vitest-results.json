@@ -1,0 +1,9 @@
+[32m-------------------------------------------------------------------------------[0m
+[32m04:07:59[0m e2e job (e2e-job)
+[32m-------------------------------------------------------------------------------[0m
+hello
+[32m-------------------------------------------------------------------------------[0m
+[32m04:07:59[0m e2e job (e2e-job)
+[32m-------------------------------------------------------------------------------[0m
+hello
+{"numTotalTestSuites":2,"numPassedTestSuites":2,"numFailedTestSuites":0,"numPendingTestSuites":0,"numTotalTests":1,"numPassedTests":1,"numFailedTests":0,"numPendingTests":0,"numTodoTests":0,"snapshot":{"added":0,"failure":false,"filesAdded":0,"filesRemoved":0,"filesRemovedList":[],"filesUnmatched":0,"filesUpdated":0,"matched":0,"total":0,"unchecked":0,"uncheckedKeysByFile":[],"unmatched":0,"updated":0,"didUpdate":false},"startTime":1768450079390,"success":true,"testResults":[{"assertionResults":[{"ancestorTitles":["OODA scheduler E2E (integration)"],"fullName":"OODA scheduler E2E (integration) runs a configured job once via run-job and writes snapshot with expected fields and retention","status":"passed","title":"runs a configured job once via run-job and writes snapshot with expected fields and retention","duration":91.7794139999969,"failureMessages":[],"meta":{}}],"startTime":1768450079853,"endTime":1768450079944.7793,"status":"passed","message":"","name":"/home/runner/work/waif/waif/tests/integration/ooda-scheduler-e2e.test.ts"}]}
