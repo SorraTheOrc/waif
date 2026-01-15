@@ -8,6 +8,7 @@ import { emitJson, logStdout } from '../lib/io.js';
 import { loadConfig, type Job } from '../lib/config.js';
 import { runJobCommand as runnerRunJobCommand } from '../lib/runner.js';
 import { redactSecrets } from '../lib/redact.js';
+import { computePrevNext } from '../lib/catchup.js';
 
 
 interface PaneRow {
@@ -692,158 +693,28 @@ export function createOodaCommand() {
 
        initScheduleEntries(cfg.jobs);
 
-       // On startup, optionally run one-time catchups for jobs that missed their most-recent run
-       // Process sequentially and do not let failures block other jobs.
-async function maybeRunStartupCatchups() {
-          const now = new Date();
-          const parseCronWithDate = (expr: string, date?: Date) => {
-            const anyParser = cronParser as any;
-            const opts = { strict: false, currentDate: date ?? now };
-            if (typeof anyParser?.parseExpression === 'function') return anyParser.parseExpression(expr, opts);
-            if (typeof anyParser?.parse === 'function') return anyParser.parse(expr, opts);
-            if (typeof anyParser?.default?.parseExpression === 'function') return anyParser.default.parseExpression(expr, opts);
-            if (typeof anyParser?.default?.parse === 'function') return anyParser.default.parse(expr, opts);
-            throw new Error('cron-parser parse function not found');
-          };
 
-          for (const id of Object.keys(scheduleEntriesMap)) {
-            const entry = scheduleEntriesMap[id];
-            const job = entry.job as any;
-            if (!job || job.catchup_on_start !== true) continue;
 
-            try {
-              // Create separate iterators for next and prev to avoid mutating shared iterator state
-              let next: Date | null = null;
-              let prev: Date | null = null;
-              try {
-                const iterNext = parseCronWithDate(job.schedule, now);
-                const maybeNext = iterNext.next ? iterNext.next() : null;
-                if (maybeNext) {
-                  if (typeof maybeNext.toDate === 'function') next = maybeNext.toDate();
-                  else if (maybeNext instanceof Date) next = maybeNext;
-                  else if (maybeNext.value && typeof maybeNext.value.toDate === 'function') next = maybeNext.value.toDate();
-                  else if (maybeNext.value && maybeNext.value instanceof Date) next = maybeNext.value;
-                  else next = new Date(String(maybeNext));
-                }
-              } catch (e) {
-                console.debug(`startup catchup: failed to compute next for job ${job.id}: ${String(e)}`);
-                continue;
-              }
+      const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', 'ooda_snapshot_' + Date.now() + '.jsonl');
 
-              // prev may not be supported by some cron parser versions; skip gracefully
-              try {
-                const iterPrev = parseCronWithDate(job.schedule, now);
-                if (typeof iterPrev.prev === 'function') {
-                  const maybePrev = iterPrev.prev();
-                  if (maybePrev) {
-                    if (typeof maybePrev.toDate === 'function') prev = maybePrev.toDate();
-                    else if (maybePrev instanceof Date) prev = maybePrev;
-                    else if (maybePrev.value && typeof maybePrev.value.toDate === 'function') prev = maybePrev.value.toDate();
-                    else if (maybePrev.value && maybePrev.value instanceof Date) prev = maybePrev.value;
-                    else prev = new Date(String(maybePrev));
-                  }
-                } else {
-                  console.info(`startup catchup: prev() unsupported for job ${job.id}; skipping catchup`);
-                  continue;
-                }
-              } catch (e) {
-                console.info(`startup catchup: unable to compute prev for job ${job.id}; skipping: ${String(e)}`);
-                continue;
-              }
+      const headerAndTimestamp = printJobHeader;
 
-              if (prev && next && prev.getTime() < now.getTime() && next.getTime() > now.getTime()) {
-                try {
-                  console.info(`startup catchup: running one-time catchup for job ${job.id}, missed run at ${prev.toISOString()}`);
-                  await runJob(entry.job);
-                } catch (e) {
-                  console.warn(`startup catchup: job ${job.id} failed during catchup: ${String(e)}`);
-                } finally {
-                  // Update the scheduled next to the computed next to avoid duplicate runs
-                  if (next) scheduleEntriesMap[id].next = next;
-                }
-              } else {
-                console.debug(`startup catchup: no missed run for job ${job.id} (prev=${prev?.toISOString() ?? 'nil'}, next=${next?.toISOString() ?? 'nil'})`);
-              }
-            } catch (e) {
-              console.warn(`startup catchup: unexpected error for job ${id}: ${String(e)}`);
-            }
-          }
+      const runJob = async (job: Job) => {
+        // print header before running
+        headerAndTimestamp(job);
+        const result = await runJobCommand(job);
+        const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
+        // print captured output to console when not in json mode
+        printJobResult(job, result, jsonOutput);
+        if (snapshotPath) {
+          writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
+          enforceRetention(snapshotPath, job.retention?.keep_last);
         }
-
-
-       // Run startup catchups once before entering main loop
-       try {
-          // Run sequentially and don't block main loop on errors
-          // eslint-disable-next-line no-await-in-loop
-          await maybeRunStartupCatchups();
-       } catch (e) {
-         console.warn(`startup catchup: failed during execution: ${String(e)}`);
-       }
-
-
-      // Helper: compute previous and next occurrences for a cron expression relative to 'now'
-      const computePrevNext = (expr: string, now: Date): { prev?: Date; next?: Date } => {
-        // Prefer using the same parseCron helper (defined earlier) so we get the same
-        // iterator implementation the rest of the scheduler uses. This avoids trying to
-        // guess the exported shape of cron-parser.
-        try {
-          const iter = parseCron(expr);
-          let prev: Date | undefined;
-          let next: Date | undefined;
-          try { if (typeof iter.prev === 'function') prev = iter.prev().toDate(); } catch { prev = undefined; }
-          try { if (typeof iter.next === 'function') next = iter.next().toDate(); } catch { next = undefined; }
-          return { prev, next };
-        } catch {
-          // fall through to fallback probing strategy
-        }
-
-        // Fallback: probe earlier times with parseCron to discover a prev occurrence.
-        try {
-          const maxLookbackMs = 24 * 60 * 60 * 1000; // 24 hours
-          let lookback = 1000; // start with 1s back
-          let prevCandidate: Date | undefined;
-          while (lookback <= maxLookbackMs) {
-            try {
-              const probeDate = new Date(now.getTime() - lookback);
-              // parseCron doesn't accept currentDate param, so temporarily override by
-              // invoking cron-parser implementations that support currentDate via the
-              // parse function paths. But reuse parseCron where possible.
-              const anyParser2 = cronParser as any;
-              const probeOpts = { currentDate: probeDate, strict: false };
-              let iter2: any | undefined;
-              if (typeof anyParser2?.parseExpression === 'function') iter2 = anyParser2.parseExpression(expr, probeOpts);
-              else if (typeof anyParser2?.parse === 'function') iter2 = anyParser2.parse(expr, probeOpts);
-              else if (typeof anyParser2?.default?.parseExpression === 'function') iter2 = anyParser2.default.parseExpression(expr, probeOpts);
-              else if (typeof anyParser2?.default?.parse === 'function') iter2 = anyParser2.default.parse(expr, probeOpts);
-              if (!iter2) { lookback *= 2; continue; }
-              if (typeof iter2.next === 'function') {
-                const candidate = iter2.next().toDate();
-                if (candidate.getTime() <= now.getTime()) {
-                  prevCandidate = candidate;
-                  break;
-                }
-              }
-            } catch {
-              // increase lookback and continue
-            }
-            lookback *= 2;
-          }
-
-          // compute next from now using parseCron if possible
-          try {
-            const iter3 = parseCron(expr);
-            let nextCandidate: Date | undefined;
-            try { if (typeof iter3.next === 'function') nextCandidate = iter3.next().toDate(); } catch { nextCandidate = undefined; }
-            return { prev: prevCandidate, next: nextCandidate };
-          } catch {
-            return { prev: prevCandidate };
-          }
-        } catch {
-          return {};
+        if (jsonOutput) {
+          emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
         }
       };
 
-      // Run one-time startup catchups for jobs configured with catchup_on_start === true
       const maybeRunStartupCatchups = async () => {
         const now = new Date();
         for (const id of Object.keys(scheduleEntriesMap)) {
@@ -905,26 +776,6 @@ async function maybeRunStartupCatchups() {
             // per-job errors should not stop other catchups
             console.debug(`[ooda] catchup_on_start: error checking job ${job.id}: ${String(e)}`);
           }
-        }
-      };
-
-      const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', 'ooda_snapshot_' + Date.now() + '.jsonl');
-
-      const headerAndTimestamp = printJobHeader;
-
-      const runJob = async (job: Job) => {
-        // print header before running
-        headerAndTimestamp(job);
-        const result = await runJobCommand(job);
-        const status: SnapshotStatus = result.timedOut ? 'timeout' : result.code === 0 ? 'success' : 'failure';
-        // print captured output to console when not in json mode
-        printJobResult(job, result, jsonOutput);
-        if (snapshotPath) {
-          writeJobSnapshot(snapshotPath, job, status, result.code, result.stdout, result.stderr, Boolean(job.redact));
-          enforceRetention(snapshotPath, job.retention?.keep_last);
-        }
-        if (jsonOutput) {
-          emitJson({ jobId: job.id, status, code: result.code, stdout: result.stdout, stderr: result.stderr });
         }
       };
 
