@@ -1,7 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>();
+  return { ...actual, spawnSync: vi.fn() } as any;
+});
 import { createOodaCommand } from '../../src/commands/ooda.js';
 
 const tmpdir = (name: string) => mkdtempSync(path.join(os.tmpdir(), `waif-ooda-e2e-${name}-`));
@@ -40,8 +44,18 @@ describe('OODA scheduler E2E (integration)', () => {
     writeFileSync(cfgPath, `jobs:\n  - id: e2e-job\n    name: e2e job\n    command: \"node -e \\\"console.log('hello')\\\"\"\n    schedule: '* * * * *'\n    capture:\n      - stdout\n    timeout_seconds: 5\n    retention:\n      keep_last: 2\n`,'utf8');
 
     const cmd = createOodaCommand();
+
+    // Ensure non-TTY behavior for CI-style runs: mock isTTY false and spy on clear invocations
+    const child = await import('node:child_process');
+    const spawnSpy = vi.spyOn(child, 'spawnSync').mockImplementation(() => ({ stdout: Buffer.alloc(0) } as any));
+    try { Object.defineProperty(process.stdout, 'isTTY', { value: false, configurable: true }); } catch {}
+
     // programmatic invocation: run-job --config <cfgPath> --job e2e-job --log <logPath>
     await cmd.parseAsync(['run-job', '--config', cfgPath, '--job', 'e2e-job', '--log', logPath], { from: 'user' });
+
+    // ensure that no clear was attempted in non-TTY
+    expect(spawnSpy).not.toHaveBeenCalled();
+    spawnSpy.mockRestore();
 
     // read snapshot and assert fields
     const content = readFileSync(logPath, 'utf8').trim().split('\n');

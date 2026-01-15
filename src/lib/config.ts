@@ -29,7 +29,7 @@ type ValidationError = { path: string; message: string };
 
 // Ajv constructor cast workaround
 const AjvClass = Ajv as unknown as { new(options?: AjvOptions): any };
-const ajv = new AjvClass({ allErrors: true, strict: true, allowUnionTypes: true });
+const ajv = new AjvClass({ allErrors: true, strict: true, allowUnionTypes: true, useDefaults: true });
 const validate = ajv.compile(schema) as ValidateFunction<Config>;
 
 export function validateConfig(obj: unknown): { valid: boolean; errors?: ValidationError[] } {

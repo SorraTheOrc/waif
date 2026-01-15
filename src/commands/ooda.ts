@@ -448,7 +448,7 @@ const runJobCommandImpl = async (job: Job): Promise<RunJobResult> => {
   return legacy as RunJobResult;
 };
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention, clearTerminalIfTTY };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
@@ -592,8 +592,29 @@ export function formatTime(d: Date) {
   return `${hh}:${mm}:${ss}`;
 }
 
+
+function clearTerminalIfTTY() {
+  try {
+    if (!process.stdout.isTTY) return;
+    const ansiClear = '\x1b[2J\x1b[H';
+    try {
+      process.stdout.write(ansiClear);
+    } catch {
+      // best-effort: ignore write errors
+    }
+  } catch {
+    // best-effort: ignore unexpected errors
+  }
+}
+
 export function printJobHeader(job: Job) {
   try {
+    // Only clear when the job explicitly opts in via config and we're in an interactive TTY.
+    // Default behavior is no clearing so CI/log capture remains stable. See schema: clear_terminal (default false).
+    if ((job as any).clear_terminal === true && process.stdout.isTTY) {
+      clearTerminalIfTTY();
+    }
+
     const now = new Date();
     const ts = formatTime(now);
     const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;

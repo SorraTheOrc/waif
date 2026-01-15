@@ -98,6 +98,10 @@ This is the operator-friendly way to trigger a run (e.g., to validate that a sch
 
 ## Output modes
 
+Note: When run interactively (TTY), the scheduler clears the terminal before printing the job header; in CI or non-TTY contexts output is not cleared.
+
+
+
 ### Non-JSON run (default)
 
 Use this for interactive debugging:
