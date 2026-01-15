@@ -908,14 +908,6 @@ async function maybeRunStartupCatchups() {
         }
       };
 
-      // Perform startup catchups once before entering the main loop
-      try {
-        // do not block the startup too long; runs are intentionally sequential per config
-        await maybeRunStartupCatchups();
-      } catch {
-        // ignore errors in catchup pass
-      }
-
       const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', 'ooda_snapshot_' + Date.now() + '.jsonl');
 
       const headerAndTimestamp = printJobHeader;
