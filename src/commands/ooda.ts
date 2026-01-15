@@ -928,6 +928,13 @@ async function maybeRunStartupCatchups() {
         }
       };
 
+      // Run startup catchups once before entering main loop (sequential)
+      try {
+        await maybeRunStartupCatchups();
+      } catch (e) {
+        console.debug(`[ooda] catchup_on_start: startup catchup pass failed: ${String(e)}`);
+      }
+
       // eslint-disable-next-line no-constant-condition
       while (true) {
         // reload config each loop to pick up changes
