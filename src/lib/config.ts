@@ -16,6 +16,9 @@ export interface Job {
   capture?: Array<'stdout' | 'stderr'>;
   redact?: boolean;
   timeout_seconds?: number;
+  // When true the scheduler will run a one-time catch-up run at startup if the most-recent scheduled
+  // run time was missed. Defaults to false.
+  catchup_on_start?: boolean;
   retention?: {
     keep_last?: number;
   };
