@@ -781,6 +781,87 @@ async function maybeRunStartupCatchups() {
        }
 
 
+      // Helper: compute previous and next occurrences for a cron expression relative to 'now'
+      const computePrevNext = (expr: string, now: Date): { prev?: Date; next?: Date } => {
+        try {
+          const anyParser = cronParser as any;
+          const parseOpts = { currentDate: now, strict: false };
+          const iter = (typeof anyParser?.parseExpression === 'function')
+            ? anyParser.parseExpression(expr, parseOpts)
+            : typeof anyParser?.parse === 'function'
+              ? anyParser.parse(expr, parseOpts)
+              : typeof anyParser?.default?.parseExpression === 'function'
+                ? anyParser.default.parseExpression(expr, parseOpts)
+                : anyParser.default.parse(expr, parseOpts);
+          let prev: Date | undefined;
+          let next: Date | undefined;
+          try {
+            if (typeof iter.prev === 'function') prev = iter.prev().toDate();
+          } catch {
+            // prev may not be supported or may throw for some expressions
+            prev = undefined;
+          }
+          try {
+            if (typeof iter.next === 'function') next = iter.next().toDate();
+          } catch {
+            next = undefined;
+          }
+          return { prev, next };
+        } catch {
+          return {};
+        }
+      };
+
+      // Run one-time startup catchups for jobs configured with catchup_on_start === true
+      const maybeRunStartupCatchups = async () => {
+        const now = new Date();
+        for (const id of Object.keys(scheduleEntriesMap)) {
+          const entry = scheduleEntriesMap[id];
+          const job = entry.job;
+          if (!job || (job as any).catchup_on_start !== true) continue;
+          try {
+            const { prev, next } = computePrevNext(job.schedule, now);
+            if (prev && next && prev.getTime() < now.getTime() && next.getTime() > now.getTime()) {
+              // Missed the most-recent scheduled run — run once now (sequentially)
+              try {
+                console.info(`[ooda] catchup_on_start: running catchup for job ${job.id} (missed run at ${prev.toISOString()})`);
+                await runJob(job);
+              } catch (e) {
+                console.warn(`[ooda] catchup_on_start: catchup for job ${job.id} failed: ${String(e)}`);
+              }
+              // Advance iterator to the computed next occurrence to avoid duplicate immediate runs
+              try {
+                const anyParser = cronParser as any;
+                const newIter = (typeof anyParser?.parseExpression === 'function')
+                  ? anyParser.parseExpression(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false })
+                  : typeof anyParser?.parse === 'function'
+                    ? anyParser.parse(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false })
+                    : typeof anyParser?.default?.parseExpression === 'function'
+                      ? anyParser.default.parseExpression(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false })
+                      : anyParser.default.parse(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false });
+                entry.iter = newIter;
+                if (typeof newIter.next === 'function') entry.next = newIter.next().toDate();
+              } catch {
+                // ignore iterator advance failures
+              }
+            } else {
+              // no catchup needed
+            }
+          } catch (e) {
+            // per-job errors should not stop other catchups
+            console.debug(`[ooda] catchup_on_start: error checking job ${job.id}: ${String(e)}`);
+          }
+        }
+      };
+
+      // Perform startup catchups once before entering the main loop
+      try {
+        // do not block the startup too long; runs are intentionally sequential per config
+        await maybeRunStartupCatchups();
+      } catch {
+        // ignore errors in catchup pass
+      }
+
       const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', 'ooda_snapshot_' + Date.now() + '.jsonl');
 
       const headerAndTimestamp = printJobHeader;
