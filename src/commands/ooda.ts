@@ -592,44 +592,18 @@ export function formatTime(d: Date) {
   return `${hh}:${mm}:${ss}`;
 }
 
-import { spawnSync } from 'node:child_process';
 
 function clearTerminalIfTTY() {
-  // Only attempt to clear in interactive TTY sessions. Gate on isTTY so CI
-  // and non-interactive log capture are not disturbed. Attempt to run the
-  // external `clear` command with stdio inherited so its output reaches the
-  // parent terminal (this fixes WSL/terminal cases where piping the output
-  // would not affect the visible screen). If that fails, fall back to the
-  // ANSI clear sequence. All errors are caught and ignored (best-effort only).
   try {
-    if (process.stdout.isTTY) {
-      const ansiClear = '\x1b[2J\x1b[H';
-      if (process.platform === 'win32') {
-        // On Windows, 'cls' is a shell builtin so emit ANSI clear as a safe
-        // cross-shell fallback instead of attempting to invoke 'cls'.
-        try {
-          process.stdout.write(ansiClear);
-        } catch {
-          // ignore write errors
-        }
-      } else {
-        try {
-          // Ensure the child process writes directly to the terminal by
-          // using stdio: 'inherit'. This lets `clear` emit control sequences
-          // that affect the visible terminal (important for WSL/Windows Terminal).
-          const res = spawnSync('clear', { stdio: 'inherit' });
-          // If spawnSync failed or returned non-zero, fall back to ANSI sequence
-          if (!res || (typeof (res as any).status === 'number' && (res as any).status !== 0) || (res as any).error) {
-            try { process.stdout.write(ansiClear); } catch {}
-          }
-        } catch {
-          // If spawnSync itself throws, fall back to ANSI sequence
-          try { process.stdout.write(ansiClear); } catch {}
-        }
-      }
+    if (!process.stdout.isTTY) return;
+    const ansiClear = '\x1b[2J\x1b[H';
+    try {
+      process.stdout.write(ansiClear);
+    } catch {
+      // best-effort: ignore write errors
     }
   } catch {
-    // best-effort: ignore any unexpected errors
+    // best-effort: ignore unexpected errors
   }
 }
 
