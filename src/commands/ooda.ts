@@ -448,7 +448,7 @@ const runJobCommandImpl = async (job: Job): Promise<RunJobResult> => {
   return legacy as RunJobResult;
 };
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention, clearTerminalIfTTY };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
@@ -592,7 +592,35 @@ export function formatTime(d: Date) {
   return `${hh}:${mm}:${ss}`;
 }
 
+import { spawnSync } from 'node:child_process';
+
+function clearTerminalIfTTY() {
+  // Only attempt to clear in interactive TTY sessions. Keep this fail-safe: any
+  // error from the child process should be caught and ignored so job runs are
+  // not aborted by a clearing failure. Prefer spawnSync to avoid shell
+  // interpretation and make mocking in tests straightforward.
+  try {
+    if (process.stdout.isTTY) {
+      if (process.platform === 'win32') {
+        // Windows commonly uses 'cls' which is a shell builtin; emit ANSI clear
+        // sequence as a safe cross-shell fallback instead of invoking 'cls'.
+        process.stdout.write('\u001b[2J\u001b[0;0H');
+      } else {
+        try {
+          spawnSync('clear');
+        } catch {
+          // best-effort: ignore spawn errors
+        }
+      }
+    }
+  } catch {
+    // best-effort: ignore any unexpected errors
+  }
+}
+
 export function printJobHeader(job: Job) {
+  // Clear the terminal for interactive TTY sessions before printing header
+  clearTerminalIfTTY();
   try {
     const now = new Date();
     const ts = formatTime(now);
