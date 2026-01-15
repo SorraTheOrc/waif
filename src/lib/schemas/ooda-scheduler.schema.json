@@ -38,7 +38,8 @@
               "keep_last": { "type": "integer", "minimum": 1 }
             }
           },
-          "clear_terminal": { "type": "boolean", "default": false }
+          "clear_terminal": { "type": "boolean", "default": false },
+          "catchup_on_start": { "type": "boolean", "default": false }
         }
       }
     }
