@@ -9,7 +9,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 import { printJobHeader } from '../src/commands/ooda.js';
 import * as child from 'node:child_process';
 
-const JOB = { id: 'j1', name: 'job-one', command: 'echo hi' } as any;
+const JOB = { id: 'j1', name: 'job-one', command: 'echo hi', clear_terminal: true } as any;
 
 describe('ooda clear-on-tty behavior', () => {
   let origIsTTY: any;
