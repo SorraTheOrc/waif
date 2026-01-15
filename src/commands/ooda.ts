@@ -694,46 +694,88 @@ export function createOodaCommand() {
 
        // On startup, optionally run one-time catchups for jobs that missed their most-recent run
        // Process sequentially and do not let failures block other jobs.
-       // Use shared helper in src/lib/catchup for computePrevNext
-       const { computePrevNext } = await import('../lib/catchup.js');
+async function maybeRunStartupCatchups() {
+          const now = new Date();
+          const parseCronWithDate = (expr: string, date?: Date) => {
+            const anyParser = cronParser as any;
+            const opts = { strict: false, currentDate: date ?? now };
+            if (typeof anyParser?.parseExpression === 'function') return anyParser.parseExpression(expr, opts);
+            if (typeof anyParser?.parse === 'function') return anyParser.parse(expr, opts);
+            if (typeof anyParser?.default?.parseExpression === 'function') return anyParser.default.parseExpression(expr, opts);
+            if (typeof anyParser?.default?.parse === 'function') return anyParser.default.parse(expr, opts);
+            throw new Error('cron-parser parse function not found');
+          };
 
-       async function maybeRunStartupCatchups() {
-         const now = new Date();
+          for (const id of Object.keys(scheduleEntriesMap)) {
+            const entry = scheduleEntriesMap[id];
+            const job = entry.job as any;
+            if (!job || job.catchup_on_start !== true) continue;
 
-         for (const id of Object.keys(scheduleEntriesMap)) {
-           const entry = scheduleEntriesMap[id];
-           const job = entry.job as any;
-           if (!job || job.catchup_on_start !== true) continue;
+            try {
+              // Create separate iterators for next and prev to avoid mutating shared iterator state
+              let next: Date | null = null;
+              let prev: Date | null = null;
+              try {
+                const iterNext = parseCronWithDate(job.schedule, now);
+                const maybeNext = iterNext.next ? iterNext.next() : null;
+                if (maybeNext) {
+                  if (typeof maybeNext.toDate === 'function') next = maybeNext.toDate();
+                  else if (maybeNext instanceof Date) next = maybeNext;
+                  else if (maybeNext.value && typeof maybeNext.value.toDate === 'function') next = maybeNext.value.toDate();
+                  else if (maybeNext.value && maybeNext.value instanceof Date) next = maybeNext.value;
+                  else next = new Date(String(maybeNext));
+                }
+              } catch (e) {
+                console.debug(`startup catchup: failed to compute next for job ${job.id}: ${String(e)}`);
+                continue;
+              }
 
-           try {
-             const { prev, next } = computePrevNext(job.schedule, now);
-             if (!prev || !next) {
-               console.info(`startup catchup: prev/next unavailable for job ${job.id}; skipping catchup`);
-               continue;
-             }
+              // prev may not be supported by some cron parser versions; skip gracefully
+              try {
+                const iterPrev = parseCronWithDate(job.schedule, now);
+                if (typeof iterPrev.prev === 'function') {
+                  const maybePrev = iterPrev.prev();
+                  if (maybePrev) {
+                    if (typeof maybePrev.toDate === 'function') prev = maybePrev.toDate();
+                    else if (maybePrev instanceof Date) prev = maybePrev;
+                    else if (maybePrev.value && typeof maybePrev.value.toDate === 'function') prev = maybePrev.value.toDate();
+                    else if (maybePrev.value && maybePrev.value instanceof Date) prev = maybePrev.value;
+                    else prev = new Date(String(maybePrev));
+                  }
+                } else {
+                  console.info(`startup catchup: prev() unsupported for job ${job.id}; skipping catchup`);
+                  continue;
+                }
+              } catch (e) {
+                console.info(`startup catchup: unable to compute prev for job ${job.id}; skipping: ${String(e)}`);
+                continue;
+              }
 
-             if (prev.getTime() < now.getTime() && next.getTime() > now.getTime()) {
-               try {
-                 console.info(`startup catchup: running one-time catchup for job ${job.id}, missed run at ${prev.toISOString()}`);
-                 await runJob(entry.job);
-               } catch (e) {
-                 console.warn(`startup catchup: job ${job.id} failed during catchup: ${String(e)}`);
-               } finally {
-                 // Update the scheduled next to the computed next to avoid duplicate runs
-                 if (next) scheduleEntriesMap[id].next = next;
-               }
-             } else {
-               console.debug(`startup catchup: no missed run for job ${job.id} (prev=${prev?.toISOString() ?? 'nil'}, next=${next?.toISOString() ?? 'nil'})`);
-             }
-           } catch (e) {
-             console.warn(`startup catchup: unexpected error for job ${id}: ${String(e)}`);
-           }
-         }
-       }
+              if (prev && next && prev.getTime() < now.getTime() && next.getTime() > now.getTime()) {
+                try {
+                  console.info(`startup catchup: running one-time catchup for job ${job.id}, missed run at ${prev.toISOString()}`);
+                  await runJob(entry.job);
+                } catch (e) {
+                  console.warn(`startup catchup: job ${job.id} failed during catchup: ${String(e)}`);
+                } finally {
+                  // Update the scheduled next to the computed next to avoid duplicate runs
+                  if (next) scheduleEntriesMap[id].next = next;
+                }
+              } else {
+                console.debug(`startup catchup: no missed run for job ${job.id} (prev=${prev?.toISOString() ?? 'nil'}, next=${next?.toISOString() ?? 'nil'})`);
+              }
+            } catch (e) {
+              console.warn(`startup catchup: unexpected error for job ${id}: ${String(e)}`);
+            }
+          }
+        }
+
 
        // Run startup catchups once before entering main loop
        try {
-         await maybeRunStartupCatchups();
+          // Run sequentially and don't block main loop on errors
+          // eslint-disable-next-line no-await-in-loop
+          await maybeRunStartupCatchups();
        } catch (e) {
          console.warn(`startup catchup: failed during execution: ${String(e)}`);
        }
