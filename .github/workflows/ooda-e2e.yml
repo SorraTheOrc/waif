@@ -41,7 +41,10 @@ jobs:
           path: |
             test-artifacts/**
             tests/**/ooda_snapshot_*.jsonl
+            tests/**/ooda*.jsonl
             history/**/ooda_snapshot_*.jsonl
+            history/**/ooda*.jsonl
+            **/ooda*.jsonl
             tests/**/results.json
             **/vitest-results.json
 
