@@ -272,6 +272,11 @@ jobs:
 
 Fields explained:
 
+New job option: `catchup_on_start` (boolean, default: false)
+
+- When `catchup_on_start: true`, the scheduler will run a one-time catch-up if the most-recent scheduled run was missed prior to startup. The scheduler only runs a single catch-up per job and will not re-run catchups on every restart if the job's next run is in the future.
+
+
 - id (required): stable identifier used with `--job <id>` for `run-job`.
 - name (optional): human-friendly name shown in logs and snapshots.
 - command (required): the shell command to execute (string). This is run via a shell; treat carefully.

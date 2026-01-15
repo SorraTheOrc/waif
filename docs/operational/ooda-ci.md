@@ -103,6 +103,13 @@ This test:
 
 ## Runner selection (self-hosted vs GH-hosted)
 
+New option: `catchup_on_start`
+
+- If you enable `catchup_on_start` for jobs, the scheduler may execute a one-time run at startup when it detects a missed run. For CI runners and automated environments, prefer leaving `catchup_on_start` disabled unless you explicitly want startup catchups to execute (e.g., recovering missed runs after outages).
+- Catch-ups are run sequentially during scheduler startup.
+- If the cron parser cannot compute a previous occurrence for a schedule, the scheduler will skip catchup for that job and emit an INFO-level log message.
+
+
 - **GH-hosted runners**
   - Simpler and recommended by default.
   - Lower risk of accidentally exposing secrets from shared host state.
