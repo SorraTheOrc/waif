@@ -690,7 +690,54 @@ export function createOodaCommand() {
         }
       };
 
-      initScheduleEntries(cfg.jobs);
+       initScheduleEntries(cfg.jobs);
+
+       // On startup, optionally run one-time catchups for jobs that missed their most-recent run
+       // Process sequentially and do not let failures block other jobs.
+       // Use shared helper in src/lib/catchup for computePrevNext
+       const { computePrevNext } = await import('../lib/catchup.js');
+
+       async function maybeRunStartupCatchups() {
+         const now = new Date();
+
+         for (const id of Object.keys(scheduleEntriesMap)) {
+           const entry = scheduleEntriesMap[id];
+           const job = entry.job as any;
+           if (!job || job.catchup_on_start !== true) continue;
+
+           try {
+             const { prev, next } = computePrevNext(job.schedule, now);
+             if (!prev || !next) {
+               console.info(`startup catchup: prev/next unavailable for job ${job.id}; skipping catchup`);
+               continue;
+             }
+
+             if (prev.getTime() < now.getTime() && next.getTime() > now.getTime()) {
+               try {
+                 console.info(`startup catchup: running one-time catchup for job ${job.id}, missed run at ${prev.toISOString()}`);
+                 await runJob(entry.job);
+               } catch (e) {
+                 console.warn(`startup catchup: job ${job.id} failed during catchup: ${String(e)}`);
+               } finally {
+                 // Update the scheduled next to the computed next to avoid duplicate runs
+                 if (next) scheduleEntriesMap[id].next = next;
+               }
+             } else {
+               console.debug(`startup catchup: no missed run for job ${job.id} (prev=${prev?.toISOString() ?? 'nil'}, next=${next?.toISOString() ?? 'nil'})`);
+             }
+           } catch (e) {
+             console.warn(`startup catchup: unexpected error for job ${id}: ${String(e)}`);
+           }
+         }
+       }
+
+       // Run startup catchups once before entering main loop
+       try {
+         await maybeRunStartupCatchups();
+       } catch (e) {
+         console.warn(`startup catchup: failed during execution: ${String(e)}`);
+       }
+
 
       const snapshotPath = options.log === false ? null : typeof options.log === 'string' ? options.log : path.join('history', 'ooda_snapshot_' + Date.now() + '.jsonl');
 
