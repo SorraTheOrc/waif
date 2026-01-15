@@ -18,6 +18,8 @@ export type RunResult = {
   stderr: string;
   sanitized_output: string;
   durationMs: number;
+  // Whether the sanitizer truncated the output
+  truncated: boolean;
 };
 
 // Minimal helper that runs a shell command and captures output with timeout.
@@ -41,8 +43,11 @@ export async function runJobCommand(job: Job, options?: { timeoutMs?: number; cw
       finished = true;
       clearTimeout(timer);
       const durationMs = Date.now() - start;
-      const sanitized = redactSecrets((capture ? stdout : '') + (stderr ? `\n${stderr}` : ''));
-      wrappedResolve({ exitCode: code, signal, stdout: capture ? stdout : '', stderr, sanitized_output: sanitized, durationMs });
+      const combined = (capture ? stdout : '') + (stderr ? `\n${stderr}` : '');
+      const sanitized = redactSecrets(combined);
+      // detect truncation marker emitted by redactSecrets
+      const truncated = sanitized.includes('[TRUNCATED');
+      wrappedResolve({ exitCode: code, signal, stdout: capture ? stdout : '', stderr, sanitized_output: sanitized, durationMs, truncated });
     };
 
     child.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
