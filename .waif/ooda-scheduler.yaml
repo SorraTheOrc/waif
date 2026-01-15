@@ -1,7 +1,7 @@
 jobs:
   - id: waif-in-progress-30s
     name: Run `waif in-progress` every 30s (operator view)
-    command: "waif-in-progress"
+    command: "waif in-progress"
     schedule: "*/30 * * * * *"
     clear_terminal: true
     capture:
