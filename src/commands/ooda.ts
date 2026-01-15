@@ -783,30 +783,87 @@ async function maybeRunStartupCatchups() {
 
       // Helper: compute previous and next occurrences for a cron expression relative to 'now'
       const computePrevNext = (expr: string, now: Date): { prev?: Date; next?: Date } => {
+        const anyParser = cronParser as any;
+        const parseOpts = { currentDate: now, strict: false };
         try {
-          const anyParser = cronParser as any;
-          const parseOpts = { currentDate: now, strict: false };
+          // Try the preferred parse API paths first
           const iter = (typeof anyParser?.parseExpression === 'function')
             ? anyParser.parseExpression(expr, parseOpts)
             : typeof anyParser?.parse === 'function'
               ? anyParser.parse(expr, parseOpts)
               : typeof anyParser?.default?.parseExpression === 'function'
                 ? anyParser.default.parseExpression(expr, parseOpts)
-                : anyParser.default.parse(expr, parseOpts);
+                : typeof anyParser?.default?.parse === 'function'
+                  ? anyParser.default.parse(expr, parseOpts)
+                  : undefined;
+
           let prev: Date | undefined;
           let next: Date | undefined;
-          try {
-            if (typeof iter.prev === 'function') prev = iter.prev().toDate();
-          } catch {
-            // prev may not be supported or may throw for some expressions
-            prev = undefined;
+
+          if (iter) {
+            // Preferred: use iterator.prev()/next() where available
+            try { if (typeof iter.prev === 'function') prev = iter.prev().toDate(); } catch { prev = undefined; }
+            try { if (typeof iter.next === 'function') next = iter.next().toDate(); } catch { next = undefined; }
+            return { prev, next };
           }
-          try {
-            if (typeof iter.next === 'function') next = iter.next().toDate();
-          } catch {
-            next = undefined;
+        } catch {
+          // fall through to fallback strategy
+        }
+
+        // Fallback: if the library doesn't expose a usable iterator.parseExpression, try to
+        // discover prev by probing earlier times and calling next(), which many implementations
+        // support. This is conservative and bounded.
+        try {
+          const maxLookbackMs = 24 * 60 * 60 * 1000; // 24 hours
+          let lookback = 1000; // start with 1s back
+          let prevCandidate: Date | undefined;
+          while (lookback <= maxLookbackMs) {
+            try {
+              const probeDate = new Date(now.getTime() - lookback);
+              const probeOpts = { currentDate: probeDate, strict: false };
+              const anyParser2 = cronParser as any;
+              const iter2 = typeof anyParser2?.parseExpression === 'function'
+                ? anyParser2.parseExpression(expr, probeOpts)
+                : typeof anyParser2?.parse === 'function'
+                  ? anyParser2.parse(expr, probeOpts)
+                  : typeof anyParser2?.default?.parseExpression === 'function'
+                    ? anyParser2.default.parseExpression(expr, probeOpts)
+                    : typeof anyParser2?.default?.parse === 'function'
+                      ? anyParser2.default.parse(expr, probeOpts)
+                      : undefined;
+              if (!iter2) break;
+              // next() should return the next occurrence after probeDate
+              if (typeof iter2.next === 'function') {
+                const candidate = iter2.next().toDate();
+                if (candidate.getTime() <= now.getTime()) {
+                  prevCandidate = candidate;
+                  break;
+                }
+              }
+            } catch {
+              // try a larger lookback
+            }
+            lookback *= 2;
           }
-          return { prev, next };
+
+          // compute next normally (from now)
+          try {
+            const anyParser3 = cronParser as any;
+            const iter3 = typeof anyParser3?.parseExpression === 'function'
+              ? anyParser3.parseExpression(expr, { currentDate: now, strict: false })
+              : typeof anyParser3?.parse === 'function'
+                ? anyParser3.parse(expr, { currentDate: now, strict: false })
+                : typeof anyParser3?.default?.parseExpression === 'function'
+                  ? anyParser3.default.parseExpression(expr, { currentDate: now, strict: false })
+                  : typeof anyParser3?.default?.parse === 'function'
+                    ? anyParser3.default.parse(expr, { currentDate: now, strict: false })
+                    : undefined;
+            let nextCandidate: Date | undefined;
+            if (iter3 && typeof iter3.next === 'function') nextCandidate = iter3.next().toDate();
+            return { prev: prevCandidate, next: nextCandidate };
+          } catch {
+            return { prev: prevCandidate };
+          }
         } catch {
           return {};
         }
