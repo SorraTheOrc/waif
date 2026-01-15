@@ -877,7 +877,26 @@ async function maybeRunStartupCatchups() {
           const job = entry.job;
           if (!job || (job as any).catchup_on_start !== true) continue;
           try {
-            const { prev, next } = computePrevNext(job.schedule, now);
+            // Prefer using the live iterator if it supports prev(), then fall back to computePrevNext
+            let prev: Date | undefined;
+            let next: Date | undefined;
+            try {
+              if (entry.iter && typeof entry.iter.prev === 'function') {
+                try { prev = entry.iter.prev().toDate(); } catch { prev = undefined; }
+                if (entry.next) next = entry.next;
+              }
+            } catch {
+              // ignore iterator prev errors
+            }
+
+            if (!prev || !next) {
+              const pn = computePrevNext(job.schedule, now);
+              prev = prev ?? pn.prev;
+              next = next ?? pn.next;
+            }
+
+            console.info(`[ooda] catchup_on_start: job ${job.id} prev=${prev ? prev.toISOString() : 'nil'} next=${next ? next.toISOString() : 'nil'}`);
+
             if (prev && next && prev.getTime() < now.getTime() && next.getTime() > now.getTime()) {
               // Missed the most-recent scheduled run — run once now (sequentially)
               try {
@@ -895,9 +914,13 @@ async function maybeRunStartupCatchups() {
                     ? anyParser.parse(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false })
                     : typeof anyParser?.default?.parseExpression === 'function'
                       ? anyParser.default.parseExpression(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false })
-                      : anyParser.default.parse(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false });
-                entry.iter = newIter;
-                if (typeof newIter.next === 'function') entry.next = newIter.next().toDate();
+                      : typeof anyParser?.default?.parse === 'function'
+                        ? anyParser.default.parse(job.schedule, { currentDate: new Date(now.getTime() + 1), strict: false })
+                        : undefined;
+                if (newIter) {
+                  entry.iter = newIter;
+                  if (typeof newIter.next === 'function') entry.next = newIter.next().toDate();
+                }
               } catch {
                 // ignore iterator advance failures
               }
