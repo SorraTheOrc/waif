@@ -596,10 +596,11 @@ import { spawnSync } from 'node:child_process';
 
 function clearTerminalIfTTY() {
   // Only attempt to clear in interactive TTY sessions. Gate on isTTY so CI
-  // and non-interactive log capture are not disturbed. Prefer a POSIX
-  // `spawnSync('clear')` for interactive terminals and fall back to the
-  // ANSI clear sequence if spawning fails or on Windows where 'cls' is a
-  // shell builtin. All errors are caught and ignored (best-effort only).
+  // and non-interactive log capture are not disturbed. Attempt to run the
+  // external `clear` command with stdio inherited so its output reaches the
+  // parent terminal (this fixes WSL/terminal cases where piping the output
+  // would not affect the visible screen). If that fails, fall back to the
+  // ANSI clear sequence. All errors are caught and ignored (best-effort only).
   try {
     if (process.stdout.isTTY) {
       const ansiClear = '\x1b[2J\x1b[H';
@@ -613,7 +614,10 @@ function clearTerminalIfTTY() {
         }
       } else {
         try {
-          const res = spawnSync('clear');
+          // Ensure the child process writes directly to the terminal by
+          // using stdio: 'inherit'. This lets `clear` emit control sequences
+          // that affect the visible terminal (important for WSL/Windows Terminal).
+          const res = spawnSync('clear', { stdio: 'inherit' });
           // If spawnSync failed or returned non-zero, fall back to ANSI sequence
           if (!res || (typeof (res as any).status === 'number' && (res as any).status !== 0) || (res as any).error) {
             try { process.stdout.write(ansiClear); } catch {}
