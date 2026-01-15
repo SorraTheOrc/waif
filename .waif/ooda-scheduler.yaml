@@ -9,4 +9,5 @@ jobs:
     timeout_seconds: 10
     retention:
       keep_last: 10
+    catchup_on_start: true
 
