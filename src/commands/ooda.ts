@@ -634,9 +634,13 @@ function clearTerminalIfTTY() {
 }
 
 export function printJobHeader(job: Job) {
-  // Clear the terminal for interactive TTY sessions before printing header
-  clearTerminalIfTTY();
   try {
+    // Only clear when the job explicitly opts in via config and we're in an interactive TTY.
+    // Default behavior is no clearing so CI/log capture remains stable. See schema: clear_terminal (default false).
+    if ((job as any).clear_terminal === true && process.stdout.isTTY) {
+      clearTerminalIfTTY();
+    }
+
     const now = new Date();
     const ts = formatTime(now);
     const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;
