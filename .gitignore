@@ -1,4 +1,4 @@
- .npm-global/
+.npm-global/
 node_modules/
 dist/
 
@@ -14,4 +14,6 @@ __pycache__/
 .opencode/logs
 .opencode/tmp
 
-
+# AI planning documents (ephemeral)
+history/
+history/*.jsonl
