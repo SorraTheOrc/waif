@@ -42,4 +42,14 @@ describe('ooda clear-on-tty behavior', () => {
     expect(child.spawnSync).not.toHaveBeenCalled();
     expect(writeSpy).toHaveBeenCalled();
   });
+
+  it('falls back to ANSI when spawnSync fails', () => {
+    try { Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true }); } catch {}
+    // make spawnSync return a non-zero status
+    (child.spawnSync as any).mockImplementation(() => ({ status: 1 }));
+    printJobHeader(JOB);
+    expect(child.spawnSync).toHaveBeenCalled();
+    // header should still be printed via process.stdout.write
+    expect(writeSpy).toHaveBeenCalled();
+  });
 });

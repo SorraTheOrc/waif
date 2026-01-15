@@ -595,21 +595,32 @@ export function formatTime(d: Date) {
 import { spawnSync } from 'node:child_process';
 
 function clearTerminalIfTTY() {
-  // Only attempt to clear in interactive TTY sessions. Keep this fail-safe: any
-  // error from the child process should be caught and ignored so job runs are
-  // not aborted by a clearing failure. Prefer spawnSync to avoid shell
-  // interpretation and make mocking in tests straightforward.
+  // Only attempt to clear in interactive TTY sessions. Gate on isTTY so CI
+  // and non-interactive log capture are not disturbed. Prefer a POSIX
+  // `spawnSync('clear')` for interactive terminals and fall back to the
+  // ANSI clear sequence if spawning fails or on Windows where 'cls' is a
+  // shell builtin. All errors are caught and ignored (best-effort only).
   try {
     if (process.stdout.isTTY) {
+      const ansiClear = '\x1b[2J\x1b[H';
       if (process.platform === 'win32') {
-        // Windows commonly uses 'cls' which is a shell builtin; emit ANSI clear
-        // sequence as a safe cross-shell fallback instead of invoking 'cls'.
-        process.stdout.write('\u001b[2J\u001b[0;0H');
+        // On Windows, 'cls' is a shell builtin so emit ANSI clear as a safe
+        // cross-shell fallback instead of attempting to invoke 'cls'.
+        try {
+          process.stdout.write(ansiClear);
+        } catch {
+          // ignore write errors
+        }
       } else {
         try {
-          spawnSync('clear');
+          const res = spawnSync('clear');
+          // If spawnSync failed or returned non-zero, fall back to ANSI sequence
+          if (!res || (typeof (res as any).status === 'number' && (res as any).status !== 0) || (res as any).error) {
+            try { process.stdout.write(ansiClear); } catch {}
+          }
         } catch {
-          // best-effort: ignore spawn errors
+          // If spawnSync itself throws, fall back to ANSI sequence
+          try { process.stdout.write(ansiClear); } catch {}
         }
       }
     }
