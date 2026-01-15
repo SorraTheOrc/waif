@@ -1,5 +1,5 @@
-import { appendFileSync, readFileSync, readdirSync, statSync, writeFileSync } from 'fs';
-import { join, dirname } from 'path';
+import { appendFileSync, readFileSync, writeFileSync } from 'fs';
+import { join } from 'path';
 
 export type Snapshot = {
   time: string;
@@ -8,26 +8,38 @@ export type Snapshot = {
   exit_code: number | null;
   sanitized_output: string;
   summary?: string;
+  // Metadata fields (may be populated by writer when missing)
+  durationMs?: number | null;
+  metadata_version?: number;
+  sanitized?: boolean;
+  truncated?: boolean;
 };
 
 export function writeJobSnapshot(dir: string, snapshot: Snapshot, options?: { retention?: number }) {
   const retention = options?.retention ?? 10;
   const outDir = dir || 'history';
-  // Ensure directory exists
+  // Ensure directory exists (create by touching a file or mkdir)
   try {
     writeFileSync(join(outDir, '.keep'), '');
   } catch (e) {
     try {
-      // attempt to create the directory by writing a file in it
       writeFileSync(join(outDir, '.keep'), '', { flag: 'w' });
     } catch (e2) {
-      // try to create using mkdir fallback
       try { require('fs').mkdirSync(outDir, { recursive: true }); } catch (e3) {}
     }
   }
 
   const file = join(outDir, `${snapshot.job_id}.jsonl`);
-  const line = JSON.stringify(snapshot) + '\n';
+
+  // Enrich snapshot with metadata fields if missing
+  const enriched = Object.assign({}, snapshot, {
+    metadata_version: snapshot.metadata_version ?? 1,
+    durationMs: snapshot.durationMs ?? null,
+    sanitized: typeof snapshot.sanitized === 'boolean' ? snapshot.sanitized : true,
+    truncated: typeof snapshot.truncated === 'boolean' ? snapshot.truncated : false,
+  });
+
+  const line = JSON.stringify(enriched) + '\n';
   appendFileSync(file, line, { encoding: 'utf8' });
 
   // Enforce retention: keep last `retention` lines
