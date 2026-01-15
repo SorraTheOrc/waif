@@ -1,83 +1,72 @@
-# OODA (Cron-style scheduler)
+# OODA CLI
 
-OODA provides a cron-style scheduler plus a deterministic one-shot job runner.
+OODA is WAIF’s lightweight job scheduler and one-shot runner.
 
-- Operator flow: `waif ooda schedule …`
-- Developer/CI flow: `waif ooda run-job …`
+## Quick examples
 
-See also: `docs/dev/prd-ooda-loop.md`.
+```bash
+# Default behavior: runs the scheduler subcommand
+waif ooda
 
-## Quickstart
+# Run the scheduler explicitly
+waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 60
 
-> Note on safety defaults: command execution is potentially dangerous. Keep `capture` opt-in, prefer short per-job timeouts, and run in a restricted environment (unprivileged user / container) for anything high-risk.
+# Run one job once
+waif ooda run-job --job my-job-id
+```
 
-### 1) Create a config
+## Default behavior (no subcommand)
 
-Create `.waif/ooda-scheduler.yaml`:
+Running `waif ooda` with **no** subcommand defaults to running the scheduler.
+
+- The OODA root action now executes `schedulerAction`.
+- Existing subcommands (for example, `scheduler` and `run-job`) are unchanged.
+
+Change implemented in PR: https://github.com/SorraTheOrc/waif/pull/125
+
+## JSON mode (`--json`)
+
+If you pass the global `--json` flag, `scheduler` and `run-job` emit JSON snapshots rather than pretty console output.
+
+Examples:
+
+```bash
+waif --json ooda
+waif --json ooda scheduler --config .waif/ooda-scheduler.yaml --interval 60
+waif --json ooda run-job --job my-job-id
+```
+
+## Scheduler behavior and testing guidance
+
+The scheduler is intended to run as a **long-lived loop**.
+
+- For tests and CI, prefer `waif ooda run-job --job <id>` (deterministic, exits).
+- If you need scheduler-like coverage in tests, refactor logic so scheduling decisions and job execution can be unit-tested without sleeping/looping.
+- A future `--once` / `--dry-run` flag may be added to make loop-based behavior easier to validate.
+
+## Configuration file
+
+The conventional default config location is:
+
+- `.waif/ooda-scheduler.yaml`
+
+Minimal example (for documentation only):
 
 ```yaml
 jobs:
-  - id: daily-health
-    name: Daily health check
-    command: "echo ok"
-    schedule: "0 7 * * *"
-    capture: [stdout]
-    redact: true
-    timeout_seconds: 30
-    retention:
-      keep_last: 10
+  - id: my-job-id
+    name: Example job
+    schedule: "*/5 * * * *"
+    command: "echo hello"
 ```
 
-Config validation references:
+## Acceptance criteria (wf-dzmc)
 
-- Loader/validation: `src/lib/config.ts`
-- JSON schema: `src/lib/schemas/ooda-scheduler.schema.json`
-
-### 2) Run one job now (deterministic)
-
-Human mode (operator interactive run):
-
-```bash
-waif ooda schedule run daily-health
-```
-
-CI/compat mode (deterministic one-shot runner):
-
-```bash
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
-```
-
-Write a snapshot JSONL line (recommended for CI evidence):
-
-```bash
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log history/ooda_snapshot.jsonl
-```
-
-Machine-readable run (top-level `--json`):
-
-```bash
-waif --json ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
-```
-
-### 3) Start scheduling
-
-Start the scheduler:
-
-```bash
-waif ooda schedule start
-```
-
-Check status:
-
-```bash
-waif ooda schedule status
-```
-
-Stop scheduling:
-
-```bash
-waif ooda schedule stop
-```
+- [ ] Doc explains that `waif ooda` defaults to `scheduler`.
+- [ ] Doc includes examples for `waif ooda`, `waif ooda scheduler ...`, and `waif ooda run-job ...`.
+- [ ] Doc notes JSON output behavior under global `--json`.
+- [ ] Doc warns scheduler is long-lived and provides testing/CI guidance.
+- [ ] Doc links PR https://github.com/SorraTheOrc/waif/pull/125.
 
 ## Scheduling: run a configured job by id
 

@@ -636,14 +636,8 @@ export function createOodaCommand() {
 
   // helper to print captured output to console in non-json runs
 
-  cmd
-    .command('scheduler')
-    .description('Run the OODA scheduler loop')
-    .option('--config <path>', 'Path to ooda scheduler config', '.waif/ooda-scheduler.yaml')
-    .option('--interval <seconds>', 'Poll interval in seconds', (v) => parseInt(v, 10), 30)
-    .option('--log <path>', 'Snapshot log path (default history/ooda_snapshot_<ts>.jsonl)')
-    .action(async (options, command) => {
-      const jsonOutput = Boolean(options.json ?? command.parent?.parent?.getOptionValue('json'));
+  const schedulerAction = async (options: any, command?: any) => {
+      const jsonOutput = Boolean(options.json ?? command?.parent?.parent?.getOptionValue?.('json'));
       const configPath = path.resolve(options.config ?? '.waif/ooda-scheduler.yaml');
       const interval = Number(options.interval ?? 30) || 30;
       const cfg = await loadConfig(configPath);
@@ -753,10 +747,24 @@ export function createOodaCommand() {
         }
         await new Promise((resolve) => setTimeout(resolve, interval * 1000));
       }
-    });
+    };
+
+  cmd
+    .command('scheduler')
+    .description('Run the OODA scheduler loop')
+    .option('--config <path>', 'Path to ooda scheduler config', '.waif/ooda-scheduler.yaml')
+    .option('--interval <seconds>', 'Poll interval in seconds', (v) => parseInt(v, 10), 30)
+    .option('--log <path>', 'Snapshot log path (default history/ooda_snapshot_<ts>.jsonl)')
+    .action(schedulerAction);
+
+  // make the top-level `waif ooda` run the scheduler by default when no subcommand is provided
+  cmd.action(async (options, command) => {
+    await schedulerAction(options, command);
+  });
 
   cmd
     .command('run-job')
+
     .description('Run a configured job once by id (debug)')
     .option('--config <path>', 'Path to ooda scheduler config', '.waif/ooda-scheduler.yaml')
     .requiredOption('--job <id>', 'Job id to run')
