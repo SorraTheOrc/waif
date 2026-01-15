@@ -3,6 +3,7 @@ jobs:
     name: Run `waif in-progress` every 30s (operator view)
     command: "waif in-progress"
     schedule: "*/30 * * * * *"
+    clear_terminal: true
     capture:
       - stdout
     timeout_seconds: 10
