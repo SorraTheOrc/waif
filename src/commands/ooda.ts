@@ -1,5 +1,6 @@
 import { Command } from 'commander';
-import { readFileSync, createReadStream, appendFileSync, mkdirSync } from 'node:fs';
+import { readFileSync, createReadStream } from 'node:fs';
+import { appendFileSync as nodeAppendFileSync, mkdirSync as nodeMkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import path from 'node:path';
@@ -9,6 +10,7 @@ import { loadConfig, type Job } from '../lib/config.js';
 import { runJobCommand as runnerRunJobCommand } from '../lib/runner.js';
 import { redactSecrets } from '../lib/redact.js';
 import { computePrevNext } from '../lib/catchup.js';
+import { appendSnapshotFile } from '../lib/snapshots.js';
 
 
 interface PaneRow {
@@ -449,13 +451,13 @@ const runJobCommandImpl = async (job: Job): Promise<RunJobResult> => {
   return legacy as RunJobResult;
 };
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, writeJobSnapshot, enforceRetention, clearTerminalIfTTY };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, clearTerminalIfTTY };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
   try {
     const dir = path.dirname(logPath);
-    if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
+    if (dir && dir !== '.') nodeMkdirSync(dir, { recursive: true });
     const time = new Date().toISOString();
     for (const r of rows) {
       const snapshot = {
@@ -465,7 +467,7 @@ export function writeSnapshots(logPath: string, rows: PaneRow[]) {
         title: redactSecrets(String(r.title)),
         reason: redactSecrets(String(r.reason)),
       };
-      appendFileSync(logPath, JSON.stringify(snapshot) + '\n', 'utf8');
+      nodeAppendFileSync(logPath, JSON.stringify(snapshot) + '\n', 'utf8');
     }
   } catch (e) {
     // best-effort: do not throw from logging
@@ -537,21 +539,18 @@ export function writeJobSnapshot(
   redact = false) {
   if (!filePath) return;
   try {
-    const dir = path.dirname(filePath);
-    if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
-    const time = new Date().toISOString();
-    const sanitize = (val?: string) => (val && redact ? redactSecrets(val) : val);
     const snapshot: Record<string, unknown> = {
-      time,
+      time: new Date().toISOString(),
       job_id: job.id,
       name: job.name,
       command: job.command,
       status,
       exit_code: code,
+      stdout: typeof stdout === 'string' ? stdout : undefined,
+      stderr: typeof stderr === 'string' ? stderr : undefined,
     };
-    if (typeof stdout === 'string') snapshot.stdout = sanitize(stdout);
-    if (typeof stderr === 'string') snapshot.stderr = sanitize(stderr);
-    appendFileSync(filePath, JSON.stringify(snapshot) + '\n', 'utf8');
+    // Delegate to shared snapshots helper which handles redaction and retention
+    appendSnapshotFile(filePath, snapshot as any, { retention: job.retention?.keep_last });
   } catch (e) {
     // best-effort
   }
@@ -562,10 +561,11 @@ export function enforceRetention(filePath: string, keepLast?: number) {
   try {
     const content = readFileSync(filePath, 'utf8');
     const lines = content.split(/\r?\n/).filter((l) => l.trim().length > 0);
-    const trimmed = lines.slice(Math.max(0, lines.length - keepLast));
+    if (lines.length <= keepLast) return;
+    const keep = lines.slice(-keepLast);
     const dir = path.dirname(filePath);
-    if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
-    require('node:fs').writeFileSync(filePath, trimmed.map((l) => `${l}\n`).join(''), 'utf8');
+    if (dir && dir !== '.') nodeMkdirSync(dir, { recursive: true });
+    require('node:fs').writeFileSync(filePath, keep.map((l) => `${l}\n`).join(''), 'utf8');
   } catch (e) {
     // best-effort
   }
