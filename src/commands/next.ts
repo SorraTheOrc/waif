@@ -83,6 +83,40 @@ function runBd(args: string[], timeout = 30000): string {
   return runSpawn('bd', args, timeout).stdout;
 }
 
+function startStatus(message: string) {
+  // Write ephemeral status to stderr with newline so it stays visible.
+  // Use stderr to avoid polluting stdout (JSON output).
+  if (!process.stderr.isTTY) return false;
+  if (process.env.WAIF_NO_STATUS) return false;
+  try {
+    process.stderr.write(`${message.trim()}\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearStatus() {
+  // No-op: status messages stay visible (no cleanup = no UI jump).
+  // Just return true/false to indicate whether status was shown.
+}
+
+function maybeSyncBeads(verbose: boolean) {
+  const override = process.env.WAIF_BD_SYNC;
+  if (override && override.toLowerCase() === '0') return;
+
+  if (!isCliAvailable('bd')) return;
+
+  const printed = startStatus('Syncing beads...');
+  try {
+    runBd(['sync'], 30_000);
+  } catch (e) {
+    if (verbose) process.stderr.write(`[debug] bd sync failed (continuing): ${(e as Error).message}\n`);
+  } finally {
+    if (printed) clearStatus();
+  }
+}
+
 
 function runBv(args: string[], timeout = 30000): string {
   return runSpawn('bv', args, timeout).stdout;
@@ -216,7 +250,7 @@ function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean) 
     return a.issue.id.localeCompare(b.issue.id);
   });
   if (verbose) {
-    scored.slice(0, Math.min(5, n)).forEach((s, idx) => {
+    scored.slice(0, Math.min(5, n)).forEach((s: { issue: Issue; score: number; rationale: string }, idx: number) => {
       process.stderr.write(`[debug] rank ${idx + 1}: ${s.issue.id} score=${s.score} (${s.rationale})\n`);
     });
   }
@@ -240,6 +274,9 @@ export function createNextCommand() {
       const n = numberRaw ? Math.max(1, parseInt(String(numberRaw), 10) || 1) : 1;
       const assignee = typeof options.assignee === 'string' ? options.assignee.trim() : undefined;
 
+      // Keep local bd state in sync before selecting next work.
+      maybeSyncBeads(verbose);
+
       const { issues, source } = loadIssues(verbose);
       const candidateIssues = assignee
         ? issues.filter((issue) => (issue.assignee ?? '').trim() === assignee)
@@ -249,8 +286,15 @@ export function createNextCommand() {
         throw new CliError(`No eligible issues found for assignee "${assignee}"`, 1);
       }
 
+      const printedReview = startStatus('Reviewing dependencies...');
       const bv = loadBvScores(verbose);
-      const selected = selectTopN(candidateIssues, bv, n, verbose);
+      const printedSelect = startStatus('Selecting next issue...');
+      let selected: any;
+      try {
+        selected = selectTopN(candidateIssues, bv, n, verbose);
+      } finally {
+        if (printedReview || printedSelect) clearStatus();
+      }
 
       // If search provided, re-rank selected candidates by fuzzy match
       let finalSelection = selected;
@@ -297,7 +341,7 @@ export function createNextCommand() {
             if (b.originalScore !== a.originalScore) return b.originalScore - a.originalScore;
             return a.issue.id.localeCompare(b.issue.id);
           });
-          finalSelection = ranked.map((r) => ({ issue: r.issue, score: r.adjustedScore, rationale: r.rationale, metadata: r.metadata }));
+          finalSelection = ranked.map((r: Ranked) => ({ issue: r.issue, score: r.adjustedScore, rationale: r.rationale, metadata: r.metadata }));
           searchMatched = true;
         }
       }
@@ -312,13 +356,13 @@ export function createNextCommand() {
       }
 
       if (jsonOutput) {
-        const payload = finalSelection.map((s, idx) => ({ ...s.issue, waif: { score: s.score, rationale: s.rationale, rank: idx + 1, metadata: { ...s.metadata, issuesSource: source, bvSource: bv.source } } }));
+        const payload = finalSelection.map((s: { issue: Issue; score?: number; rationale?: string; metadata?: Record<string, unknown> }, idx: number) => ({ ...s.issue, waif: { score: s.score, rationale: s.rationale, rank: idx + 1, metadata: { ...s.metadata, issuesSource: source, bvSource: bv.source } } }));
         emitJson(payload.length === 1 ? payload[0] : payload);
         return;
       }
 
       // Human output: render a table with up to n rows, then show details for the first
-      const recommendedIssues = finalSelection.map((s) => s.issue);
+      const recommendedIssues = finalSelection.map((s: { issue: Issue }) => s.issue);
       // When search applied and matched, show only the chosen first item; otherwise show full selection
       const displayIssues = (searchApplied && searchMatched && finalSelection.length > 0)
         ? [finalSelection[0].issue]
@@ -345,11 +389,14 @@ export function createNextCommand() {
       if (finalSelection.length > 0) {
         const top = finalSelection[0];
         if (isCliAvailable('bd')) {
+          const printedDetails = startStatus('Fetching details...');
           try {
             const shown = runBd(['show', top.issue.id]);
+            if (printedDetails) clearStatus();
             logStdout(shown.trim());
             return;
           } catch (e) {
+            if (printedDetails) clearStatus();
             if (verbose) process.stderr.write(`[debug] bd show failed: ${(e as Error).message}\n`);
           }
         }
