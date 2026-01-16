@@ -12,10 +12,6 @@ function gitStatus(): string {
   return out.stdout;
 }
 
-function isWorkingTreeClean(): boolean {
-  const status = gitStatus();
-  return status.trim() === '';
-}
 
 function runWaifInProgressJson(): string | null {
   try {
