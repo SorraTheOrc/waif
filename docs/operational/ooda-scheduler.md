@@ -6,6 +6,7 @@ Related docs:
 
 - CLI reference: [`docs/commands/ooda.md`](../commands/ooda.md)
 - Usage quickstart: [`docs/usage/ooda.md`](../usage/ooda.md)
+- Snapshots (JSONL, retention, permissions): [`docs/operational/ooda-snapshots.md`](./ooda-snapshots.md)
 - CI/E2E: [`docs/operational/ooda-ci.md`](./ooda-ci.md) and [`.github/workflows/ooda-e2e.yml`](../../.github/workflows/ooda-e2e.yml)
 
 ## CLI commands (operator surface)

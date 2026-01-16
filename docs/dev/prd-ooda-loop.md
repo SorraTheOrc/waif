@@ -123,66 +123,156 @@ jobs:
     schedule: "0 7 * * *"
 ```
 
-## Snapshot logging (JSONL)
+## Snapshot Persistence & Redaction
+
+This section defines the canonical snapshot persistence format and the operator expectations for redaction and retention.
 
 ### Snapshot destination
 
-Scheduler and run-job can append snapshots to a JSONL file. Exact wiring is implemented in the OODA command layer; this PRD defines the canonical record shape and operational expectations.
+Both `waif ooda run-job` and `waif ooda scheduler` can append snapshots to a JSONL file.
 
-### Single-line example
+- Use `--log <path>` to choose an explicit snapshot file.
+- If `--log` is omitted, snapshots are appended to a default under `history/` (typically `history/<job-id>.jsonl`).
 
-```json
-{"time":"2026-01-12T12:34:56.789Z","job_id":"daily-health","name":"Daily health check","command":"echo ok","status":"success","exit_code":0,"stdout":"ok\n"}
+CLI examples:
+
+```bash
+# Run one job once and append a snapshot line
+waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log
+
+# Run one job once and write snapshots to a custom file
+waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log /var/log/waif/ooda.jsonl
+
+# Run the long-lived scheduler and append snapshots
+waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log
 ```
 
-### Fields
+Notes:
 
-Per `src/commands/ooda.ts` (`writeJobSnapshot`), each JSONL line currently includes:
+- `--log` with no path uses the default location.
+- Snapshot files are JSONL (one JSON object per line). They are safe to `tail -f` and easy to ingest.
 
-- `time` (string, ISO-8601): snapshot timestamp
-- `job_id` (string): job id
-- `name` (string): job name
-- `command` (string): executed command string
-- `status` (string): `success | failure | timeout`
-- `exit_code` (number|null): exit code
-- `stdout` (string, optional): captured stdout (sanitized if `job.redact: true`)
-- `stderr` (string, optional): captured stderr (sanitized if `job.redact: true`)
+### Snapshot JSONL record shape (example)
 
-Fields this PRD calls out as desirable but **not currently present** in the snapshot line (follow-ups):
+A single snapshot line (formatted here for readability):
 
-- `timestamp` (alias of `time`)
-- `id/name` duplication (it includes `job_id` and `name` already)
-- `summary` (short)
-- explicit `truncated`/`sanitized` flags
+```json
+{
+  "time": "2026-01-12T12:34:56.789Z",
+  "job_id": "daily-health",
+  "name": "Daily health check",
+  "command": "./scripts/health-check.sh",
+  "status": "success",
+  "exit_code": 0,
+  "stdout": "ok\n",
+  "stderr": "",
+  "sanitized_output": "ok\n",
+  "summary": "ok",
+  "durationMs": 12,
+  "metadata_version": 1,
+  "sanitized": true,
+  "truncated": false
+}
+```
+
+Field notes (stable intent):
+
+- `time`: ISO-8601 timestamp when the run completed.
+- `job_id`, `name`, `command`: job identity and executed command.
+- `status`: `success | failure | timeout`.
+- `exit_code`: numeric exit code, or `null` if not available.
+- `stdout` / `stderr`: captured streams (present only when capture is enabled).
+- `sanitized_output`: combined captured output after redaction/truncation (when available).
+- `summary`: short operator-friendly summary (when available).
+- `durationMs`: elapsed wall time in milliseconds.
+- `metadata_version`: snapshot schema version marker.
+- `sanitized`: whether redaction was applied.
+- `truncated`: whether output was truncated.
 
 Implementation references:
 
-- Snapshot writer: `src/commands/ooda.ts` (`writeJobSnapshot`, `enforceRetention`)
-- Alternate snapshot helper type (not used by CLI snapshot format): `src/lib/snapshots.ts`
+- Snapshot write/retention enforcement: `src/commands/ooda.ts`.
 
-## Retention
+### Redaction and truncation
 
-### Defaults
+Redaction is applied to captured output when `job.redact: true`.
 
-- If `retention.keep_last` is **unset**, do not prune the snapshot file (append-only).
-- If `retention.keep_last` is set, keep the **last N non-empty lines** for that job’s snapshot log file.
+- Implementation: reuse `src/lib/redact.ts`.
+- Redaction is best-effort and is not a security boundary.
 
-### Retention config example
+Examples:
+
+- Token-like values are replaced before printing and before persisting snapshots.
+
+  Input:
+
+  ```
+  Authorization: sk-live-abc123
+  ```
+
+  Persisted (example):
+
+  ```
+  Authorization: sk-REDACTED
+  ```
+
+- Very large outputs are truncated, and the truncation is explicitly marked:
+
+  Persisted (example):
+
+  ```
+  <first part of output>
+  [TRUNCATED 18421 chars]
+  ```
+
+### Retention policy
+
+Retention is configured per job, and enforced after a snapshot is appended.
+
+- Config path: `jobs[].retention.keep_last`
+- Enforcement: keep the last `N` non-empty JSONL lines in the snapshot file; drop older lines.
+
+Recommended operator policy:
+
+- Default: **keep_last = 100** per job.
+- Note: the snapshot library implementation may default to a lower number (currently 10); operators should explicitly set `jobs[].retention.keep_last` to the policy value in `.waif/ooda-scheduler.yaml`.
+
+Example:
 
 ```yaml
 jobs:
   - id: daily-health
     name: Daily health check
-    command: "echo ok"
+    command: "./scripts/health-check.sh"
     schedule: "0 7 * * *"
     retention:
-      keep_last: 10
+      keep_last: 100
 ```
 
-Operational guidance:
+### Migration notes (legacy tmux/probe removal)
 
-- Use retention in CI to prevent snapshot logs from growing without bound.
-- Use per-job snapshot files for high-volume jobs to reduce contention.
+Before removing legacy tmux/probe-based mechanisms, validate the integrated snapshots and retention end-to-end.
+
+Recommended acceptance checklist:
+
+1. **Unit tests** pass (snapshot writer + retention behavior).
+2. **E2E** test validates:
+   - a snapshot line is written for `run-job`
+   - outputs are sanitized/truncated as expected
+   - `keep_last` is enforced
+3. **Manual operator verification**:
+   - run `waif ooda run-job --config .waif/ooda-scheduler.yaml --job <id> --log`
+   - confirm `history/<job-id>.jsonl` (or custom `--log`) exists and is append-only
+   - confirm file permissions are appropriate for your environment (see operator doc)
+
+Related docs:
+
+- Operator guide: `docs/operational/ooda-scheduler.md`
+- CI guidance: `docs/operational/ooda-ci.md`
+
+## Retention
+
+See **Snapshot Persistence & Redaction → Retention policy** for the canonical retention definition and recommended defaults.
 
 ## Safety-by-default (recommended)
 
@@ -194,6 +284,8 @@ Operational guidance:
 - **Use a containerized sandbox** for high-risk jobs (network + filesystem isolation).
 
 ## Safety, redaction, and operator guidance
+
+See also: `docs/operational/ooda-snapshots.md` for a concise operator runbook-style reference.
 
 - **Treat the config as code.** `job.command` is executed via a shell; unreviewed configs can execute arbitrary commands.
 - Prefer using `env:` for secrets rather than embedding secrets into `command`.
