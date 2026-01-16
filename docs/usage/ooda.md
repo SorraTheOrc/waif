@@ -20,7 +20,7 @@ waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log histo
 waif ooda run-job --job my-job-id --config .waif/ooda-scheduler.yaml --log history/ooda_snapshot.jsonl --json
 ```
 
-Operator guide (config, snapshots, retention): [`docs/operational/ooda-scheduler.md`](../operational/ooda-scheduler.md)
+Operator guide (config, snapshots, retention, runner behavior): [`docs/operational/ooda-scheduler.md`](../operational/ooda-scheduler.md)
 
 ## Default behavior (no subcommand)
 
@@ -76,27 +76,6 @@ jobs:
 - [ ] Doc links PR https://github.com/SorraTheOrc/waif/pull/125.
 
 ## Scheduling: run a configured job by id
-
-### New job option: `catchup_on_start`
-
-New option: `catchup_on_start` (boolean, default: false)
-
-- When set to `true` for a job, the scheduler will check on startup whether the job's most-recent scheduled run time was missed. If so, it will execute the job once immediately as a one-time "catch-up" run.
-- Catch-up runs are executed sequentially (one at a time) during startup to avoid overloading the system.
-- If the cron parser cannot compute a previous occurrence for a schedule, the scheduler will skip catchup for that job and emit an INFO-level log message.
-
-Example job entry:
-
-```yaml
-jobs:
-  - id: example
-    name: Example job
-    command: "echo hi"
-    schedule: "*/5 * * * *"
-    catchup_on_start: true
-```
-
-
 
 Run a single configured job by id (operator-friendly):
 
