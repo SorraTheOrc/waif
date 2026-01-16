@@ -1,6 +1,6 @@
 # OODA scheduler (operator guide)
 
-This document is the operator-facing reference for running and migrating the WAIF OODA scheduler.
+This document is the operator-facing reference for running the WAIF OODA scheduler.
 
 Related docs:
 
