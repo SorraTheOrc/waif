@@ -216,42 +216,13 @@ retitle_window_panes() {
 
 # --- Branch helpers ---
 
-# Ensure the current repo working directory is on the canonical branch
-# for the agent if one exists. The canonical branch format is:
-#   <beads_prefix>-<id>/<short-desc>
-# This function will attempt to switch to an existing branch that matches
-# the given beads prefix+id pattern. If no matching branch exists, it
-# leaves the repo at repo root on the current branch.
-ensure_branch_for_agent() {
-  local actor="$1"
-  local beads_prefix="$2" # e.g., bd-123
+# NOTE: legacy behavior that attempted to auto-checkout branches for each
+# agent has been removed. The tmux pane bootstrap now runs in the repo root
+# and does not switch branches on behalf of the user. This avoids surprising
+# side-effects and keeps pane initialization deterministic. Branch switching
+# remains a manual operator step (or must be handled by a separate bead task).
 
-  # Nothing to do if no beads id provided
-  if [[ -z "$beads_prefix" ]]; then
-    return 0
-  fi
-
-  # Look for local branch names that start with the beads_prefix
-  local match
-  match=$(git -C "$repo_root" for-each-ref --format='%(refname:short)' refs/heads | grep -E "^${beads_prefix}(/|-)" | head -n1 || true)
-  if [[ -n "$match" ]]; then
-    git -C "$repo_root" checkout "$match" >/dev/null 2>&1 || WARNINGS+=("[$actor] Failed to checkout branch $match")
-    return 0
-  fi
-
-  # If none found locally, try remote
-  match=$(git -C "$repo_root" ls-remote --heads origin "${beads_prefix}*" | awk '{print $2}' | sed 's|refs/heads/||' | head -n1 || true)
-  if [[ -n "$match" ]]; then
-    # Create a local tracking branch
-    if git -C "$repo_root" checkout -b "$match" --track "origin/$match" >/dev/null 2>&1; then
-      return 0
-    else
-      WARNINGS+=("[$actor] Failed to create tracking branch $match")
-    fi
-  fi
-
-  return 0
-}
+# (ensure_branch_for_agent removed — intentionally no-op)
 
 # --- Pane bootstrap ---
 
