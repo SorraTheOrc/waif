@@ -1,0 +1,27 @@
+name: E2E OODA Snapshot Tests
+
+on:
+  push:
+    branches: [ feature/wf-e6r.6-ci ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: [20.x]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Run E2E test
+        run: npx vitest run tests/integration/ooda-snapshot-e2e.test.ts --run
