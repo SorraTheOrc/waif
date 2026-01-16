@@ -15,12 +15,12 @@ test('writeJobSnapshot writes redacted snapshot and retains last N non-empty ent
     summary: 's',
   });
 
-  // write 12 entries with retention default 10
-  for (let i = 0; i < 12; i++) writeJobSnapshot(dir, snap(i));
+  // write 112 entries with retention keep_last = 100
+  for (let i = 0; i < 112; i++) writeJobSnapshot(dir, snap(i), { retention: 100 });
 
   const file = join(dir, 'j.jsonl');
   const content = readFileSync(file, 'utf8').trim().split('\n');
-  expect(content.length).toBe(10);
+  expect(content.length).toBe(100);
 
   const parsedLast = JSON.parse(content[content.length - 1]);
   expect(parsedLast.sanitized_output).not.toMatch(/sk-[A-Za-z0-9]{16,}/);
