@@ -17,3 +17,6 @@ __pycache__/
 # AI planning documents (ephemeral)
 history/
 history/*.jsonl
+
+# bv (beads viewer) local config and caches
+.bv/

@@ -12,10 +12,6 @@ function gitStatus(): string {
   return out.stdout;
 }
 
-function isWorkingTreeClean(): boolean {
-  const status = gitStatus();
-  return status.trim() === '';
-}
 
 function runWaifInProgressJson(): string | null {
   try {
@@ -42,8 +38,9 @@ export function createImplementCommand() {
   cmd
     .description('Begin implementation for a Beads issue. Usage: /implement <bd-id>')
     .argument('[bdId]', 'Beads issue id')
+    .argument('[rest...]', 'Unexpected extra arguments')
     .option('--branch-from <ref>', 'Base ref for new branch (default: origin/main)')
-    .action((bdId: string | undefined, opts, command) => {
+    .action((bdId: string | undefined, rest: string[] = [], opts, command) => {
       const jsonOutput = Boolean(command.parent?.getOptionValue('json'));
 
       // Safety gate: check working tree
@@ -57,43 +54,25 @@ export function createImplementCommand() {
         throw new Error(message);
       }
 
-      // Determine bd id
-      let id = bdId;
-      if (!id) {
-        // try in-progress
-        const inProgress = runWaifInProgressJson();
-        if (inProgress) {
-          try {
-            const parsed = JSON.parse(inProgress);
-            if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id) {
-              id = parsed[0].id;
-            }
-          } catch (e) {
-            // ignore
-          }
-        }
-      }
-
-      if (!id) {
-        const next = runWaifNextJson();
-        if (next) {
-          try {
-            const parsed = JSON.parse(next);
-            if (parsed?.id) id = parsed.id;
-          } catch (e) {
-            // ignore
-          }
-        }
-      }
-
-      if (!id) {
-        const message = 'No Beads id could be determined (explicit arg, in-progress, next). Please run again with /implement <bd-id>.';
+      const extraArgs = Array.isArray(rest) ? rest : [];
+      if (!bdId) {
+        const message = 'This command expects a single Beads id argument (e.g., wf-ba2.4.3). Please re-run with exactly one bead id.';
         if (jsonOutput) {
-          emitJson({ error: 'no_bd_id', message });
+          emitJson({ error: 'invalid_args', message, receivedArgs: command.args ?? [] });
           process.exit(3);
         }
         throw new Error(message);
       }
+      if (extraArgs.length > 0) {
+        const message = 'This command expects exactly one Beads id argument. Found extra tokens.';
+        if (jsonOutput) {
+          emitJson({ error: 'invalid_args', message, receivedArgs: command.args ?? [] });
+          process.exit(3);
+        }
+        throw new Error(message);
+      }
+
+      const id = bdId;
 
       // Create branch name
       const suffix = 'implement-arg-handling';

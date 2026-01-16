@@ -14,9 +14,13 @@ import { handleError, logStdout } from './lib/io.js';
 import { getCliVersion } from './lib/version.js';
 
 
+import { normalizeSlashCommandArgv } from './lib/argv.js';
+
 export async function run(argv = process.argv.slice(2)): Promise<number> {
+  const { argv: normalizedArgv } = normalizeSlashCommandArgv(argv);
+
   // Handle version fast-path before commander parses or commands execute.
-  if (argv[0] === '--version' || argv[0] === '-v') {
+  if (normalizedArgv[0] === '--version' || normalizedArgv[0] === '-v') {
     logStdout(getCliVersion());
     return 0;
   }
@@ -44,7 +48,7 @@ export async function run(argv = process.argv.slice(2)): Promise<number> {
   program.addCommand(createShowCommand());
 
   try {
-    await program.parseAsync(argv, { from: 'user' });
+    await program.parseAsync(normalizedArgv, { from: 'user' });
     return 0;
   } catch (err) {
     const opts = program.opts<{ json?: boolean }>();
