@@ -13,17 +13,13 @@ Related docs:
 ### Scheduler lifecycle
 
 ```bash
-# Start the scheduler loop (foreground)
-waif ooda scheduler start --config .waif/ooda-scheduler.yaml
+# Run the scheduler loop (foreground). This is the default when no subcommand is provided:
+waif ooda
 
-# Stop a previously started scheduler (if supported by your environment)
-waif ooda scheduler stop
+# Or run the scheduler explicitly with options:
+waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log history/ooda_snapshot.jsonl
 
-# Run scheduler work once (useful for smoke tests / local verification)
-waif ooda scheduler run --config .waif/ooda-scheduler.yaml
-
-# Report scheduler status
-waif ooda scheduler status
+# To stop the scheduler, terminate the process (Ctrl-C) or send a kill to the PID.
 ```
 
 Notes:
@@ -140,36 +136,3 @@ If you suspect secrets were written into a snapshot file:
   - Configure `retention.keep_last` per job to avoid unbounded `history/*.jsonl` growth.
   - Retention trimming is best-effort; failures to trim should not fail job execution.
 
-## Migration checklist: retiring legacy OODA (tmux/probe)
-
-Goal: fully migrate to the OODA scheduler CLI and remove legacy monitoring integrations.
-
-### Verify the new scheduler surface
-
-- [ ] Confirm all operator docs and scripts use:
-  - `waif ooda scheduler start|stop|run|status`
-  - `waif ooda run-job --job <id> --config <path> --log <path> --json`
-- [ ] Run local smoke:
-
-  ```bash
-  waif ooda run-job --job <id> --config .waif/ooda-scheduler.yaml --log history/ooda_snapshot.jsonl --json
-  ```
-
-### CI/E2E verification
-
-- [ ] Ensure the E2E workflow is green: [`.github/workflows/ooda-e2e.yml`](../../.github/workflows/ooda-e2e.yml)
-- [ ] Confirm `run-job` is used for deterministic CI verification (no infinite loops).
-
-### Manual acceptance
-
-- [ ] Start scheduler in a local terminal and observe at least one scheduled run.
-- [ ] Verify snapshot JSONL lines are appended and redaction is applied when enabled.
-- [ ] Verify retention trimming behaves as expected (file does not grow without bound).
-
-### Removal steps (after migration is accepted)
-
-- [ ] Remove legacy tmux/probe flows.
-- [ ] Remove `.opencode/plugin/waif-ooda.ts` if it is still present and only used for legacy OODA.
-- [ ] Update any remaining docs referencing legacy OODA.
-
-Keep this as a coordinated change: ensure dependent docs/tools are updated and CI is green before removal.

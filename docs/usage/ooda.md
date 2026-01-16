@@ -9,14 +9,18 @@ OODA is WAIF’s lightweight job scheduler and one-shot runner.
 waif ooda
 
 # Scheduler lifecycle (operator surface)
-waif ooda scheduler start --config .waif/ooda-scheduler.yaml
-waif ooda scheduler status
+# Default to run scheduler:
+waif ooda
+
+# Explicit scheduler invocation:
+waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log history/ooda_snapshot.jsonl
+# Check status by observing the running process or logs; stop the scheduler by terminating the process (Ctrl-C)
 
 # Run one job once (CI-friendly, exits)
 waif ooda run-job --job my-job-id --config .waif/ooda-scheduler.yaml --log history/ooda_snapshot.jsonl --json
 ```
 
-Operator guide (config, snapshots, retention, migration): [`docs/operational/ooda-scheduler.md`](../operational/ooda-scheduler.md)
+Operator guide (config, snapshots, retention): [`docs/operational/ooda-scheduler.md`](../operational/ooda-scheduler.md)
 
 ## Default behavior (no subcommand)
 
@@ -94,13 +98,13 @@ jobs:
 
 
 
-Run a single configured job by id through the scheduling interface:
+Run a single configured job by id (operator-friendly):
 
 ```bash
-waif ooda schedule run daily-health
+waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
 ```
 
-This is the operator-friendly way to trigger a run (e.g., to validate that a scheduled job still works) without changing the schedule.
+This runs the configured job once and is useful for validating that a scheduled job still works without starting the long-lived scheduler.
 
 ## Output capture, redaction, and snapshots
 
