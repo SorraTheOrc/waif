@@ -8,12 +8,15 @@ OODA is WAIF’s lightweight job scheduler and one-shot runner.
 # Default behavior: runs the scheduler subcommand
 waif ooda
 
-# Run the scheduler explicitly
-waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 60
+# Scheduler lifecycle (operator surface)
+waif ooda scheduler start --config .waif/ooda-scheduler.yaml
+waif ooda scheduler status
 
-# Run one job once
-waif ooda run-job --job my-job-id
+# Run one job once (CI-friendly, exits)
+waif ooda run-job --job my-job-id --config .waif/ooda-scheduler.yaml --log history/ooda_snapshot.jsonl --json
 ```
+
+Operator guide (config, snapshots, retention, migration): [`docs/operational/ooda-scheduler.md`](../operational/ooda-scheduler.md)
 
 ## Default behavior (no subcommand)
 
