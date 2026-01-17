@@ -140,3 +140,53 @@ Primary: Producer (user running `waif next`). No secondary stakeholders identifi
 
 # Source issue: wf-c2n
 # Linked issue: wf-c2n
+
+## Update: Epic-aware selection (wf-uctv)
+
+Problem (update)
+
+- When the selected top issue is an Epic currently in the `in_progress` state, Producers need `waif next` to recommend the next most important work specifically for that Epic (direct children or immediate blockers), rather than a global top-ranked issue. The recommendation must make Epic context explicit so the Producer can direct agents/humans effectively.
+
+Users
+
+- Primary: Producer / PM running `waif next` in an environment where an Epic is in progress.
+- Secondary: Engineers and agents picking the recommended bead to work on.
+
+Acceptance criteria
+
+1. Epic detection: when the top-ranked candidate (by existing selection/ranking logic) is an issue of type `epic` and status `in_progress`, `waif next` enters Epic-aware selection mode.
+2. Candidate scope: Epic-aware selection considers the Epic's direct children and any immediate blockers (i.e., issues that have a `blocks` relationship to the Epic or vice-versa where applicable). Only direct relations are considered to keep latency low.
+3. Selection rule (v1):
+   - If any child is `in_progress`, recommend that child (prioritize finishing work already started).
+   - Otherwise, among the set of children and blockers, pick the issue with the highest bv priority score. If bv is unavailable or ties occur, fall back to numeric priority (lower number higher priority), then recency (earlier created_at wins), then id deterministic tie-break.
+4. Assignee filtering: the existing `--assignee <name>` flag applies a hard filter before Epic-aware selection; if not provided, selection considers all assignees.
+5. Human output: in human mode, `waif next` must clearly display:
+   - A one-row recommendation table (as before)
+   - An explicit `Epic context:` line after the table, e.g. `Epic context: wf-1234 (in_progress)`
+   - The recommended child/blocker id and title and a short rationale (e.g. `recommended: wf-2345 (child, in_progress) — finish in-progress child`).
+   - If a child/blocker is already in_progress, highlight this as the most important work to complete.
+6. JSON output: `waif next --json` will include an additional `waif.epic_context` object when Epic-aware selection is used. The object MUST include at minimum: `{ "epic_id": "<id>", "epic_status": "in_progress", "selection_reason": "in_progress_child|bv_priority|priority_fallback", "recommended_id": "<id>" }` so automation consumers can detect Epic-scoped recommendations.
+7. Tests: add unit tests covering the selection branch (in_progress child preferred; bv-selection fallback; assignee filter interaction) and an integration test that simulates bd outputs and validates both human and JSON output formats.
+8. Idempotence & safety: the command must be read-only by default and MUST NOT modify bead state (no auto assignment). Any annotations or comments created by follow-up tooling must be idempotent and opt-in.
+
+Constraints
+
+- Performance: only direct children and immediate blockers are considered; do not traverse the full graph for v1.
+- Determinism: tie-breaking follows the documented ordered fallback.
+- Backward compatibility: when no Epic context applies, the existing `waif next` behavior is unchanged.
+
+Implementation notes
+
+- Primary code location: `src/commands/next.ts` — add an Epic-aware selection branch into the existing selection flow.
+- Data sources: use `bd show <epic-id>` and `bd list --status=open --json` as needed to enumerate children and blockers; prefer `bd` outputs when available.
+- Tests: extend `tests/next.test.ts` with unit tests for the new selection method and add an integration test exercising `--json` output.
+- UX examples: add a short human-output example in the PR to guide reviewers.
+
+Related Beads & docs
+
+- Related Beads: wf-70j.5, wf-70j.4, wf-5e2, wf-c2n
+- Update NOTE: Ensure PR references `wf-uctv` when opening the implementation PR.
+
+Source issue
+
+- wf-uctv
