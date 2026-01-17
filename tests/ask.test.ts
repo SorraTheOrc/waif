@@ -4,6 +4,10 @@ import { join } from 'path';
 import { expect, test, beforeEach, afterEach } from 'vitest';
 import { run } from '../src/index.js';
 
+// Tests expect the tmux runtime to be removed. These tests assert that invoking
+// commands that would previously use tmux now surface a user-facing error and
+// return a non-zero exit code. We keep the tests minimal and hermetic.
+
 const originalEnv = { ...process.env };
 
 beforeEach(() => {
