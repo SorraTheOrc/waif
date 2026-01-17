@@ -44,7 +44,7 @@ Define the bounding intent for the work: scope, measurable success metrics, cons
 
 Agent Commands:
 1) Create initial tracking bead: `/intake <Project Title>` (OpenCode) or `waif intake <Project Title>` (CLI)
-2) Create PRD via interview: `/prd <Bead ID>` (OpenCode) or `waif prd <Bead ID>` (CLI)
+2) Create PRD via interview: `/prd <Bead ID>` (OpenCode; CLI subcommand removed — use slash command)
 
 Summary: a clear, testable project definition that guides epics and prioritization.
 
@@ -85,7 +85,7 @@ Agent Commands:
 1) For each issue, generate implementation plan: `/plan <Issue ID>` (OpenCode) or `waif plan <Issue ID>` (CLI)
 2) For each issue, generate user documentation: `/doc <Issue ID>` (OpenCode) or `waif doc <Issue ID>` (CLI)
 3) For each issue, generate test plan: `/testplan <Issue ID>` (OpenCode) or `waif testplan <Issue ID>` (CLI)
-4) For each issue implement the feature and tests: `/implement <Issue ID>` (OpenCode) or `waif implement <Issue ID>` (CLI) 
+4) For each issue implement the feature and tests: `/implement <Issue ID>` (OpenCode-hosted; CLI subcommand removed — use slash command)
 
 Summary: vertical slices reduce integration risk and make progress visible.
 

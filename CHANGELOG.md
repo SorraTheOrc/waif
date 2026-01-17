@@ -10,3 +10,6 @@
 ### Changed
 - Updated `/implement` and workflow docs to reflect the canonical WAIF-driven workflow and landing steps.
 
+### Removed
+- Remove CLI subcommands `waif prd`, `waif ask`, and `waif implement` — these are now provided as OpenCode slash commands (`/prd`, `/ask`, `/implement`). This change removes the CLI registration and implementation files; docs updated to point to OpenCode-hosted alternatives. (wf-p46z)
+

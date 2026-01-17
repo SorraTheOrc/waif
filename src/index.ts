@@ -2,8 +2,6 @@
 import { realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { Command } from 'commander';
-import { createPrdCommand } from './commands/prd.js';
-import { createAskCommand } from './commands/ask.js';
 import { createNextCommand } from './commands/next.js';
 import { createRecentCommand } from './commands/recent.js';
 import { createInProgressCommand } from './commands/inProgress.js';
@@ -48,14 +46,10 @@ export async function run(argv = process.argv.slice(2)): Promise<number> {
     .option('--verbose', 'Emit debug logs to stderr')
     .showHelpAfterError();
 
-  program.addCommand(createPrdCommand());
-  program.addCommand(createAskCommand());
   program.addCommand(createNextCommand());
   program.addCommand(createRecentCommand());
   program.addCommand(createInProgressCommand());
   program.addCommand(createStartWorkCommand());
-  const { createImplementCommand } = await import('./commands/implement.js');
-  program.addCommand(createImplementCommand());
   program.addCommand(createOodaCommand());
   program.addCommand(createShowCommand());
 

@@ -1,69 +1,8 @@
-# ask — docs and E2E guide
+# ask — deprecated (use OpenCode slash command)
 
-Short summary and motivation
+This CLI subcommand has been removed. Use the OpenCode-hosted `/ask` slash command instead. The documentation below is retained only for historical reference and will be pruned in a future cleanup.
 
-- The `waif ask` command is a one-shot CLI to send a short prompt to a named agent and print the agent's Markdown response. It integrates lazily with a local OpenCode server: the CLI will check for a configured server, start one via the OpenCode SDK if needed, then forward the prompt to the requested agent. When the OpenCode SDK or server is unavailable, `waif ask` falls back to a safe, non-fatal placeholder response so interactive workflows aren't blocked.
-
-## Usage examples
-
-- Default behavior (uses default agent "map"):
-
-```bash
-waif ask "Summarize this file for me"
-```
-
-- Use a different agent (defaults also follow `OPENCODE_DEFAULT_AGENT` when set):
-
-```bash
-waif ask "What should I change?" --agent plan
-```
-
-- Use first word as agent when mapped in `.opencode/agent_map.yaml` (no `--agent` flag needed):
-
-```bash
-waif ask "Patch draft a short response"
-# Uses agent "Patch" if it exists in agent_map and strips it from the prompt
-```
-
-- Override default provider/model (also read from `.opencode/server.yaml`):
-
-```bash
-OPENCODE_PROVIDER=github-copilot OPENCODE_MODEL=gpt-5-mini \
-  waif ask "Check server"
-```
-
-- Emit JSON output (machine-readable, fields: `agent`, `promptLength`, `responseMarkdown`):
-
-```bash
-waif ask "Give me a summary" --json
-```
-
-- Read prompt from stdin (hyphen `-` means read stdin, 5s timeout):
-
-```bash
-echo "Write a short changelog" | waif ask - --agent Scribbler --json
-```
-
-- Enable/disable OpenCode integration (env var override):
-
-```bash
-OPENCODE_ENABLED=1 waif ask "Use real OpenCode"
-OPENCODE_ENABLED=0 waif ask "Use fallback behavior"
-```
-
-- Override host/port for an existing server:
-
-```bash
-OPENCODE_HOST=127.0.0.1 OPENCODE_PORT=9000 OPENCODE_ENABLED=1 waif ask "Check server"
-```
-
-- Override default agent (CLI and server default):
-
-```bash
-OPENCODE_DEFAULT_AGENT=build waif ask "Say hi"
-```
-
-## Runtime behavior (what happens when you run `waif ask`)
+The previous CLI usage and runtime behavior are deprecated with the command removal. Please use the OpenCode `/ask` slash command for agent interactions.
 
 1. Validate prompt
    - If the CLI is invoked with `-` as the prompt argument it reads stdin (5s timeout). Otherwise it uses the provided string argument. If no prompt is provided the command exits with a helpful error.
