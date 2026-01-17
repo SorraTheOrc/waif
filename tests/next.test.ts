@@ -10,7 +10,7 @@ function makeIssues(path: string, issues: any[]) {
   writeFileSync(path, issues.map((i) => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }
 
-describe('waif next', () => {
+describe('wf next', () => {
   it('does not print in-progress table; shows recommendation', async () => {
     const tmpIssues = join(tmpdir(), `issues-${Date.now()}-inprogress.jsonl`);
     makeIssues(tmpIssues, [

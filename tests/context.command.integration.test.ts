@@ -6,7 +6,7 @@ import { resolve } from 'path'
 const cli = 'node dist/index.js'
 const outPath = resolve('tmp', 'CONTEXT_PACK_INTEGRATION.md')
 
-describe('waif context integration', () => {
+describe('wf context integration', () => {
   afterEach(() => {
     try { if (existsSync(outPath)) unlinkSync(outPath); } catch (e) {}
   })

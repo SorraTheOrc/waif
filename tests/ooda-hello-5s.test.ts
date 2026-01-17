@@ -5,7 +5,7 @@ import os from 'node:os';
 import { loadConfig } from '../src/lib/config.js';
 import { runJobCommand, writeJobSnapshot } from '../src/commands/ooda.js';
 
-const tmpFile = (name: string) => path.join(os.tmpdir(), `waif-ooda-${name}-${Date.now()}.jsonl`);
+const tmpFile = (name: string) => path.join(os.tmpdir(), `wf-ooda-${name}-${Date.now()}.jsonl`);
 
 describe('hello-5s fixture integration', () => {
   it('loads fixture and has correct schema (schedule + capture array)', async () => {

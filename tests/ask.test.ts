@@ -15,7 +15,7 @@ afterEach(() => {
 });
 
 test('ask command sends prompt to mapped tmux pane and logs', async () => {
-  const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
+  const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
   process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
   // ensure agent resolution uses default map -> Map (PM)
@@ -28,7 +28,7 @@ test('ask command sends prompt to mapped tmux pane and logs', async () => {
 });
 
 test('ask removes "to" after agent name', async () => {
-  const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
+  const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
   process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
   
@@ -46,7 +46,7 @@ test('ask removes "to" after agent name', async () => {
 });
 
 test('ask does not remove "to" if no agent name provided', async () => {
-  const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
+  const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
   process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
   
@@ -64,7 +64,7 @@ test('ask does not remove "to" if no agent name provided', async () => {
 });
 
 test('ask does not remove other words after agent name', async () => {
-  const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
+  const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
   process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
   

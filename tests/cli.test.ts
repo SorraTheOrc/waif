@@ -10,7 +10,7 @@ function tmpFile(name: string) {
   return join(tmpdir(), name);
 }
 
-test('waif --help shows prd/next/recent/in-progress/show', async () => {
+test('wf --help shows prd/next/recent/in-progress/show', async () => {
   const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), '--help']);
   expect(exitCode).toBe(0);
   expect(stdout).toContain('prd');

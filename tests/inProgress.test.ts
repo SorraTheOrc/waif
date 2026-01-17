@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 const CLI = [process.execPath, 'dist/index.js'];
 
-describe('waif in-progress', () => {
+describe('wf in-progress', () => {
   it('prints a table of in-progress issues', async () => {
     const envPayload = JSON.stringify([
       { id: 'wf-ip1', title: 'First', status: 'in_progress', priority: 2 },
