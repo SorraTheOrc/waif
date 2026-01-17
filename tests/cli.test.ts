@@ -20,7 +20,7 @@ test('wf --help shows prd/next/recent/in-progress/show', async () => {
   expect(stdout).toContain('show');
 });
 
-test('waif --version prints release semver in release mode', async () => {
+test('wf --version prints release semver in release mode', async () => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
   const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), '--version'], {
     env: { WAIF_VERSION_MODE: 'release' },
@@ -29,7 +29,7 @@ test('waif --version prints release semver in release mode', async () => {
   expect(stdout.trim()).toBe(`v${pkg.version}`);
 });
 
-test('waif -v works', async () => {
+test('wf -v works', async () => {
   const pkg = JSON.parse(readFileSync('package.json', 'utf8')) as { version: string };
   const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), '-v'], {
     env: { WAIF_VERSION_MODE: 'release' },
@@ -38,7 +38,7 @@ test('waif -v works', async () => {
   expect(stdout.trim()).toBe(`v${pkg.version}`);
 });
 
-test('waif --version can emit dev stamp', async () => {
+test('wf --version can emit dev stamp', async () => {
   const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), '--version'], {
     env: { WAIF_VERSION_MODE: 'dev' },
   });
@@ -46,13 +46,13 @@ test('waif --version can emit dev stamp', async () => {
   expect(stdout.trim()).toMatch(/^v0\.0\.0-dev\+\d{8}T\d{6}(\.[0-9a-f]+)?$/);
 });
 
-test('waif prd --help works', async () => {
+test('wf prd --help works', async () => {
   const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'prd', '--help']);
   expect(exitCode).toBe(0);
   expect(stdout).toContain('--out');
 });
 
-test('waif: missing --out exits 2', async () => {
+test('wf: missing --out exits 2', async () => {
   const { exitCode, stderr } = await execa(CLI[0], [...CLI.slice(1), 'prd'], { reject: false });
   expect(exitCode).toBe(2);
   expect(stderr).toMatch(/--out|Missing/);

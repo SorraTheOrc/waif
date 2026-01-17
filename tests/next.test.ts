@@ -47,7 +47,7 @@ describe('wf next', () => {
 
     const idxDetail = stdout.indexOf('# Details');
 
-    // In Progress should no longer be printed by `waif next`
+    // In Progress should no longer be printed by `wf next`
     expect(stdout).not.toContain('# In Progress');
 
     // in-progress issues should not be rendered inline anymore
@@ -110,8 +110,8 @@ describe('wf next', () => {
     expect(exitCode).toBe(0);
     const payload = JSON.parse(stdout.trim());
     expect(payload.id).toBe('wf-2');
-    expect(payload.waif.score).toBe(20);
-    expect(payload.waif.metadata.bvSource).toBe('env');
+    expect(payload.wf.score).toBe(20);
+    expect(payload.wf.metadata.bvSource).toBe('env');
 
     // JSON output should not include human sections
     expect(stdout).not.toContain('== Recommended Summary ==');
@@ -153,7 +153,7 @@ describe('wf next', () => {
     expect(exitCode).toBe(0);
     const payload = JSON.parse(stdout.trim());
     expect(payload.id).toBe('wf-2');
-    expect(payload.waif.rationale).toContain('priority');
+    expect(payload.wf.rationale).toContain('priority');
   });
 
   it('errors when no eligible issues', async () => {

@@ -10,7 +10,7 @@ const fixtureConfig = path.join(process.cwd(), 'tests', 'fixtures', 'ooda.valid.
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'waif-ooda-test-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'wf-ooda-test-'));
 });
 
 afterEach(() => {

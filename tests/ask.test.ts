@@ -17,7 +17,7 @@ afterEach(() => {
 test('ask command sends prompt to mapped tmux pane and logs', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
+  process.env.WAIF_TMUX_PANES = 'wf-workflow:core.0\tMap (PM)';
   // ensure agent resolution uses default map -> Map (PM)
   const code = await run(['ask', 'Hello world']);
   expect(code).toBe(0);
@@ -30,7 +30,7 @@ test('ask command sends prompt to mapped tmux pane and logs', async () => {
 test('ask removes "to" after agent name', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
+  process.env.WAIF_TMUX_PANES = 'wf-workflow:core.0\tMap (PM)';
   
   // "map to hello world" -> agent: map, prompt: "hello world"
   const code = await run(['ask', 'map', 'to', 'hello', 'world']);
@@ -48,7 +48,7 @@ test('ask removes "to" after agent name', async () => {
 test('ask does not remove "to" if no agent name provided', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
+  process.env.WAIF_TMUX_PANES = 'wf-workflow:core.0\tMap (PM)';
   
   // "to be or not to be" -> agent: map (default), prompt: "to be or not to be"
   const code = await run(['ask', 'to', 'be', 'or', 'not', 'to', 'be']);
@@ -66,7 +66,7 @@ test('ask does not remove "to" if no agent name provided', async () => {
 test('ask does not remove other words after agent name', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'wf-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
+  process.env.WAIF_TMUX_PANES = 'wf-workflow:core.0\tMap (PM)';
   
   // "map hello world" -> agent: map, prompt: "hello world"
   const code = await run(['ask', 'map', 'hello', 'world']);
