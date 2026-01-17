@@ -21,12 +21,21 @@ export function createStartWorkCommand() {
       // If inside tmux, set the pane title and enable pane borders so the title is visible.
       try {
         if (process.env.TMUX) {
-          spawnSync('tmux', ['set-option', '-g', 'pane-border-status', 'top'], { stdio: 'ignore' });
-          spawnSync('tmux', ['set-option', '-g', 'pane-border-format', '#{pane_title}'], { stdio: 'ignore' });
-          spawnSync('tmux', ['select-pane', '-T', paneTitle], { stdio: 'ignore' });
+          // TMUX runtime behavior removed — surface a clear error to the user
+          // The helper throws an Error with migration guidance
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const { ensureTmuxRemoved } = require('../lib/tmux-removed');
+          ensureTmuxRemoved();
         }
-      } catch (e) {
-        // ignore failures
+      } catch (e: any) {
+        // Surface the tmux removal message to the caller via stderr and exit code
+        try {
+          // eslint-disable-next-line no-console
+          console.error(e && e.message ? e.message : String(e));
+        } catch (_) {
+          // ignore
+        }
+        process.exit(1);
       }
 
       // Best-effort terminal title (helps tmux pick up pane_title for some configs)
