@@ -26,7 +26,7 @@ describe('integration: run-job snapshot starter', () => {
   });
 
   it('writes a snapshot JSONL line under history/', async () => {
-    const workDir = fs.mkdtempSync(path.join(tmpDirRoot, 'waif-ooda-e2e-'));
+    const workDir = fs.mkdtempSync(path.join(tmpDirRoot, 'wf-ooda-e2e-'));
     createdPaths.push(workDir);
 
     const cfgPath = path.join(workDir, 'ooda.yaml');

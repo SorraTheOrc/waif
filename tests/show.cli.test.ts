@@ -47,9 +47,9 @@ function makeFakeBd(binDir: string, issues: Record<string, any>) {
   return bdPath;
 }
 
-describe('waif show (integration)', () => {
+describe('wf show (integration)', () => {
   it('emits issue JSON with --json', async () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'waif-bd-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'wf-bd-'));
 
     makeFakeBd(binDir, {
       'wf-123': {
@@ -77,7 +77,7 @@ describe('waif show (integration)', () => {
   });
 
   it('exits nonzero and prints friendly error when issue is missing', async () => {
-    const binDir = mkdtempSync(join(tmpdir(), 'waif-bd-'));
+    const binDir = mkdtempSync(join(tmpdir(), 'wf-bd-'));
     makeFakeBd(binDir, { 'wf-present': { id: 'wf-present', title: 'Present', status: 'open', priority: 2 } });
 
     const { exitCode, stderr } = await execa(CLI[0], [...CLI.slice(1), 'show', 'wf-missing'], {

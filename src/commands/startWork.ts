@@ -1,6 +1,6 @@
 import { Command } from 'commander';
 import { spawnSync } from 'child_process';
-import { getTmuxProvider } from '../lib/tmux-provider.js';
+// tmux provider removed in combined rename - no import here
 import { mkdtempSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
@@ -22,26 +22,10 @@ export function createStartWorkCommand() {
       // If inside tmux, set the pane title and enable pane borders so the title is visible.
       try {
         if (process.env.TMUX) {
-<<<<<<< HEAD
-          const provider = getTmuxProvider();
-          if (provider.attachIfNeeded) {
-            try {
-              provider.attachIfNeeded();
-            } catch (e) {
-              // ignore provider errors and continue to fallback
-            }
-          }
-
-          spawnSync('tmux', ['set-option', '-g', 'pane-border-status', 'top'], { stdio: 'ignore' });
-          spawnSync('tmux', ['set-option', '-g', 'pane-border-format', '#{pane_title}'], { stdio: 'ignore' });
-          spawnSync('tmux', ['select-pane', '-T', paneTitle], { stdio: 'ignore' });
-=======
           // TMUX runtime behavior removed — surface a clear error to the user
           // The helper throws an Error with migration guidance
           // eslint-disable-next-line @typescript-eslint/no-var-requires
-          const { ensureTmuxRemoved } = require('../lib/tmux-removed');
-          ensureTmuxRemoved();
->>>>>>> origin/wf-b6fz.1/remove-tmux-runtime
+          (function(){ const { ensureTmuxRemoved } = require('../lib/tmux-removed'); ensureTmuxRemoved(); })();
         }
       } catch (e: any) {
         // Surface the tmux removal message to the caller via stderr and exit code

@@ -15,7 +15,7 @@ function createTestProgram() {
   return program;
 }
 
-describe('waif show', () => {
+describe('wf show', () => {
   it('prints main issue, blockers, and children tables', async () => {
     (showIssue as unknown as Mock).mockReturnValue({
       id: 'wf-123',

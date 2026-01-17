@@ -10,7 +10,7 @@ function makeIssues(path: string, issues: any[]) {
   writeFileSync(path, issues.map((i) => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }
 
-describe('waif recent', () => {
+describe('wf recent', () => {
   it('defaults to 3 most recently updated issues (human output)', async () => {
     const tmpIssues = join(tmpdir(), `issues-${Date.now()}-recent.jsonl`);
     makeIssues(tmpIssues, [
