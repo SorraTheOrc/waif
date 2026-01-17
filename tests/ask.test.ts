@@ -18,12 +18,11 @@ afterEach(() => {
 test('ask command sends prompt to mapped tmux pane and logs', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  // Inject mock tmux helpers so no real tmux is invoked.
-  (askCmd as any)._tmux = {
-    listTmuxPanes: () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }],
-    findPaneForAgent: (_a: any) => 'waif-workflow:core.0',
-    sendToPane: (_paneId: string, _prompt: string, _agentName: string) => undefined,
-  };
+  // Inject mock tmux helpers so no real tmux is invoked by mutating exported helper properties.
+  const _t = (askCmd as any)._tmux as any;
+  _t.listTmuxPanes = () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }];
+  _t.findPaneForAgent = (_a: any) => 'waif-workflow:core.0';
+  _t.sendToPane = (_paneId: string, _prompt: string, _agentName: string) => undefined;
   // ensure agent resolution uses default map -> Map (PM)
   const code = await run(['ask', 'Hello world']);
   expect(code).toBe(0);
