@@ -35,12 +35,11 @@ test('ask command sends prompt to mapped tmux pane and logs', async () => {
 test('ask removes "to" after agent name', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  (askCmd as any)._tmux = {
-    listTmuxPanes: () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }],
-    findPaneForAgent: (_a: any) => 'waif-workflow:core.0',
-    sendToPane: (_paneId: string, _prompt: string, _agentName: string) => undefined,
-  };
-  
+  const _t = (askCmd as any)._tmux as any;
+  _t.listTmuxPanes = () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }];
+  _t.findPaneForAgent = (_a: any) => 'waif-workflow:core.0';
+  _t.sendToPane = (_paneId: string, _prompt: string, _agentName: string) => undefined;
+   
   // "map to hello world" -> agent: map, prompt: "hello world"
   const code = await run(['ask', 'map', 'to', 'hello', 'world']);
   expect(code).toBe(0);
@@ -57,12 +56,11 @@ test('ask removes "to" after agent name', async () => {
 test('ask does not remove "to" if no agent name provided', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  (askCmd as any)._tmux = {
-    listTmuxPanes: () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }],
-    findPaneForAgent: (_a: any) => 'waif-workflow:core.0',
-    sendToPane: (_paneId: string, _prompt: string, _agentName: string) => undefined,
-  };
-  
+  const _t = (askCmd as any)._tmux as any;
+  _t.listTmuxPanes = () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }];
+  _t.findPaneForAgent = (_a: any) => 'waif-workflow:core.0';
+  _t.sendToPane = (_paneId: string, _prompt: string, _agentName: string) => undefined;
+   
   // "to be or not to be" -> agent: map (default), prompt: "to be or not to be"
   const code = await run(['ask', 'to', 'be', 'or', 'not', 'to', 'be']);
   expect(code).toBe(0);
@@ -79,12 +77,11 @@ test('ask does not remove "to" if no agent name provided', async () => {
 test('ask does not remove other words after agent name', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  (askCmd as any)._tmux = {
-    listTmuxPanes: () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }],
-    findPaneForAgent: (_a: any) => 'waif-workflow:core.0',
-    sendToPane: (_paneId: string, _prompt: string, _agentName: string) => undefined,
-  };
-  
+  const _t = (askCmd as any)._tmux as any;
+  _t.listTmuxPanes = () => [{ id: 'waif-workflow:core.0', title: 'Map (PM)', session: 'waif-workflow', window: 'core' }];
+  _t.findPaneForAgent = (_a: any) => 'waif-workflow:core.0';
+  _t.sendToPane = (_paneId: string, _prompt: string, _agentName: string) => undefined;
+   
   // "map hello world" -> agent: map, prompt: "hello world"
   const code = await run(['ask', 'map', 'hello', 'world']);
   expect(code).toBe(0);
