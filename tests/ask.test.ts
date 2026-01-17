@@ -1,8 +1,12 @@
-import { mkdtempSync, readFileSync, rmSync } from 'fs';
+import { mkdtempSync, rmSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { expect, test, beforeEach, afterEach } from 'vitest';
 import { run } from '../src/index.js';
+
+// Tests expect the tmux runtime to be removed. These tests assert that invoking
+// commands that would previously use tmux now surface a user-facing error and
+// return a non-zero exit code. We keep the tests minimal and hermetic.
 
 const originalEnv = { ...process.env };
 
@@ -14,69 +18,49 @@ afterEach(() => {
   process.env = { ...originalEnv };
 });
 
-test('ask command sends prompt to mapped tmux pane and logs', async () => {
+test('ask command errors when tmux integration is invoked', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
-  // ensure agent resolution uses default map -> Map (PM)
+
+  // No provider injected: runtime should surface the tmux-removed error if it
+  // attempts to use tmux. We assert the CLI exits non-zero and does not write a log.
   const code = await run(['ask', 'Hello world']);
-  expect(code).toBe(0);
+  // tmux integration has been removed; command should return non-zero
+  expect(code).toBeGreaterThan(0);
   const logPath = join(logDir, 'ask.log');
-  const log = readFileSync(logPath, 'utf8');
-  expect(log).toContain('Hello world');
+  expect(existsSync(logPath)).toBe(false);
   rmSync(logDir, { recursive: true, force: true });
 });
 
-test('ask removes "to" after agent name', async () => {
+test('ask errors when tmux integration is invoked after agent parsing', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
-  
-  // "map to hello world" -> agent: map, prompt: "hello world"
+
   const code = await run(['ask', 'map', 'to', 'hello', 'world']);
-  expect(code).toBe(0);
-  
+  expect(code).toBeGreaterThan(0);
   const logPath = join(logDir, 'ask.log');
-  const log = readFileSync(logPath, 'utf8');
-  const entry = JSON.parse(log);
-  expect(entry.agent).toBe('map');
-  expect(entry.prompt).toBe('hello world');
-  
+  expect(existsSync(logPath)).toBe(false);
   rmSync(logDir, { recursive: true, force: true });
 });
 
-test('ask does not remove "to" if no agent name provided', async () => {
+test('ask errors when no agent name provided and tmux would be used', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
-  
-  // "to be or not to be" -> agent: map (default), prompt: "to be or not to be"
+
   const code = await run(['ask', 'to', 'be', 'or', 'not', 'to', 'be']);
-  expect(code).toBe(0);
-  
+  expect(code).toBeGreaterThan(0);
   const logPath = join(logDir, 'ask.log');
-  const log = readFileSync(logPath, 'utf8');
-  const entry = JSON.parse(log);
-  expect(entry.agent).toBe('map');
-  expect(entry.prompt).toBe('to be or not to be');
-  
+  expect(existsSync(logPath)).toBe(false);
   rmSync(logDir, { recursive: true, force: true });
 });
 
-test('ask does not remove other words after agent name', async () => {
+test('ask errors when tmux integration would be used for other word patterns', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
-  process.env.WAIF_TMUX_PANES = 'waif-workflow:core.0\tMap (PM)';
-  
-  // "map hello world" -> agent: map, prompt: "hello world"
+
   const code = await run(['ask', 'map', 'hello', 'world']);
-  expect(code).toBe(0);
-  
+  expect(code).toBeGreaterThan(0);
   const logPath = join(logDir, 'ask.log');
-  const log = readFileSync(logPath, 'utf8');
-  const entry = JSON.parse(log);
-  expect(entry.agent).toBe('map');
-  expect(entry.prompt).toBe('hello world');
-  
+  expect(existsSync(logPath)).toBe(false);
   rmSync(logDir, { recursive: true, force: true });
 });

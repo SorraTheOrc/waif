@@ -1,3 +1,4 @@
+// Removed tmux provider abstraction; using WAIF_* env shims and spawnSync fallbacks
 import { stdin as processStdin } from 'process';
 import { Command } from 'commander';
 import {
@@ -10,6 +11,7 @@ import {
 } from 'fs';
 import { resolve } from 'path';
 import { spawnSync } from 'child_process';
+import { getTmuxProvider } from '../lib/tmux-provider.js';
 import yaml from 'yaml';
 import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
@@ -50,9 +52,11 @@ function readStdin(timeoutMs = 5000): Promise<string> {
 }
 
 function getLogPaths() {
+  // Use a stable HOME fallback so resolve() never receives undefined.
+  const home = process.env.HOME ?? '~';
   const dir = process.env.WAIF_LOG_DIR
     ? resolve(process.env.WAIF_LOG_DIR)
-    : resolve(process.env.HOME || '~', '.waif/logs');
+    : resolve(home, '.waif/logs');
   const file = resolve(dir, 'ask.log');
   return { dir, file };
 }
@@ -121,6 +125,11 @@ function parsePaneEnv(line: string) {
 }
 
 function listTmuxPanes(): Array<{ id: string; title: string; session: string; window: string }> {
+  // Backwards compatibility: delegate to provider when available
+  const provider = getTmuxProvider();
+  const panes = provider.listPanes();
+  if (panes && panes.length > 0) return panes.map((p) => ({ id: p.id, title: p.title, session: p.session, window: p.window }));
+
   if (process.env.WAIF_TMUX_PANES) {
     return process.env.WAIF_TMUX_PANES.split(/\r?\n/)
       .map((l) => l.trim())
@@ -128,18 +137,18 @@ function listTmuxPanes(): Array<{ id: string; title: string; session: string; wi
       .map(parsePaneEnv);
   }
 
-  const tmuxBin = process.env.WAIF_TMUX_BIN || 'tmux';
-  const res = spawnSync(tmuxBin, ['list-panes', '-a', '-F', '#{session_name}:#{window_name}.#{pane_index}\t#{pane_title}'], {
-    encoding: 'utf8',
-  });
-  if (res.status !== 0) {
-    throw new CliError('tmux not available. Hint: start workflow tmux session.', 1);
-  }
-  const lines = res.stdout.trim().split(/\r?\n/).filter(Boolean);
-  return lines.map(parsePaneEnv);
+  // TMUX runtime removed; surface a clear error with migration guidance
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { ensureTmuxRemoved } = require('../lib/tmux-removed');
+  ensureTmuxRemoved();
+  // Unreachable but satisfy function signature
+  return [];
 }
 
 function findPaneForAgent(agent: AgentConfig): string {
+  const provider = getTmuxProvider();
+  if (provider.findPaneForAgent) return provider.findPaneForAgent(agent);
+
   const panes = listTmuxPanes();
   const session = process.env.WORKFLOW_TMUX_SESSION || 'waif-workflow';
   const targetTitle = agent.label || agent.name;
@@ -166,19 +175,25 @@ function findPaneForAgent(agent: AgentConfig): string {
 }
 
 function sendToPane(paneId: string, prompt: string, agentName: string) {
+  const provider = getTmuxProvider();
+  if (provider.sendKeysToPane) return provider.sendKeysToPane(paneId, prompt, agentName);
+  // Fallback to original behaviour
+
   // In tests or dry-run mode, skip real tmux send
   if (process.env.WAIF_TMUX_DRY_RUN === '1' || process.env.WAIF_TMUX_PANES) return;
 
-  const tmuxBin = process.env.WAIF_TMUX_BIN || 'tmux';
-  const promptArg = JSON.stringify(prompt);
-  const agentArg = JSON.stringify(agentName.toLowerCase());
-  const commandString = `opencode --agent ${agentArg} --prompt ${promptArg}`;
-  const res = spawnSync(tmuxBin, ['send-keys', '-t', paneId, commandString, 'C-m'], { encoding: 'utf8' });
-  if (res.status !== 0) {
-    const err = (res.stderr || res.stdout || '').toString().trim();
-    throw new CliError(`Failed to send prompt to tmux pane${err ? `: ${err}` : ''}`, 1);
-  }
+  // TMUX runtime removed; surface a clear error with migration guidance
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { ensureTmuxRemoved } = require('../lib/tmux-removed');
+  ensureTmuxRemoved();
 }
+
+// Expose small tmux helper indirection to allow tests to inject a mock implementation.
+export const _tmux = {
+  listTmuxPanes: listTmuxPanes,
+  findPaneForAgent: findPaneForAgent,
+  sendToPane: sendToPane,
+};
 
 export function createAskCommand() {
   const cmd = new Command('ask');
@@ -249,8 +264,8 @@ export function createAskCommand() {
         throw new CliError(`Agent '${mappedAgent}' not defined in workflow_agents.yaml`, 1);
       }
 
-      const paneId = findPaneForAgent(agentCfg);
-      sendToPane(paneId, promptText, agentCfg.name);
+      const paneId = _tmux.findPaneForAgent(agentCfg);
+      _tmux.sendToPane(paneId, promptText, agentCfg.name);
       appendLog(agentCfg.name, promptText);
 
       if (jsonOutput) {

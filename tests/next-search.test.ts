@@ -10,7 +10,7 @@ function makeIssues(path: string, issues: any[]) {
   writeFileSync(path, issues.map((i) => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }
 
-describe('waif next search', () => {
+describe('wf next search', () => {
   it('promotes matching title above higher bv score', async () => {
     const tmpIssues = join(tmpdir(), `issues-${Date.now()}-search1.jsonl`);
     makeIssues(tmpIssues, [

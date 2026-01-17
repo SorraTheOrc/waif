@@ -10,7 +10,7 @@ function makeIssues(path: string, issues: any[]) {
   writeFileSync(path, issues.map((i) => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }
 
-describe('waif next', () => {
+describe('wf next', () => {
   it('does not print in-progress table; shows recommendation', async () => {
     const tmpIssues = join(tmpdir(), `issues-${Date.now()}-inprogress.jsonl`);
     makeIssues(tmpIssues, [
@@ -47,7 +47,7 @@ describe('waif next', () => {
 
     const idxDetail = stdout.indexOf('# Details');
 
-    // In Progress should no longer be printed by `waif next`
+    // In Progress should no longer be printed by `wf next`
     expect(stdout).not.toContain('# In Progress');
 
     // in-progress issues should not be rendered inline anymore

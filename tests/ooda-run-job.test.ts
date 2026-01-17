@@ -4,13 +4,13 @@ import { readFileSync, unlinkSync, mkdtempSync, writeFileSync, rmSync } from 'no
 import path from 'node:path';
 import os from 'node:os';
 
-const tmp = (name: string) => path.join('/tmp', `waif-ooda-${name}-${Date.now()}.jsonl`);
+const tmp = (name: string) => path.join('/tmp', `wf-ooda-${name}-${Date.now()}.jsonl`);
 const fixtureConfig = path.join(process.cwd(), 'tests', 'fixtures', 'ooda.valid.yaml');
 
 let tmpDir: string;
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'waif-ooda-test-'));
+  tmpDir = mkdtempSync(path.join(os.tmpdir(), 'wf-ooda-test-'));
 });
 
 afterEach(() => {

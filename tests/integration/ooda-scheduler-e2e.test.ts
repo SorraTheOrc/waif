@@ -8,7 +8,7 @@ vi.mock('node:child_process', async (importOriginal) => {
 });
 import { createOodaCommand } from '../../src/commands/ooda.js';
 
-const tmpdir = (name: string) => mkdtempSync(path.join(os.tmpdir(), `waif-ooda-e2e-${name}-`));
+const tmpdir = (name: string) => mkdtempSync(path.join(os.tmpdir(), `wf-ooda-e2e-${name}-`));
 
 describe('OODA scheduler E2E (integration)', () => {
   let dir: string;
