@@ -2,26 +2,26 @@
 
 Short summary and motivation
 
-- The `waif ask` command is a one-shot CLI to send a short prompt to a named agent and print the agent's Markdown response. It integrates lazily with a local OpenCode server: the CLI will check for a configured server, start one via the OpenCode SDK if needed, then forward the prompt to the requested agent. When the OpenCode SDK or server is unavailable, `waif ask` falls back to a safe, non-fatal placeholder response so interactive workflows aren't blocked.
+- The `wf ask` command is a one-shot CLI to send a short prompt to a named agent and print the agent's Markdown response. It integrates lazily with a local OpenCode server: the CLI will check for a configured server, start one via the OpenCode SDK if needed, then forward the prompt to the requested agent. When the OpenCode SDK or server is unavailable, `wf ask` falls back to a safe, non-fatal placeholder response so interactive workflows aren't blocked.
 
 ## Usage examples
 
 - Default behavior (uses default agent "map"):
 
 ```bash
-waif ask "Summarize this file for me"
+wf ask "Summarize this file for me"
 ```
 
 - Use a different agent (defaults also follow `OPENCODE_DEFAULT_AGENT` when set):
 
 ```bash
-waif ask "What should I change?" --agent plan
+wf ask "What should I change?" --agent plan
 ```
 
 - Use first word as agent when mapped in `.opencode/agent_map.yaml` (no `--agent` flag needed):
 
 ```bash
-waif ask "Patch draft a short response"
+wf ask "Patch draft a short response"
 # Uses agent "Patch" if it exists in agent_map and strips it from the prompt
 ```
 
@@ -29,41 +29,41 @@ waif ask "Patch draft a short response"
 
 ```bash
 OPENCODE_PROVIDER=github-copilot OPENCODE_MODEL=gpt-5-mini \
-  waif ask "Check server"
+  wf ask "Check server"
 ```
 
 - Emit JSON output (machine-readable, fields: `agent`, `promptLength`, `responseMarkdown`):
 
 ```bash
-waif ask "Give me a summary" --json
+wf ask "Give me a summary" --json
 ```
 
 - Read prompt from stdin (hyphen `-` means read stdin, 5s timeout):
 
 ```bash
-echo "Write a short changelog" | waif ask - --agent Scribbler --json
+echo "Write a short changelog" | wf ask - --agent Scribbler --json
 ```
 
 - Enable/disable OpenCode integration (env var override):
 
 ```bash
-OPENCODE_ENABLED=1 waif ask "Use real OpenCode"
-OPENCODE_ENABLED=0 waif ask "Use fallback behavior"
+OPENCODE_ENABLED=1 wf ask "Use real OpenCode"
+OPENCODE_ENABLED=0 wf ask "Use fallback behavior"
 ```
 
 - Override host/port for an existing server:
 
 ```bash
-OPENCODE_HOST=127.0.0.1 OPENCODE_PORT=9000 OPENCODE_ENABLED=1 waif ask "Check server"
+OPENCODE_HOST=127.0.0.1 OPENCODE_PORT=9000 OPENCODE_ENABLED=1 wf ask "Check server"
 ```
 
 - Override default agent (CLI and server default):
 
 ```bash
-OPENCODE_DEFAULT_AGENT=build waif ask "Say hi"
+OPENCODE_DEFAULT_AGENT=build wf ask "Say hi"
 ```
 
-## Runtime behavior (what happens when you run `waif ask`)
+## Runtime behavior (what happens when you run `wf ask`)
 
 1. Validate prompt
    - If the CLI is invoked with `-` as the prompt argument it reads stdin (5s timeout). Otherwise it uses the provided string argument. If no prompt is provided the command exits with a helpful error.
@@ -133,7 +133,7 @@ scribbler: scribbler
 
   - How to add a mapping / how it’s populated:
     - The CLI will attempt to list agents from the server and auto-write `.opencode/agent_map.yaml`; you can also add entries manually.
-    - The `waif ask` CLI reads the mapping at invocation time.
+    - The `wf ask` CLI reads the mapping at invocation time.
 
 ## Testing and E2E guide
 
@@ -170,7 +170,7 @@ export OPENCODE_PORT=8080
 export OPENCODE_ENABLED=1
 ```
 
-- Run the WAIF E2E tests that hit the real server
+- Run the WF E2E tests that hit the real server
   - From repo root:
 
 ```bash
@@ -208,7 +208,7 @@ npm test -- -t "ask.e2e"
 
 ```bash
 # ensure server is up via CLI before running tests
-OPENCODE_ENABLED=1 waif ask "warmup" || true
+OPENCODE_ENABLED=1 wf ask "warmup" || true
 npm test -- -t "ask.e2e"
 ```
 
@@ -254,7 +254,7 @@ npm test -- -t "ask.e2e"
 
 PR-ready changelog paragraph
 
-- Add developer documentation for the new `waif ask` command, including usage examples, runtime behavior with lazy OpenCode integration, configuration and agent-mapping guidance, and end-to-end testing instructions. Reviewers should verify that the examples match the CLI flags and environment variables, that the `.opencode/server.yaml` snippet reflects the intended default enablement (`enable: true`), and that the E2E steps run the real OpenCode server and `OPENCODE_E2E=1 npm test -- -t "ask.e2e"` successfully in their environment.
+- Add developer documentation for the new `wf ask` command, including usage examples, runtime behavior with lazy OpenCode integration, configuration and agent-mapping guidance, and end-to-end testing instructions. Reviewers should verify that the examples match the CLI flags and environment variables, that the `.opencode/server.yaml` snippet reflects the intended default enablement (`enable: true`), and that the E2E steps run the real OpenCode server and `OPENCODE_E2E=1 npm test -- -t "ask.e2e"` successfully in their environment.
 
 Files reviewers should check (concise)
 

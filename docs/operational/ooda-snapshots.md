@@ -15,17 +15,17 @@ A snapshot is **one JSON object per line** (JSONL) representing one completed jo
 
 Snapshots are appended by both:
 
-- `waif ooda scheduler` (long-lived loop)
-- `waif ooda run-job` (deterministic one-shot; preferred for CI)
+- `wf ooda scheduler` (long-lived loop)
+- `wf ooda run-job` (deterministic one-shot; preferred for CI)
 
 Logging is controlled via `--log`:
 
 ```bash
 # Use the default snapshot location (typically under history/)
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log
 
 # Or choose an explicit path
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log /var/log/waif/ooda.jsonl
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log /var/log/wf/ooda.jsonl
 ```
 
 A common operator pattern is per-job files under `history/`:
@@ -115,7 +115,7 @@ Retention is configured **per job**:
 
 Enforcement:
 
-- After appending a new snapshot line, WAIF keeps the **last N non-empty lines** and removes older entries.
+- After appending a new snapshot line, WF keeps the **last N non-empty lines** and removes older entries.
 
 If you do not set `keep_last`, snapshot logs may grow without bound.
 

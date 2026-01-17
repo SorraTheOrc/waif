@@ -2,7 +2,7 @@
 
 ## Summary
 
-The **Cron-style OODA Scheduler** is the canonical OODA implementation for WAIF: a cron-driven job scheduler plus a deterministic single-job runner.
+The **Cron-style OODA Scheduler** is the canonical OODA implementation for WF: a cron-driven job scheduler plus a deterministic single-job runner.
 
 It enables:
 
@@ -44,13 +44,13 @@ Canonical commands:
 
 ```bash
 # long-lived cron-style loop
-waif ooda scheduler --config .waif/ooda-scheduler.yaml
+wf ooda scheduler --config .waif/ooda-scheduler.yaml
 
 # deterministic one-shot runner (used by CI)
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job <id>
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job <id>
 
 # optional: write snapshots somewhere specific
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job <id> --log history/ooda_snapshot.jsonl
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job <id> --log history/ooda_snapshot.jsonl
 ```
 
 Note: the CLI presently implements `ooda scheduler` and `ooda run-job`. If we also want an alias surface like `ooda schedule start|stop|run|status`, track that as a follow-up.
@@ -61,7 +61,7 @@ Notes:
 - A separate developer/CI oriented entrypoint exists for deterministic run execution:
 
 ```bash
-waif ooda run-job --config <path> --job <id>
+wf ooda run-job --config <path> --job <id>
 ```
 
 See usage docs: `docs/usage/ooda.md`.
@@ -129,7 +129,7 @@ This section defines the canonical snapshot persistence format and the operator 
 
 ### Snapshot destination
 
-Both `waif ooda run-job` and `waif ooda scheduler` can append snapshots to a JSONL file.
+Both `wf ooda run-job` and `wf ooda scheduler` can append snapshots to a JSONL file.
 
 - Use `--log <path>` to choose an explicit snapshot file.
 - If `--log` is omitted, snapshots are appended to a default under `history/` (typically `history/<job-id>.jsonl`).
@@ -138,13 +138,13 @@ CLI examples:
 
 ```bash
 # Run one job once and append a snapshot line
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log
 
 # Run one job once and write snapshots to a custom file
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log /var/log/waif/ooda.jsonl
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log /var/log/wf/ooda.jsonl
 
 # Run the long-lived scheduler and append snapshots
-waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log
+wf ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log
 ```
 
 Notes:
@@ -261,7 +261,7 @@ Recommended acceptance checklist:
    - outputs are sanitized/truncated as expected
    - `keep_last` is enforced
 3. **Manual operator verification**:
-   - run `waif ooda run-job --config .waif/ooda-scheduler.yaml --job <id> --log`
+   - run `wf ooda run-job --config .waif/ooda-scheduler.yaml --job <id> --log`
    - confirm `history/<job-id>.jsonl` (or custom `--log`) exists and is append-only
    - confirm file permissions are appropriate for your environment (see operator doc)
 

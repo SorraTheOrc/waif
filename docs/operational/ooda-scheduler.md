@@ -1,6 +1,6 @@
 # OODA scheduler (operator guide)
 
-This document is the operator-facing reference for running the WAIF OODA scheduler.
+This document is the operator-facing reference for running the WF OODA scheduler.
 
 Related docs:
 
@@ -15,10 +15,10 @@ Related docs:
 
 ```bash
 # Run the scheduler loop (foreground). This is the default when no subcommand is provided:
-waif ooda
+wf ooda
 
 # Or run the scheduler explicitly with options:
-waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log history/ooda_snapshot.jsonl
+wf ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30 --log history/ooda_snapshot.jsonl
 
 # To stop the scheduler, terminate the process (Ctrl-C) or send a kill to the PID.
 ```
@@ -31,13 +31,13 @@ Notes:
 ### Run a single job (CI-friendly)
 
 ```bash
-waif ooda run-job --job <id> --config <path> --log <path> --json
+wf ooda run-job --job <id> --config <path> --log <path> --json
 ```
 
 Example:
 
 ```bash
-waif ooda run-job \
+wf ooda run-job \
   --job daily-health \
   --config .waif/ooda-scheduler.yaml \
   --log history/ooda_snapshot.jsonl \

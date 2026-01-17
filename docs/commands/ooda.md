@@ -16,7 +16,7 @@ Use `run-job` when you want a deterministic “run this one thing now” workflo
 - `tests/fixtures/ooda.hello-5s.yaml` — run the scheduler every 5 seconds:
 
   ```bash
-  waif ooda scheduler --config tests/fixtures/ooda.hello-5s.yaml --interval 1
+  wf ooda scheduler --config tests/fixtures/ooda.hello-5s.yaml --interval 1
   ```
 
 ### Scheduler
@@ -24,19 +24,19 @@ Use `run-job` when you want a deterministic “run this one thing now” workflo
 Run the scheduler loop:
 
 ```bash
-waif ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30
+wf ooda scheduler --config .waif/ooda-scheduler.yaml --interval 30
 ```
 
 Optional snapshot log location:
 
 ```bash
-waif ooda scheduler --config .waif/ooda-scheduler.yaml --log history/ooda_snapshot.jsonl
+wf ooda scheduler --config .waif/ooda-scheduler.yaml --log history/ooda_snapshot.jsonl
 ```
 
 Disable snapshot logging:
 
 ```bash
-waif ooda scheduler --config .waif/ooda-scheduler.yaml --log false
+wf ooda scheduler --config .waif/ooda-scheduler.yaml --log false
 ```
 
 Notes:
@@ -49,25 +49,25 @@ Notes:
 Run a configured job once by id:
 
 ```bash
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
 ```
 
 Write the run snapshot to a specific file:
 
 ```bash
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log history/ooda_snapshot.jsonl
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log history/ooda_snapshot.jsonl
 ```
 
 Disable snapshot logging:
 
 ```bash
-waif ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log false
+wf ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health --log false
 ```
 
 Machine-readable output (when supported by your top-level invocation):
 
 ```bash
-waif --json ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
+wf --json ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
 ```
 
 #### Quick examples for `run-job`
@@ -75,7 +75,7 @@ waif --json ooda run-job --config .waif/ooda-scheduler.yaml --job daily-health
 One-shot run (human mode). Captured output is printed to stdout/stderr when *not* using JSON output:
 
 ```bash
-waif ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+wf ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
 ```
 
 What to expect:
@@ -86,7 +86,7 @@ What to expect:
 JSON output (automation). Use the top-level `--json` flag:
 
 ```bash
-waif --json ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+wf --json ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
 ```
 
 Example output:
@@ -117,7 +117,7 @@ These steps are intended for contributors/reviewers running locally.
 2. Use a known-good fixture config:
 
    ```bash
-   waif ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+   wf ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
    ```
 
 3. Verify snapshot logging (default path is `history/ooda_snapshot_<ts>.jsonl`):
@@ -223,13 +223,13 @@ Pragmatic mitigations:
 Non-JSON run (prints captured output to your terminal):
 
 ```bash
-waif ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+wf ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
 ```
 
 JSON run (does not print the raw output; output is in the JSON object):
 
 ```bash
-waif --json ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
+wf --json ooda run-job --config tests/fixtures/ooda.valid.yaml --job daily-health
 ```
 
 Redaction example (what a snapshot line can look like when `redact: true`):
@@ -334,7 +334,7 @@ Scheduler mode
 Run the scheduler loop with the example config at 5 second intervals and persist snapshots to a file:
 
 ```bash
-waif ooda scheduler --config tests/fixtures/ooda.hello-5s.yaml --interval 5 --log history/ooda_snapshot_hello.jsonl
+wf ooda scheduler --config tests/fixtures/ooda.hello-5s.yaml --interval 5 --log history/ooda_snapshot_hello.jsonl
 ```
 
 What to expect:
@@ -348,14 +348,14 @@ Run-job mode (single-run / debug)
 You can execute the job once with `run-job` (useful for debugging or iterating on the command):
 
 ```bash
-waif ooda run-job --config tests/fixtures/ooda.hello-5s.yaml --job hello-5s --log history/ooda_snapshot_hello.jsonl
+wf ooda run-job --config tests/fixtures/ooda.hello-5s.yaml --job hello-5s --log history/ooda_snapshot_hello.jsonl
 ```
 
 If you want to mimic the scheduler cadence using `run-job`, run it in a simple shell loop:
 
 ```bash
 while true; do
-  waif ooda run-job --config tests/fixtures/ooda.hello-5s.yaml --job hello-5s --log history/ooda_snapshot_hello.jsonl
+  wf ooda run-job --config tests/fixtures/ooda.hello-5s.yaml --job hello-5s --log history/ooda_snapshot_hello.jsonl
   sleep 5
 done
 ```

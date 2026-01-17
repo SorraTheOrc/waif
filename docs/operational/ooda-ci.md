@@ -15,7 +15,7 @@ Recommended layers:
    - Uses `tests/run-job.e2e.test.ts` and `tests/wf-e6r.2.14.cli-e2e.test.ts`.
 
 3. **Sandbox smoke test** (optional; matrix job)
-   - A minimal “end-to-end” smoke run of `waif ooda run-job` against a safe fixture config.
+   - A minimal “end-to-end” smoke run of `wf ooda run-job` against a safe fixture config.
    - Useful to catch runner-specific issues (shell availability, Node version oddities, filesystem permissions).
 
 ## Secrets masking and redaction
@@ -44,7 +44,7 @@ Guidelines:
 ### Suggested jobs
 
 1. **sandbox-smoke** (fast, safe)
-   - Runs `waif ooda run-job` against a minimal fixture config.
+   - Runs `wf ooda run-job` against a minimal fixture config.
    - Writes snapshots to a temp path.
    - Does not require secrets.
 
@@ -56,7 +56,7 @@ Guidelines:
 ### Example (conceptual)
 
 - `unit` (matrix): `npm test` / `npx vitest`
-- `sandbox-smoke` (single env): `waif ooda run-job ...`
+- `sandbox-smoke` (single env): `wf ooda run-job ...`
 - `run-job` (single env): vitest E2E specs above
 
 ## Recommended CI matrix placement
@@ -97,7 +97,7 @@ npx vitest tests/wf-e6r.2.14.cli-e2e.test.ts
 This test:
 
 - Creates a temporary YAML config
-- Executes `waif ooda run-job` programmatically
+- Executes `wf ooda run-job` programmatically
 - Asserts that a single JSONL snapshot line is written
 - Asserts retention enforcement (`keep_last: 1`)
 
