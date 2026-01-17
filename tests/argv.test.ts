@@ -3,14 +3,14 @@ import { normalizeSlashCommandArgv } from '../src/lib/argv.js';
 
 describe('normalizeSlashCommandArgv', () => {
   test('passes through argv when no leading slash token', () => {
-    const { argv, stripped } = normalizeSlashCommandArgv(['implement', 'wf-ba2.4.3']);
-    expect(argv).toEqual(['implement', 'wf-ba2.4.3']);
+    const { argv, stripped } = normalizeSlashCommandArgv(['next', 'wf-ba2.4.3']);
+    expect(argv).toEqual(['next', 'wf-ba2.4.3']);
     expect(stripped).toBe(false);
   });
 
   test('strips leading slash from first token', () => {
-    const { argv, stripped } = normalizeSlashCommandArgv(['/implement', 'wf-ba2.4.3']);
-    expect(argv).toEqual(['implement', 'wf-ba2.4.3']);
+    const { argv, stripped } = normalizeSlashCommandArgv(['/next', 'wf-ba2.4.3']);
+    expect(argv).toEqual(['next', 'wf-ba2.4.3']);
     expect(stripped).toBe(true);
   });
 

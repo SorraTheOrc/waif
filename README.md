@@ -48,9 +48,9 @@ When interacting with agents, the `waif` CLI tool is designed to integrate with 
 
 [OpenCode Slash Commands](https://opencode.ai/docs/commands/) are a way to define short commands that guide agents in their completion of specific tasks. WAIF defines several slash commands which can be run directly or via the CLI tool (using `wafi COMMAND [ARGS]`). These commands are defined in [`.opencode/command`](.opencode/command) and include:
 
-- [`/prd`](.opencode/command/prd.md): Creates or edits a PRD through a short interview; optionally seeds from a Beads issue id and/or a target file path, then writes the PRD in a standard Markdown outline.
+- [`/prd`](.opencode/command/prd.md): Creates or edits a PRD through a short interview; optionally seeds from a Beads issue id and/or a target file path, then writes the PRD in a standard Markdown outline. (Use the OpenCode slash command; the CLI subcommand has been removed.)
 - [`/design`](.opencode/command/design.md): Runs an interview + drafting loop to create or improve design notes for a single Beads issue id via `bd update --design`.
-- [`/implement`](.opencode/command/implement.md): Implements a Beads issue end-to-end from an id
+- [`/implement`](.opencode/command/implement.md): Implements a Beads issue end-to-end from an id (OpenCode-hosted; CLI subcommand removed — use the slash command)
 
 ## WAIF CLI Features
 
@@ -71,7 +71,7 @@ When interacting with agents, the `waif` CLI tool is designed to integrate with 
 
   JSON behavior: `waif show <id> --json` (or global `waif --json show <id>`) emits the raw issue object from `bd show --json`.
 - `waif --version` (alias: `-v`): prints the CLI version and exits.
-- `waif ask [prompt] [--agent <name>] [--json]`: one-shot ask that integrates with OpenCode; defaults to agent `map`, provider `github-copilot`, model `gpt-5-mini`, host `127.0.0.1`, port `4096`. Env overrides: `OPENCODE_ENABLED`, `OPENCODE_HOST`, `OPENCODE_PORT`, `OPENCODE_DEFAULT_AGENT`, `OPENCODE_PROVIDER`, `OPENCODE_MODEL`. If no `--agent` is provided and the first word of the prompt matches a key in `.opencode/agent_map.yaml`, that word is used as the agent and removed from the prompt.
+- `waif ask ...` **removed**: use the OpenCode-hosted `/ask` slash command instead (see `.opencode/command/ask.md`).
 
 ### Symbols config
 
