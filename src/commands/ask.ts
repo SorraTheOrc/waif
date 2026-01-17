@@ -180,6 +180,13 @@ function sendToPane(paneId: string, prompt: string, agentName: string) {
   }
 }
 
+// Expose small tmux helper indirection to allow tests to inject a mock implementation.
+export const _tmux = {
+  listTmuxPanes: listTmuxPanes,
+  findPaneForAgent: findPaneForAgent,
+  sendToPane: sendToPane,
+};
+
 export function createAskCommand() {
   const cmd = new Command('ask');
   cmd
@@ -249,8 +256,8 @@ export function createAskCommand() {
         throw new CliError(`Agent '${mappedAgent}' not defined in workflow_agents.yaml`, 1);
       }
 
-      const paneId = findPaneForAgent(agentCfg);
-      sendToPane(paneId, promptText, agentCfg.name);
+      const paneId = _tmux.findPaneForAgent(agentCfg);
+      _tmux.sendToPane(paneId, promptText, agentCfg.name);
       appendLog(agentCfg.name, promptText);
 
       if (jsonOutput) {
