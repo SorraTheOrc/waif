@@ -43,8 +43,8 @@ Define the bounding intent for the work: scope, measurable success metrics, cons
 - **Top risks:** short list of the highest-impact uncertainties and a proposed first-mitigation.
 
 Agent Commands:
-1) Create initial tracking bead: `/intake <Project Title>` (OpenCode) or `waif intake <Project Title>` (CLI)
-2) Create PRD via interview: `/prd <Bead ID>` (OpenCode) or `waif prd <Bead ID>` (CLI)
+1) Create initial tracking bead: `/intake <Project Title>` (OpenCode) or `wf intake <Project Title>` (CLI)
+2) Create PRD via interview: `/prd <Bead ID>` (OpenCode) or `wf prd <Bead ID>` (CLI)
 
 Summary: a clear, testable project definition that guides epics and prioritization.
 
@@ -57,7 +57,7 @@ Map the end-to-end user outcomes into one or more master epics that represent de
 - **Ownership:** assign an owner for PM, engineering, infra, security and UX per epic.
 
 Agent Commands:
-1) Decompose the PRD into master epic(s): `/milestones <PRD Path>` (OpenCode) or `waif milestones <PRD Path>` (CLI)
+1) Decompose the PRD into master epic(s): `/milestones <PRD Path>` (OpenCode) or `wf milestones <PRD Path>` (CLI)
 
 Summary: master epics turn the project definition into parallel, owned workstreams.
 
@@ -70,7 +70,7 @@ Break each epic into discrete features: each feature should have a concise accep
 - **Taskization:** create `bd` tasks for implementation, infra, docs, and tests; link to the PRD and epic.
 
 Agent Commands:
-1) Decompose epics into features and tasks: `/plan <Epic ID>` (OpenCode) or `waif plan <Epic ID>` (CLI)
+1) Decompose epics into features and tasks: `/plan <Epic ID>` (OpenCode) or `wf plan <Epic ID>` (CLI)
 
 Summary: features make epics executable and testable in small increments.
 
@@ -82,10 +82,10 @@ Implement each milestone/epicas vertical, end-to-end slices: each iteration deli
 - **Demo-ready:** each slice should be deployable to a staging environment and demoable with a short script.
 
 Agent Commands:
-1) For each issue, generate implementation plan: `/plan <Issue ID>` (OpenCode) or `waif plan <Issue ID>` (CLI)
-2) For each issue, generate user documentation: `/doc <Issue ID>` (OpenCode) or `waif doc <Issue ID>` (CLI)
-3) For each issue, generate test plan: `/testplan <Issue ID>` (OpenCode) or `waif testplan <Issue ID>` (CLI)
-4) For each issue implement the feature and tests: `/implement <Issue ID>` (OpenCode) or `waif implement <Issue ID>` (CLI) 
+1) For each issue, generate implementation plan: `/plan <Issue ID>` (OpenCode) or `wf plan <Issue ID>` (CLI)
+2) For each issue, generate user documentation: `/doc <Issue ID>` (OpenCode) or `wf doc <Issue ID>` (CLI)
+3) For each issue, generate test plan: `/testplan <Issue ID>` (OpenCode) or `wf testplan <Issue ID>` (CLI)
+4) For each issue implement the feature and tests: `/implement <Issue ID>` (OpenCode) or `wf implement <Issue ID>` (CLI) 
 
 Summary: vertical slices reduce integration risk and make progress visible.
 
