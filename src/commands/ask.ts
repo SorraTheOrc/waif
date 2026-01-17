@@ -1,3 +1,4 @@
+// Removed tmux provider abstraction; using WAIF_* env shims and spawnSync fallbacks
 import { stdin as processStdin } from 'process';
 import { Command } from 'commander';
 import {
