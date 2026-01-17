@@ -1,0 +1,23 @@
+#compdef wf
+
+_wf() {
+  local -a commands
+  commands=(
+    'next:Recommend next issue'
+    'in-progress:Show in-progress issues'
+    'show:Show issue details'
+    'ask:Ask an agent'
+    'startWork:Start agent shell'
+    'ooda:OODA subcommands'
+  )
+
+  if [[ $COMP_CWORD -eq 1 ]]; then
+    _describe 'command' commands
+    return
+  fi
+
+  # fallback to filename
+  _files
+}
+
+compdef _wf wf
