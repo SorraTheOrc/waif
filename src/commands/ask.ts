@@ -50,9 +50,11 @@ function readStdin(timeoutMs = 5000): Promise<string> {
 }
 
 function getLogPaths() {
+  // Use a stable HOME fallback so resolve() never receives undefined.
+  const home = process.env.HOME ?? '~';
   const dir = process.env.WAIF_LOG_DIR
     ? resolve(process.env.WAIF_LOG_DIR)
-    : resolve(process.env.HOME || '~', '.waif/logs');
+    : resolve(home, '.waif/logs');
   const file = resolve(dir, 'ask.log');
   return { dir, file };
 }

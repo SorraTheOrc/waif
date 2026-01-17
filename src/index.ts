@@ -13,6 +13,21 @@ import { createShowCommand } from './commands/show.js';
 import { handleError, logStdout } from './lib/io.js';
 import { getCliVersion } from './lib/version.js';
 
+// Env compatibility shim: make WF_* and WAIF_* interchangeable at runtime.
+// This copies values from WF_<SUFFIX> to WAIF_<SUFFIX> when the latter is undefined,
+// and vice-versa. Keep minimal and early so the rest of the app can rely on either.
+for (const [k, v] of Object.entries(process.env)) {
+  if (!v) continue;
+  if (k.startsWith('WF_')) {
+    const rest = k.slice(3);
+    const waifKey = `WAIF_${rest}`;
+    if (process.env[waifKey] === undefined) process.env[waifKey] = v;
+  } else if (k.startsWith('WAIF_')) {
+    const rest = k.slice(5);
+    const wfKey = `WF_${rest}`;
+    if (process.env[wfKey] === undefined) process.env[wfKey] = v;
+  }
+}
 
 import { normalizeSlashCommandArgv } from './lib/argv.js';
 
