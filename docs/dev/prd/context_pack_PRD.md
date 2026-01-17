@@ -6,8 +6,8 @@
 
 ## Introduction
 
-- One-liner
-  - Provide a single, agent-oriented “signpost” document (`docs/dev/CONTEXT_PACK.md`) that gives agents *minimum efficient* context to navigate the repository, plus a CLI command (`waif context` / `waif ctx`) that generates/updates it.
+ - One-liner
+   - Provide a single, agent-oriented “signpost” document (`docs/dev/CONTEXT_PACK.md`) that gives agents *minimum efficient* context to navigate the repository. The previous CLI generator (`waif context` / `waif ctx`) has been removed; this document now focuses on the pack's content and maintenance approach.
 
 - Problem statement
   - Agents starting work on a new issue need fast, reliable orientation to the project’s structure, rules, and canonical docs.
