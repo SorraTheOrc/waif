@@ -22,6 +22,8 @@ test('ask command errors when tmux integration is invoked', async () => {
   const logDir = mkdtempSync(join(tmpdir(), 'waif-ask-log-'));
   process.env.WAIF_LOG_DIR = logDir;
 
+  // No provider injected: runtime should surface the tmux-removed error if it
+  // attempts to use tmux. We assert the CLI exits non-zero and does not write a log.
   const code = await run(['ask', 'Hello world']);
   // tmux integration has been removed; command should return non-zero
   expect(code).toBeGreaterThan(0);
