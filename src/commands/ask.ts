@@ -137,15 +137,12 @@ function listTmuxPanes(): Array<{ id: string; title: string; session: string; wi
       .map(parsePaneEnv);
   }
 
-  const tmuxBin = process.env.WAIF_TMUX_BIN || 'tmux';
-  const res = spawnSync(tmuxBin, ['list-panes', '-a', '-F', '#{session_name}:#{window_name}.#{pane_index}\t#{pane_title}'], {
-    encoding: 'utf8',
-  });
-  if (res.status !== 0) {
-    throw new CliError('tmux not available. Hint: start workflow tmux session.', 1);
-  }
-  const lines = res.stdout.trim().split(/\r?\n/).filter(Boolean);
-  return lines.map(parsePaneEnv);
+  // TMUX runtime removed; surface a clear error with migration guidance
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { ensureTmuxRemoved } = require('../lib/tmux-removed');
+  ensureTmuxRemoved();
+  // Unreachable but satisfy function signature
+  return [];
 }
 
 function findPaneForAgent(agent: AgentConfig): string {
@@ -185,15 +182,10 @@ function sendToPane(paneId: string, prompt: string, agentName: string) {
   // In tests or dry-run mode, skip real tmux send
   if (process.env.WAIF_TMUX_DRY_RUN === '1' || process.env.WAIF_TMUX_PANES) return;
 
-  const tmuxBin = process.env.WAIF_TMUX_BIN || 'tmux';
-  const promptArg = JSON.stringify(prompt);
-  const agentArg = JSON.stringify(agentName.toLowerCase());
-  const commandString = `opencode --agent ${agentArg} --prompt ${promptArg}`;
-  const res = spawnSync(tmuxBin, ['send-keys', '-t', paneId, commandString, 'C-m'], { encoding: 'utf8' });
-  if (res.status !== 0) {
-    const err = (res.stderr || res.stdout || '').toString().trim();
-    throw new CliError(`Failed to send prompt to tmux pane${err ? `: ${err}` : ''}`, 1);
-  }
+  // TMUX runtime removed; surface a clear error with migration guidance
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { ensureTmuxRemoved } = require('../lib/tmux-removed');
+  ensureTmuxRemoved();
 }
 
 // Expose small tmux helper indirection to allow tests to inject a mock implementation.
