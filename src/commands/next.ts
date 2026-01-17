@@ -7,6 +7,7 @@ import { emitJson, logStdout } from '../lib/io.js';
 import { renderIssueTitle } from '../lib/issueTitle.js';
 import { renderIssuesTable } from '../lib/table.js';
 import { copyToClipboard } from '../lib/clipboard.js';
+import { extractBlockers, extractChildren, type IssueWithRelations } from '../lib/relations.js';
 import Fuse from 'fuse.js';
 
 const ANSI = {
@@ -38,7 +39,7 @@ function issuesTable(issues: Issue[]): string {
   });
 }
 
-interface Issue {
+interface Issue extends IssueWithRelations {
   id: string;
   title?: string;
   description?: string;
@@ -48,7 +49,7 @@ interface Issue {
   assignee?: string;
   dependency_count?: number;
   dependent_count?: number;
-  dependencies?: Array<{ type?: string; depends_on_id?: string }>;
+  dependencies?: Array<{ dependency_type?: string; type?: string; depends_on_id?: string }>;
   [key: string]: unknown;
 }
 
@@ -97,8 +98,15 @@ function startStatus(message: string) {
 }
 
 function clearStatus() {
-  // No-op: status messages stay visible (no cleanup = no UI jump).
-  // Just return true/false to indicate whether status was shown.
+  if (!process.stderr.isTTY) return false;
+  if (process.env.WAIF_NO_STATUS) return false;
+  try {
+    // Move cursor up one line and clear it
+    process.stderr.write('\u001b[1A\u001b[2K');
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function maybeSyncBeads(verbose: boolean) {
@@ -203,7 +211,13 @@ function loadBvScores(verbose: boolean): BvResult {
 
 function isBlocked(issue: Issue): boolean {
   if (!issue.dependencies || !Array.isArray(issue.dependencies)) return false;
-  return issue.dependencies.some((d) => (d?.type || '').toLowerCase() === 'blocks');
+  return issue.dependencies.some((d) => String(d?.dependency_type ?? d?.type ?? '').toLowerCase() === 'blocks');
+}
+
+function isEpicInProgress(issue: Issue): boolean {
+  const type = String((issue as any).issue_type ?? '').toLowerCase();
+  const status = String(issue.status ?? '').toLowerCase();
+  return type === 'epic' && status === 'in_progress';
 }
 
 function eligible(issue: Issue): boolean {
@@ -218,7 +232,7 @@ function computeScore(issue: Issue, bv: BvResult): { score: number; rationale: s
     return {
       score: bvEntry.score,
       rationale: bvEntry.rationale || 'bv priority score',
-      metadata: { source: bv.source, rank: bvEntry.rank ?? null },
+      metadata: { source: bv.source, rank: bvEntry.rank ?? null, selection: 'bv_priority' },
     };
   }
 
@@ -232,11 +246,112 @@ function computeScore(issue: Issue, bv: BvResult): { score: number; rationale: s
   return {
     score,
     rationale: rationaleParts.join(' + '),
-    metadata: { priority, created_at: issue.created_at ?? null, tie_break: 'created_at' },
+    metadata: { priority, created_at: issue.created_at ?? null, tie_break: 'created_at', selection: 'priority_fallback' },
   };
 }
 
-function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean) {
+type Selection = { issue: Issue; score: number; rationale: string; metadata: Record<string, unknown> };
+
+function hydrateEpicRelations(epic: Issue, verbose: boolean): Issue {
+  if ((epic.dependencies && epic.dependencies.length) || (epic.dependents && epic.dependents.length) || (epic.children && epic.children.length)) {
+    return epic;
+  }
+
+  const envShow = process.env.WAIF_BD_SHOW_JSON;
+  if (envShow) {
+    try {
+      const parsed = JSON.parse(envShow);
+      const list = Array.isArray(parsed) ? parsed : [parsed];
+      const match = list.find((i: any) => i?.id === epic.id);
+      if (match) return { ...epic, ...match } as Issue;
+    } catch (e) {
+      if (verbose) process.stderr.write(`[debug] failed to parse WAIF_BD_SHOW_JSON: ${(e as Error).message}\n`);
+    }
+  }
+
+  if (!isCliAvailable('bd')) return epic;
+
+  try {
+    const out = runBd(['show', epic.id, '--json']);
+    const parsed = JSON.parse(out);
+    if (parsed && typeof parsed === 'object') {
+      return { ...epic, ...(Array.isArray(parsed) ? parsed[0] : parsed) } as Issue;
+    }
+  } catch (e) {
+    if (verbose) process.stderr.write(`[debug] failed to hydrate epic relations: ${(e as Error).message}\n`);
+  }
+  return epic;
+}
+
+type RelatedCandidate = Selection & { relation: 'child' | 'blocker' };
+
+function mapRelatedIssueToSelection(issue: Issue, relation: 'child' | 'blocker', bv: BvResult): RelatedCandidate {
+  const { score, rationale, metadata } = computeScore(issue, bv);
+  return { issue, score, rationale, metadata: { ...metadata, relation } as Record<string, unknown>, relation };
+}
+
+function collectEpicRelated(epic: Issue, assignee: string | undefined, bv: BvResult, verbose: boolean): RelatedCandidate[] {
+  const hydrated = hydrateEpicRelations(epic, verbose);
+  const children = extractChildren(hydrated).map((c) => ({ issue: c, relation: 'child' as const }));
+  const blockers = extractBlockers(hydrated).map((b) => ({ issue: b, relation: 'blocker' as const }));
+  const combined = [...children, ...blockers];
+  if (!combined.length) return [];
+
+  const dedup = new Map<string, { issue: Issue; relation: 'child' | 'blocker' }>();
+  for (const rel of combined) {
+    const id = rel.issue.id;
+    if (!id) continue;
+    if (assignee && (rel.issue.assignee ?? '').trim() !== assignee) continue;
+    if (dedup.has(id)) continue;
+    dedup.set(id, { issue: rel.issue as Issue, relation: rel.relation });
+  }
+
+  const filtered: RelatedCandidate[] = [];
+  for (const { issue, relation } of dedup.values()) {
+    if (!eligible(issue as Issue)) continue;
+    filtered.push(mapRelatedIssueToSelection(issue as Issue, relation, bv));
+  }
+
+  return filtered;
+}
+
+function pickEpicRecommendation(epic: Issue, assignee: string | undefined, bv: BvResult, verbose: boolean): { recommendation: RelatedCandidate | null; reason?: 'in_progress_child' | 'bv_priority' | 'priority_fallback'; related: RelatedCandidate[] } {
+  const related = collectEpicRelated(epic, assignee, bv, verbose);
+  if (!related.length) return { recommendation: null, related: [] };
+
+  const inProgressChildren = related.filter((r) => r.relation === 'child' && String(r.issue.status ?? '').toLowerCase() === 'in_progress');
+  if (inProgressChildren.length) {
+    const sorted = [...inProgressChildren].sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score;
+      const prA = typeof a.issue.priority === 'number' ? a.issue.priority : 99;
+      const prB = typeof b.issue.priority === 'number' ? b.issue.priority : 99;
+      if (prA !== prB) return prA - prB;
+      const ca = a.issue.created_at ? Date.parse(a.issue.created_at) : Number.MAX_SAFE_INTEGER;
+      const cb = b.issue.created_at ? Date.parse(b.issue.created_at) : Number.MAX_SAFE_INTEGER;
+      if (ca !== cb) return ca - cb;
+      return a.issue.id.localeCompare(b.issue.id);
+    });
+    return { recommendation: sorted[0], reason: 'in_progress_child', related };
+  }
+
+  const sorted = [...related].sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    const prA = typeof a.issue.priority === 'number' ? a.issue.priority : 99;
+    const prB = typeof b.issue.priority === 'number' ? b.issue.priority : 99;
+    if (prA !== prB) return prA - prB;
+    const ca = a.issue.created_at ? Date.parse(a.issue.created_at) : Number.MAX_SAFE_INTEGER;
+    const cb = b.issue.created_at ? Date.parse(b.issue.created_at) : Number.MAX_SAFE_INTEGER;
+    if (ca !== cb) return ca - cb;
+    return a.issue.id.localeCompare(b.issue.id);
+  });
+
+  const top = sorted[0];
+  const hasBv = (top.metadata?.source ?? top.metadata?.bvSource ?? '') !== undefined && (top.metadata as any).selection === 'bv_priority';
+  const reason: 'bv_priority' | 'priority_fallback' = hasBv ? 'bv_priority' : 'priority_fallback';
+  return { recommendation: top, reason, related };
+}
+
+function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean): Selection[] {
   const candidates = issues.filter(eligible);
   if (!candidates.length) {
     throw new CliError('No eligible issues found (need open, unblocked issues)', 1);
@@ -247,6 +362,12 @@ function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean) 
   });
   scored.sort((a, b) => {
     if (b.score !== a.score) return b.score - a.score;
+    const priorityA = typeof a.issue.priority === 'number' ? a.issue.priority : 99;
+    const priorityB = typeof b.issue.priority === 'number' ? b.issue.priority : 99;
+    if (priorityA !== priorityB) return priorityA - priorityB; // lower is higher priority
+    const createdA = a.issue.created_at ? Date.parse(a.issue.created_at) : Number.MAX_SAFE_INTEGER;
+    const createdB = b.issue.created_at ? Date.parse(b.issue.created_at) : Number.MAX_SAFE_INTEGER;
+    if (createdA !== createdB) return createdA - createdB;
     return a.issue.id.localeCompare(b.issue.id);
   });
   if (verbose) {
@@ -279,7 +400,7 @@ export function createNextCommand() {
 
       const { issues, source } = loadIssues(verbose);
       const candidateIssues = assignee
-        ? issues.filter((issue) => (issue.assignee ?? '').trim() === assignee)
+        ? issues.filter((issue) => ((issue.assignee ?? '').trim() === assignee) || isEpicInProgress(issue))
         : issues;
 
       if (assignee && candidateIssues.length === 0) {
@@ -289,23 +410,55 @@ export function createNextCommand() {
       const printedReview = startStatus('Reviewing dependencies...');
       const bv = loadBvScores(verbose);
       const printedSelect = startStatus('Selecting next issue...');
-      let selected: any;
+      let selected: Selection[];
       try {
         selected = selectTopN(candidateIssues, bv, n, verbose);
       } finally {
-        if (printedReview || printedSelect) clearStatus();
+        const clearsNeeded = (printedReview ? 1 : 0) + (printedSelect ? 1 : 0);
+        for (let i = 0; i < clearsNeeded; i += 1) {
+          clearStatus();
+        }
+      }
+
+      const epicContext: { epic?: Issue; recommendation?: RelatedCandidate; reason?: string; relation?: 'child' | 'blocker'; related?: RelatedCandidate[] } = {};
+
+      let finalSelection: Selection[] = selected;
+
+      const epicCandidates = candidateIssues.filter(isEpicInProgress);
+      let epicFocus: Issue | undefined;
+      const topSelected = selected[0]?.issue;
+      if (topSelected && isEpicInProgress(topSelected)) {
+        epicFocus = topSelected;
+      } else if (epicCandidates.length) {
+        const topEpic = selectTopN(epicCandidates, bv, 1, verbose)[0];
+        epicFocus = topEpic?.issue;
+      }
+
+      if (epicFocus) {
+        const { recommendation, reason, related } = pickEpicRecommendation(epicFocus, assignee, bv, verbose);
+        if (recommendation) {
+          epicContext.epic = epicFocus;
+          epicContext.recommendation = recommendation;
+          epicContext.reason = reason;
+          epicContext.relation = recommendation.relation;
+          epicContext.related = related;
+          finalSelection = [recommendation];
+        }
       }
 
       // If search provided, re-rank selected candidates by fuzzy match
-      let finalSelection = selected;
+      // Note: if search is provided, we re-evaluate topN against the same filtered candidate set
+      // When an in-progress epic triggered epicContext, search is constrained to that epic's related items.
       let searchApplied = false;
       let searchMatched = false;
       if (search && search.trim().length > 0) {
         searchApplied = true;
         const topN = n || 10;
-        const candidates = selectTopN(candidateIssues, bv, topN, verbose);
+        const baseCandidates = epicContext.recommendation && epicContext.related?.length
+          ? epicContext.related
+          : selectTopN(candidateIssues, bv, topN, verbose);
+        const candidates = baseCandidates.map((c) => ('relation' in c ? c : { ...c, relation: undefined })) as Array<RelatedCandidate | (Selection & { relation?: string })>;
         const items = candidates.map((c) => c.issue);
-
 
         const titleFuse = new Fuse(items, { keys: ['title'], includeScore: true, threshold: 0.4 });
         const descFuse = new Fuse(items, { keys: ['description'], includeScore: true, threshold: 0.6 });
@@ -332,8 +485,7 @@ export function createNextCommand() {
 
         const anyMatch = ranked.some((r) => r.titleMatch > 0 || r.descMatch > 0);
         if (!anyMatch) {
-          // no-match fallback: keep original selection (selected) and indicate no-match
-          finalSelection = selected;
+          // no-match fallback: keep original selection (selected or epic-focused) and indicate no-match
           searchMatched = false;
         } else {
           ranked.sort((a, b) => {
@@ -356,13 +508,57 @@ export function createNextCommand() {
       }
 
       if (jsonOutput) {
-        const payload = finalSelection.map((s: { issue: Issue; score?: number; rationale?: string; metadata?: Record<string, unknown> }, idx: number) => ({ ...s.issue, waif: { score: s.score, rationale: s.rationale, rank: idx + 1, metadata: { ...s.metadata, issuesSource: source, bvSource: bv.source } } }));
+        const payload = finalSelection.map((s: { issue: Issue; score?: number; rationale?: string; metadata?: Record<string, unknown> }, idx: number) => ({
+          ...s.issue,
+          waif: {
+            score: s.score,
+            rationale: s.rationale,
+            rank: idx + 1,
+            metadata: { ...s.metadata, issuesSource: source, bvSource: bv.source },
+            epic_context: epicContext.epic && epicContext.recommendation
+              ? {
+                  epic_id: epicContext.epic.id,
+                  epic_status: epicContext.epic.status,
+                  recommended_id: epicContext.recommendation.issue.id,
+                  selection_reason: epicContext.reason,
+                  relation: epicContext.relation,
+                  related_ids: epicContext.related?.map((r) => r.issue.id).filter(Boolean),
+                }
+              : undefined,
+          },
+        }));
         emitJson(payload.length === 1 ? payload[0] : payload);
         return;
       }
 
+      // Human output: frontmatter notes shown before the table
+      const frontmatter: string[] = [];
+      const topIssue = finalSelection[0]?.issue;
+      if (topIssue && String(topIssue.status ?? '').toLowerCase() === 'in_progress') {
+        frontmatter.push(`Recommended is already in_progress: ${topIssue.id}`);
+      }
+      if (epicContext.epic && epicContext.recommendation) {
+        const relLabel = epicContext.relation === 'blocker' ? 'blocker' : 'child';
+        const progressNote = String(epicContext.recommendation.issue.status ?? '').toLowerCase() === 'in_progress'
+          ? ' (in_progress — finish started work)'
+          : '';
+        frontmatter.push(`Epic context: ${epicContext.epic.id} (${epicContext.epic.status ?? ''})`);
+        frontmatter.push(`Recommended ${relLabel}: ${epicContext.recommendation.issue.id}${progressNote}`);
+      }
+      if (frontmatter.length) {
+        frontmatter.forEach((line) => logStdout(line));
+        logStdout('');
+      }
+
       // Human output: render a table with up to n rows, then show details for the first
       const recommendedIssues = finalSelection.map((s: { issue: Issue }) => s.issue);
+      if (epicContext.epic && epicContext.recommendation && !searchApplied) {
+        // When epic mode triggers without search, align display to the recommended related issue
+        const match = recommendedIssues.find((i) => i.id === epicContext.recommendation?.issue.id);
+        if (match) {
+          recommendedIssues.splice(0, recommendedIssues.length, match);
+        }
+      }
       // When search applied and matched, show only the chosen first item; otherwise show full selection
       const displayIssues = (searchApplied && searchMatched && finalSelection.length > 0)
         ? [finalSelection[0].issue]
@@ -382,6 +578,16 @@ export function createNextCommand() {
           logStdout(`# Search applied: "${search}"`);
           logStdout('');
         }
+      }
+
+      if (epicContext.epic && epicContext.recommendation) {
+        const relLabel = epicContext.relation === 'blocker' ? 'blocker' : 'child';
+        const progressNote = String(epicContext.recommendation.issue.status ?? '').toLowerCase() === 'in_progress'
+          ? ' (in_progress — finish started work)'
+          : '';
+        logStdout(`Epic context: ${epicContext.epic.id} (${epicContext.epic.status ?? ''})`);
+        logStdout(`Recommended ${relLabel}: ${epicContext.recommendation.issue.id}${progressNote}`);
+        logStdout('');
       }
 
       logStdout(heading('Details'));
