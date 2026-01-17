@@ -6,6 +6,10 @@ import { describe, expect, it } from 'vitest';
 
 const CLI = [process.execPath, 'dist/index.js'];
 
+function makeRelated(rel: any) {
+  return { dependency_type: rel.dependency_type, type: rel.type, id: rel.id, depends_on_id: rel.depends_on_id, status: rel.status, title: rel.title, priority: rel.priority, assignee: rel.assignee };
+}
+
 function makeIssues(path: string, issues: any[]) {
   writeFileSync(path, issues.map((i) => JSON.stringify(i)).join('\n') + '\n', 'utf8');
 }
@@ -156,6 +160,100 @@ describe('wf next', () => {
     expect(payload.waif.rationale).toContain('priority');
   });
 
+  it('prefers in-progress child when top is epic in_progress', async () => {
+    const tmpIssues = join(tmpdir(), `issues-${Date.now() + 5}.jsonl`);
+    makeIssues(tmpIssues, [
+      { id: 'wf-epic', title: 'Epic', status: 'in_progress', issue_type: 'epic', priority: 1 },
+      { id: 'wf-open', title: 'Other open', status: 'open', priority: 0 },
+    ]);
+
+    const epicShow = [
+      {
+        id: 'wf-epic',
+        title: 'Epic',
+        status: 'in_progress',
+        issue_type: 'epic',
+        dependents: [
+          makeRelated({ id: 'wf-child1', dependency_type: 'parent-child', status: 'in_progress', priority: 2, title: 'Child 1' }),
+          makeRelated({ id: 'wf-child2', dependency_type: 'parent-child', status: 'open', priority: 0, title: 'Child 2' }),
+        ],
+        dependencies: [],
+      },
+      { id: 'wf-child1', title: 'Child 1', status: 'in_progress', priority: 2 },
+      { id: 'wf-child2', title: 'Child 2', status: 'open', priority: 0 },
+    ];
+
+    const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'next', '--json'], {
+      env: {
+        WAIF_ISSUES_PATH: tmpIssues,
+        WAIF_CLIPBOARD_CMD: process.execPath,
+        PATH: '',
+        WAIF_NO_COLOR: '1',
+        WAIF_BD_SHOW_JSON: JSON.stringify(epicShow),
+      },
+      input: '',
+    });
+
+    expect(exitCode).toBe(0);
+    const payload = JSON.parse(stdout.trim());
+    expect(payload.id).toBe('wf-child1');
+    expect(payload.waif.epic_context.epic_id).toBe('wf-epic');
+    expect(payload.waif.epic_context.recommended_id).toBe('wf-child1');
+    expect(payload.waif.epic_context.selection_reason).toBe('in_progress_child');
+  });
+
+  it('selects highest bv child/blocker when no in-progress child and applies assignee filter first', async () => {
+    const tmpIssues = join(tmpdir(), `issues-${Date.now() + 6}.jsonl`);
+    makeIssues(tmpIssues, [
+      { id: 'wf-epic', title: 'Epic', status: 'in_progress', issue_type: 'epic', priority: 2 },
+      { id: 'wf-open', title: 'Other open', status: 'open', priority: 0 },
+    ]);
+
+    const epicShow = [
+      {
+        id: 'wf-epic',
+        title: 'Epic',
+        status: 'in_progress',
+        issue_type: 'epic',
+        dependents: [
+          makeRelated({ id: 'wf-child1', dependency_type: 'parent-child', status: 'open', priority: 2, title: 'Child 1', assignee: 'bob' }),
+          makeRelated({ id: 'wf-child2', dependency_type: 'parent-child', status: 'open', priority: 1, title: 'Child 2', assignee: 'alice' }),
+        ],
+        dependencies: [
+          makeRelated({ id: 'wf-block', dependency_type: 'blocks', status: 'open', priority: 0, title: 'Blocker', assignee: 'alice' }),
+        ],
+      },
+      { id: 'wf-child1', title: 'Child 1', status: 'open', priority: 2, assignee: 'bob' },
+      { id: 'wf-child2', title: 'Child 2', status: 'open', priority: 1, assignee: 'alice' },
+      { id: 'wf-block', title: 'Blocker', status: 'open', priority: 0, assignee: 'alice' },
+    ];
+
+    const bvPayload = JSON.stringify({ items: [
+      { id: 'wf-child1', score: 5 },
+      { id: 'wf-child2', score: 50 },
+      { id: 'wf-block', score: 10 },
+      { id: 'wf-epic', score: 1 },
+    ] });
+
+    const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'next', '--assignee', 'alice', '--json'], {
+      env: {
+        WAIF_ISSUES_PATH: tmpIssues,
+        WAIF_CLIPBOARD_CMD: process.execPath,
+        PATH: '',
+        WAIF_NO_COLOR: '1',
+        WAIF_BD_SHOW_JSON: JSON.stringify(epicShow),
+        WAIF_BV_PRIORITY_JSON: bvPayload,
+      },
+      input: '',
+    });
+
+    expect(exitCode).toBe(0);
+    const payload = JSON.parse(stdout.trim());
+    expect(payload.id).toBe('wf-child2');
+    expect(payload.waif.epic_context.recommended_id).toBe('wf-child2');
+    expect(payload.waif.epic_context.selection_reason).toBe('bv_priority');
+  });
+
   it('errors when no eligible issues', async () => {
     const tmpIssues = join(tmpdir(), `issues-${Date.now() + 2}.jsonl`);
     makeIssues(tmpIssues, [{ id: 'wf-1', status: 'closed' }]);
@@ -208,5 +306,43 @@ describe('wf next', () => {
     expect(first).toBe(second);
     expect(first).toContain('wf-1');
     expect(first).not.toContain('wf-3');
+  });
+
+  it('includes epic context and in-progress note in frontmatter when epic mode triggers', async () => {
+    const tmpIssues = join(tmpdir(), `issues-${Date.now() + 7}.jsonl`);
+    makeIssues(tmpIssues, [
+      { id: 'wf-epic', title: 'Epic', status: 'in_progress', issue_type: 'epic', priority: 1 },
+      { id: 'wf-open', title: 'Other open', status: 'open', priority: 0 },
+    ]);
+
+    const epicShow = [
+      {
+        id: 'wf-epic',
+        title: 'Epic',
+        status: 'in_progress',
+        issue_type: 'epic',
+        dependents: [
+          makeRelated({ id: 'wf-child1', dependency_type: 'parent-child', status: 'in_progress', priority: 2, title: 'Child 1' }),
+        ],
+        dependencies: [],
+      },
+      { id: 'wf-child1', title: 'Child 1', status: 'in_progress', priority: 2 },
+    ];
+
+    const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'next'], {
+      env: {
+        WAIF_ISSUES_PATH: tmpIssues,
+        WAIF_CLIPBOARD_CMD: process.execPath,
+        PATH: '',
+        WAIF_NO_COLOR: '1',
+        WAIF_BD_SHOW_JSON: JSON.stringify(epicShow),
+      },
+      input: '',
+    });
+
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain('Recommended is already in_progress: wf-child1');
+    expect(stdout).toContain('Epic context: wf-epic');
+    expect(stdout).toContain('Recommended child: wf-child1');
   });
 });

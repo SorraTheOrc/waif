@@ -168,6 +168,7 @@ Acceptance criteria
 6. JSON output: `waif next --json` will include an additional `waif.epic_context` object when Epic-aware selection is used. The object MUST include at minimum: `{ "epic_id": "<id>", "epic_status": "in_progress", "selection_reason": "in_progress_child|bv_priority|priority_fallback", "recommended_id": "<id>" }` so automation consumers can detect Epic-scoped recommendations.
 7. Tests: add unit tests covering the selection branch (in_progress child preferred; bv-selection fallback; assignee filter interaction) and an integration test that simulates bd outputs and validates both human and JSON output formats.
 8. Idempotence & safety: the command must be read-only by default and MUST NOT modify bead state (no auto assignment). Any annotations or comments created by follow-up tooling must be idempotent and opt-in.
+9. Idempotence (repeat runs): Running the command repeatedly must not mutate bead state; any proposed annotations or comments remain proposal-only and should be deduplicated by downstream tooling if emitted. Default behavior is proposal-only.
 
 Constraints
 

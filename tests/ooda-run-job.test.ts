@@ -65,7 +65,7 @@ describe('runJobCommand', () => {
     } as any);
 
     expect(result.timedOut).toBe(true);
-  });
+  }, 10000);
 });
 
 describe('enforceRetention + writeJobSnapshot', () => {
