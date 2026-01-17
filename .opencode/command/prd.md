@@ -35,7 +35,7 @@ You are helping create or update a Product Requirements Document (PRD) for an ar
 
 ## Seed context
 
-- Read `docs/dev/CONTEXT_PACK.md` if present; otherwise scan `docs/` (excluding `docs/dev`), `README.md`, and other high-level files for product context.
+- Read `docs/dev/CONTEXT_PACK.md` if present; otherwise scan `docs/` and other high-level files for product context. Note: the previous `waif context` CLI generator has been removed; maintainers should update the Context Pack manually or via external automation.
 - Fetch and read the issue details using beads CLI: `bd show <issueId> --json`.
 - Fetch and read any documents or beads referenced in the issue external references.
 - If a PRD already exisgts at the path indicated in the bead then assume we are updating an existing PRD.

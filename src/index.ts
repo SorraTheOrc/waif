@@ -49,9 +49,6 @@ export async function run(argv = process.argv.slice(2)): Promise<number> {
     .showHelpAfterError();
 
   program.addCommand(createPrdCommand());
-  // Load context command before parsing to ensure it's available synchronously
-  const contextModule = await import('./commands/context.js');
-  program.addCommand(contextModule.createContextCommand());
   program.addCommand(createAskCommand());
   program.addCommand(createNextCommand());
   program.addCommand(createRecentCommand());
