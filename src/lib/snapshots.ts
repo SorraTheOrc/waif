@@ -26,7 +26,8 @@ export function writeJobSnapshot(dir: string, snapshot: Snapshot, options?: { re
   try {
     mkdirSync(outDir, { recursive: true });
   } catch (e) {
-    // best-effort
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] writeJobSnapshot mkdir failure: ${String(e)}`);
   }
 
   const file = join(outDir, `${snapshot.job_id}.jsonl`);
@@ -62,7 +63,8 @@ export function writeJobSnapshot(dir: string, snapshot: Snapshot, options?: { re
       writeFileSync(file, keep.map((l) => `${l}\n`).join(''), 'utf8');
     }
   } catch (e) {
-    // ignore
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] writeJobSnapshot retention: ${String(e)}`);
   }
 }
 
@@ -72,7 +74,8 @@ export function appendSnapshotFile(filePath: string, snapshot: Snapshot, options
     const dir = dirname(filePath);
     if (dir && dir !== '.') mkdirSync(dir, { recursive: true });
   } catch (e) {
-    // best-effort
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] appendSnapshotFile mkdir failure: ${String(e)}`);
   }
 
   // Redact/stdout/stderr handling
@@ -102,6 +105,7 @@ export function appendSnapshotFile(filePath: string, snapshot: Snapshot, options
       writeFileSync(filePath, keep.map((l) => `${l}\n`).join(''), 'utf8');
     }
   } catch (e) {
-    // ignore
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] appendSnapshotFile retention: ${String(e)}`);
   }
 }
