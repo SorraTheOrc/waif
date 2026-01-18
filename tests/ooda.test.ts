@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classify, __test__, writeSnapshots } from '../src/commands/ooda.js';
 
-const { readOpencodeEvents } = __test__;
+const { readOpencodeEvents, eventsToRows } = __test__;
 
 describe('ooda classify', () => {
   it('marks busy for keywords and bd ids', () => {
@@ -50,6 +50,37 @@ describe('ooda readOpencodeEvents', () => {
     expect(a).toEqual({ type: 'update', properties: { agent: 'a', seq: 2 } });
     expect(b).toEqual({ type: 'update', properties: { agent: 'b', seq: 2 } });
     require('fs').unlinkSync(tmp);
+  });
+});
+
+describe('ooda table width fitting', () => {
+  it('caps columns to terminal width and truncates cells', () => {
+    const rows = eventsToRows([
+      { type: 'update', agent: 'a-very-long-agent-name', properties: { agent: 'a-very-long-agent-name', info: { title: 'x'.repeat(200) } } },
+      { type: 'update', agent: 'b', properties: { agent: 'b', info: { title: 'short' } } },
+    ] as any);
+
+    // Simulate narrow terminal
+    const originalCols = process.stdout.columns;
+    Object.defineProperty(process.stdout, 'columns', { value: 40, configurable: true });
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
+
+    const table = require('../dist/commands/ooda.js').__test__.renderTable(rows);
+
+    // No line should exceed the terminal width
+    const lines = table.split('\n');
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(40);
+    }
+
+    // Titles should be truncated with ellipsis when needed
+    const bodyLine = lines[2];
+    expect(bodyLine).toContain('…');
+
+    // restore
+    if (originalCols !== undefined) {
+      Object.defineProperty(process.stdout, 'columns', { value: originalCols, configurable: true });
+    }
   });
 });
 

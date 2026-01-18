@@ -63,26 +63,36 @@ function computeWidths(rows: PaneRow[]): { agent: number; status: number; title:
   }
 
   const termCols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : Number(process.env.COLUMNS || 0) || 120;
-  const padding = 6;
-  const computedTitle = termCols - agent - status - padding;
-  if (computedTitle > title) title = computedTitle;
-  if (title < 10) title = 10;
+  const padding = 6; // " | " separators
+
+  // If agent + status already consume too much, cap them so we always leave room for a title column.
+  const maxContent = Math.max(1, termCols - padding);
+  if (agent + status >= maxContent) {
+    const agentShare = Math.max(1, Math.floor((maxContent - 1) / 2));
+    agent = agentShare;
+    status = Math.max(1, maxContent - agentShare);
+  }
+
+  const availableTitle = Math.max(1, termCols - agent - status - padding);
+  // Title should never exceed available space; prefer header/title length but cap to availableTitle
+  title = Math.min(Math.max(title, headerTitle.length), availableTitle);
 
   return { agent, status, title };
 }
 
 function truncateField(text: string, maxLen: number): string {
+  if (maxLen <= 0) return '';
   if (text.length <= maxLen) return text;
-  if (maxLen <= 1) return text.slice(0, maxLen);
+  if (maxLen === 1) return text.slice(0, 1);
   return `${text.slice(0, maxLen - 1)}…`;
 }
 
 function renderTable(rows: PaneRow[]): string {
   const widths = computeWidths(rows);
-  const header = `${'Agent'.padEnd(widths.agent)} | ${'Status'.padEnd(widths.status)} | ${'Title'.padEnd(widths.title)}`;
+  const header = `${truncateField('Agent', widths.agent).padEnd(widths.agent)} | ${truncateField('Status', widths.status).padEnd(widths.status)} | ${truncateField('Title', widths.title).padEnd(widths.title)}`;
   const sep = `${'-'.repeat(widths.agent)}-+-${'-'.repeat(widths.status)}-+-${'-'.repeat(widths.title)}`;
   const body = rows
-    .map((r) => `${r.pane.padEnd(widths.agent)} | ${r.status.padEnd(widths.status)} | ${truncateField(r.title, widths.title).padEnd(widths.title)}`)
+    .map((r) => `${truncateField(r.pane ?? '', widths.agent).padEnd(widths.agent)} | ${truncateField(r.status ?? '', widths.status).padEnd(widths.status)} | ${truncateField(r.title ?? '', widths.title).padEnd(widths.title)}`)
     .join('\n');
   return `${header}\n${sep}\n${body}`;
 }
@@ -465,7 +475,7 @@ const runJobCommandImpl = async (job: Job): Promise<RunJobResult> => {
   return legacy as RunJobResult;
 };
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, clearTerminalIfTTY };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, clearTerminalIfTTY, renderTable, computeWidths, truncateField };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
