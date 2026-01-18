@@ -5,6 +5,7 @@ import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import path from 'node:path';
 import cronParser from 'cron-parser';
+import stringWidth from 'string-width';
 import { emitJson, logStdout } from '../lib/io.js';
 import { loadConfig, type Job } from '../lib/config.js';
 import { runJobCommand as runnerRunJobCommand } from '../lib/runner.js';
@@ -82,19 +83,53 @@ function computeWidths(rows: PaneRow[]): { agent: number; status: number; title:
 
 function truncateField(text: string, maxLen: number): string {
   if (maxLen <= 0) return '';
-  if (text.length <= maxLen) return text;
+  const w = stringWidth(text);
+  if (w <= maxLen) return text;
   if (maxLen === 1) return text.slice(0, 1);
-  return `${text.slice(0, maxLen - 1)}…`;
+  // truncate by slicing code units conservatively until display width fits
+  let out = '';
+  for (const ch of text) {
+    if (stringWidth(out + ch) >= maxLen - 1) break;
+    out += ch;
+  }
+  return `${out}…`;
+}
+
+function padToDisplayWidth(text: string, width: number): string {
+  const w = stringWidth(text);
+  if (w >= width) return text;
+  return text + ' '.repeat(width - w);
 }
 
 function renderTable(rows: PaneRow[]): string {
-  const widths = computeWidths(rows);
-  const header = `${truncateField('Agent', widths.agent).padEnd(widths.agent)} | ${truncateField('Status', widths.status).padEnd(widths.status)} | ${truncateField('Title', widths.title).padEnd(widths.title)}`;
-  const sep = `${'-'.repeat(widths.agent)}-+-${'-'.repeat(widths.status)}-+-${'-'.repeat(widths.title)}`;
-  const body = rows
-    .map((r) => `${truncateField(r.pane ?? '', widths.agent).padEnd(widths.agent)} | ${truncateField(r.status ?? '', widths.status).padEnd(widths.status)} | ${truncateField(r.title ?? '', widths.title).padEnd(widths.title)}`)
-    .join('\n');
-  return `${header}\n${sep}\n${body}`;
+  let widths = computeWidths(rows);
+
+  // render using display-aware truncation/padding, then validate. If any line exceeds
+  // terminal columns (due to emoji/wide-chars), iteratively shrink title width and retry.
+  const termCols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : Number(process.env.COLUMNS || 0) || 120;
+  const make = (w: { agent: number; status: number; title: number }) => {
+    const header = `${truncateField('Agent', w.agent)} | ${truncateField('Status', w.status)} | ${truncateField('Title', w.title)}`;
+    const sep = `${'-'.repeat(w.agent)}-+-${'-'.repeat(w.status)}-+-${'-'.repeat(w.title)}`;
+    const body = rows
+      .map((r) => `${truncateField(r.pane ?? '', w.agent)} | ${truncateField(r.status ?? '', w.status)} | ${truncateField(r.title ?? '', w.title)}`)
+      .map((line) => {
+        // pad to display widths
+        const parts = line.split(' | ');
+        if (parts.length !== 3) return line;
+        return `${padToDisplayWidth(parts[0], w.agent)} | ${padToDisplayWidth(parts[1], w.status)} | ${padToDisplayWidth(parts[2], w.title)}`;
+      })
+      .join('\n');
+    return `${header}\n${sep}\n${body}`;
+  };
+
+  let attempt = make(widths);
+  // safety: ensure no rendered line exceeds terminal columns
+  const linesExceed = (s: string) => s.split('\n').some((l) => stringWidth(l) > termCols);
+  while (stringWidth(attempt) > 0 && linesExceed(attempt) && widths.title > 10) {
+    widths.title -= 1;
+    attempt = make(widths);
+  }
+  return attempt;
 }
 
 function sampleRows(): PaneRow[] {
@@ -475,7 +510,7 @@ const runJobCommandImpl = async (job: Job): Promise<RunJobResult> => {
   return legacy as RunJobResult;
 };
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, clearTerminalIfTTY, renderTable, computeWidths, truncateField };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, clearTerminalIfTTY, renderTable, computeWidths, truncateField, padToDisplayWidth };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
