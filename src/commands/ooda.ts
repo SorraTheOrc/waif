@@ -213,15 +213,18 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
                   matched = true;
                   break;
                 }
-              } catch {
+              } catch (e) {
+                // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+                console.debug(`[wf-pdpc] readOpencodeEvents pattern compare: ${String(e)}`);
                 // fallthrough
               }
             }
           }
           if (matched) break;
         }
-      } catch {
-        // ignore correlation failures
+      } catch (e) {
+        // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+        console.debug(`[wf-pdpc] readOpencodeEvents correlation: ${String(e)}`);
       }
 
       if (!matched) {
@@ -275,7 +278,9 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
                 matched = true;
               }
             }
-          } catch {
+          } catch (e) {
+            // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+            console.debug(`[wf-pdpc] readOpencodeEvents nearest-time correlation: ${String(e)}`);
             // ignore time parse errors
           }
         }
@@ -307,7 +312,9 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
                 }
               }
             }
-          } catch {
+          } catch (e) {
+            // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+            console.debug(`[wf-pdpc] readOpencodeEvents raw log heuristic: ${String(e)}`);
             // ignore file read errors
           }
 
@@ -338,13 +345,17 @@ async function readOpencodeEvents(logPath: string): Promise<OpencodeAgentEvent[]
             }
           }
         }
-      } catch {
-        // ignore
-      }
-    }
+  } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] readOpencodeEvents final-unknown heuristic: ${String(e)}`);
+    // ignore
+  }
+}
 
     return Object.keys(agentLatest).map((k) => agentLatest[k]);
   } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] readOpencodeEvents top-level: ${String(e)}`);
     return [];
   }
 }
@@ -410,9 +421,12 @@ function eventsToRows(events: OpencodeAgentEvent[]): PaneRow[] {
               agent = raw.slice(start, end);
             }
           }
-        } catch {
-          // ignore
-        }
+          } catch (e) {
+            // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+            console.debug(`[wf-pdpc] readOpencodeEvents final-unknown heuristic: ${String(e)}`);
+            // ignore
+          }
+
       }
     } else if (evType === 'session.idle' || statusProp === 'idle') {
       // Treat explicit idle session signals as waiting for next input/permission
@@ -470,6 +484,8 @@ export function writeSnapshots(logPath: string, rows: PaneRow[]) {
       nodeAppendFileSync(logPath, JSON.stringify(snapshot) + '\n', 'utf8');
     }
   } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] writeSnapshots: ${String(e)}`);
     // best-effort: do not throw from logging
   }
 }
@@ -552,6 +568,8 @@ export function writeJobSnapshot(
     // Delegate to shared snapshots helper which handles redaction and retention
     appendSnapshotFile(filePath, snapshot as any, { retention: job.retention?.keep_last });
   } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] writeJobSnapshot: ${String(e)}`);
     // best-effort
   }
 }
@@ -567,6 +585,8 @@ export function enforceRetention(filePath: string, keepLast?: number) {
     if (dir && dir !== '.') nodeMkdirSync(dir, { recursive: true });
     require('node:fs').writeFileSync(filePath, keep.map((l) => `${l}\n`).join(''), 'utf8');
   } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] enforceRetention: ${String(e)}`);
     // best-effort
   }
 }
@@ -582,6 +602,8 @@ export function printJobResult(job: Job, result: { stdout?: string; stderr?: str
       process.stderr.write(String(result.stderr));
     }
   } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] printJobResult: ${String(e)}`);
     // best-effort: do not throw while printing
   }
 }
@@ -600,10 +622,14 @@ function clearTerminalIfTTY() {
     const ansiClear = '\x1b[2J\x1b[H';
     try {
       process.stdout.write(ansiClear);
-    } catch {
+    } catch (e) {
+      // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+      console.debug(`[wf-pdpc] clearTerminalIfTTY write: ${String(e)}`);
       // best-effort: ignore write errors
     }
-  } catch {
+  } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] clearTerminalIfTTY: ${String(e)}`);
     // best-effort: ignore unexpected errors
   }
 }
@@ -626,7 +652,9 @@ export function printJobHeader(job: Job) {
     process.stdout.write(`${green}${line}${reset}\n`);
     process.stdout.write(`${green}${ts}${reset} ${job.name} (${job.id})\n`);
     process.stdout.write(`${green}${line}${reset}\n`);
-  } catch {
+  } catch (e) {
+    // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
+    console.debug(`[wf-pdpc] printJobHeader: ${String(e)}`);
     // best-effort
   }
 }
