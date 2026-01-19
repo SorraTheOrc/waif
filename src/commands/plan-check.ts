@@ -6,12 +6,14 @@ import { analyzeIssues, getFindings } from '../lib/planCheck.js';
 export function createPlanCheckCommand() {
   const cmd = new Command('doctor');
   cmd
-    .description('Validate beads plan integrity (interactive-only)')
+    .description('Validate beads plan integrity (interactive-only). By default only open or in_progress issues are scanned; use --include-closed to include closed issues.')
     .option('--type <kind>', 'Filter to a specific problem type: intake, dependency, cycles, orphans')
+    .option('--include-closed', 'Include closed issues in the scan')
     .option('--json', 'Emit JSON (reserved)')
     .option('--verbose', 'Emit debug logs to stderr')
     .action((options, command) => {
       const verbose = Boolean(options.verbose ?? command.parent?.getOptionValue('verbose'));
+      const includeClosed = Boolean(options.includeClosed ?? command.parent?.getOptionValue('includeClosed'));
       const typeOpt = typeof options.type === 'string' ? String(options.type).toLowerCase() : undefined;
 
       const normalize = (t?: string) => {
@@ -43,6 +45,14 @@ export function createPlanCheckCommand() {
             .split(/\r?\n/)
             .filter(Boolean)
             .map((l: string) => JSON.parse(l));
+        }
+
+        // Filter by status unless includeClosed is true
+        if (!includeClosed) {
+          issues = issues.filter((it: any) => {
+            const st = (it.status || '').toString().toLowerCase();
+            return st === 'open' || st === 'in_progress' || st === 'in-progress' || st === 'in progress';
+          });
         }
       } catch (e) {
         logStdout('Failed to load beads issues: ' + (e instanceof Error ? e.message : String(e)));
