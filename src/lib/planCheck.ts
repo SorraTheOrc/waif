@@ -16,7 +16,7 @@ function hasHeading(desc: string | undefined, heading: string) {
   return re.test(desc);
 }
 
-export function analyzeIssues(issues: BeadIssue[]) {
+export function getFindings(issues: BeadIssue[]) {
   const findings: string[] = [];
 
   // Build adjacency for dependency checking
@@ -43,7 +43,7 @@ export function analyzeIssues(issues: BeadIssue[]) {
     if (!hasHeading(it.description, 'Success criteria')) missing.push('Success criteria');
     if (!hasHeading(it.description, 'Constraints')) missing.push('Constraints');
     if (missing.length) {
-      findings.push(`- [Intake] ${it.id} ${it.title ? `(${it.title}) ` : ''}missing headings: ${missing.join(', ')}`);
+      findings.push(`${it.id}::Intake::missing-headings::${missing.join(',')}`);
     }
   }
 
@@ -54,7 +54,7 @@ export function analyzeIssues(issues: BeadIssue[]) {
     const matches = Array.from(desc.matchAll(idPattern)).map((m) => m[0]);
     for (const m of matches) {
       if (!ids.has(m)) {
-        findings.push(`- [Dependency] ${it.id} references missing issue ${m}`);
+        findings.push(`${it.id}::Dependency::missing-ref::${m}`);
       }
     }
   }
@@ -83,7 +83,7 @@ export function analyzeIssues(issues: BeadIssue[]) {
 
   for (const id of ids) dfs(id, [id]);
   for (const c of cycles) {
-    findings.push(`- [Cycle] ${c.join(' -> ')}`);
+    findings.push(`cycle::${c.join('->')}`);
   }
 
   // 4) Orphans: leaf tasks (non-epic) with no parent and no deps and no dependents
@@ -101,15 +101,32 @@ export function analyzeIssues(issues: BeadIssue[]) {
     const hasDeps = (adj.get(it.id) ?? []).length > 0;
     const hasDependents = (dependents.get(it.id) ?? 0) > 0;
     if (!isEpic && !hasParent && !hasDeps && !hasDependents) {
-      findings.push(`- [Orphan] ${it.id} ${it.title ? `(${it.title}) ` : ''}is a leaf task with no parent or deps`);
+      findings.push(`${it.id}::Orphan::leaf::no-parent-or-deps`);
     }
   }
 
+  return findings;
+}
+
+export function analyzeIssues(issues: BeadIssue[]) {
+  const findings = getFindings(issues);
   if (findings.length === 0) {
     return '# wf doctor — Plan Validator\n\nNo issues detected. All checks passed.';
   }
 
   // Format human-readable Markdown
   const header = '# wf doctor — Plan Validator\n\nThe validator found the following items. These are informational; no fixes were applied.\n\n';
-  return header + findings.join('\n') + '\n';
+  const human = findings.map((f) => {
+    // convert compact tokens to readable lines
+    if (f.includes('::')) {
+      const parts = f.split('::');
+      if (parts[1] === 'Intake') return `- [Intake] ${parts[0]} missing headings: ${parts[3].split(',').join(', ')}`;
+      if (parts[1] === 'Dependency') return `- [Dependency] ${parts[0]} references missing issue ${parts[3]}`;
+      if (parts[1] === 'Orphan') return `- [Orphan] ${parts[0]} is a leaf task with no parent or deps`;
+    }
+    if (f.startsWith('cycle::')) return `- [Cycle] ${f.slice('cycle::'.length).split('->').join(' -> ')}`;
+    return `- ${f}`;
+  }).join('\n');
+
+  return header + human + '\n';
 }

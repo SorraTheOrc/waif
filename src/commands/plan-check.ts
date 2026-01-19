@@ -1,7 +1,7 @@
 import { Command } from 'commander';
-import { logStdout } from '../lib/io.js';
+import { logStdout, emitJson } from '../lib/io.js';
 import * as bd from '../lib/bd.js';
-import { analyzeIssues } from '../lib/planCheck.js';
+import { analyzeIssues, getFindings } from '../lib/planCheck.js';
 
 export function createPlanCheckCommand() {
   const cmd = new Command('doctor');
@@ -32,7 +32,14 @@ export function createPlanCheckCommand() {
       }
 
       const md = analyzeIssues(issues);
+      // default interactive human output
       logStdout(md);
+      // reserve --json for future automation; if the parent/global --json is set, emit a compact JSON findings list
+      const jsonMode = Boolean(options.json ?? command.parent?.getOptionValue('json'));
+      if (jsonMode) {
+        const findings = getFindings(issues);
+        emitJson({ findings });
+      }
     });
 
   return cmd;
