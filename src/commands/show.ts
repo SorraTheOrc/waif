@@ -67,8 +67,10 @@ export function createShowCommand() {
       let childrenSection: string | undefined = '';
       if (related.length) {
         let hydrated = related as any[];
-        // Only try to call bd show to hydrate child objects when bd is available (avoids surprising behavior in tests/mocks)
-        if (isBdAvailable()) {
+        // Only try to call bd show to hydrate child objects when bd is available.
+        // The bd module may be mocked in tests and not expose isBdAvailable, so guard the call.
+        const bdAvailable = typeof isBdAvailable === 'function' ? isBdAvailable() : false;
+        if (bdAvailable) {
           hydrated = [] as any[];
           for (const rel of related) {
             const cid = (rel && (rel.id ?? (rel as any).depends_on_id)) as string | undefined;
