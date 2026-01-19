@@ -59,7 +59,7 @@ function computeBlocksCount(issue: IssueForTable): number {
   return 0;
 }
 
-function renderGenericTable<Row extends Record<string, any>>(options: TableOptions<Row>): string {
+export function renderGenericTable<Row extends Record<string, any>>(options: TableOptions<Row>): string {
   const sep = options.sep ?? '  ';
   const termWidth = typeof options.termWidth === 'number'
     ? options.termWidth

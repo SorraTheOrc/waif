@@ -10,6 +10,8 @@ export type BeadIssue = {
   labels?: string[];
 };
 
+import { extractStageTokens } from './stage.js';
+
 function hasHeading(desc: string | undefined, heading: string) {
   if (!desc) return false;
   const re = new RegExp(`^\\s*${heading}\\s*$`, 'im');
@@ -20,7 +22,8 @@ export type StructuredFindings = {
   intake: Array<{ id: string; title?: string; missing: string[] }>;
   dependency: Array<{ id: string; ref: string }>;
   cycles: string[][];
-  orphans: Array<{ id: string; title?: string }>; 
+  orphans: Array<{ id: string; title?: string }>;
+  missingStage: Array<{ id: string; title?: string }>;
 };
 
 export function getFindings(issues: BeadIssue[]): StructuredFindings {
@@ -28,6 +31,7 @@ export function getFindings(issues: BeadIssue[]): StructuredFindings {
   const dependency: Array<{ id: string; ref: string }> = [];
   const cycles: string[][] = [];
   const orphans: Array<{ id: string; title?: string }> = [];
+  const missingStage: Array<{ id: string; title?: string }> = [];
 
   // Build adjacency for dependency checking
   const adj = new Map<string, string[]>();
@@ -111,7 +115,16 @@ export function getFindings(issues: BeadIssue[]): StructuredFindings {
     }
   }
 
-  return { intake, dependency, cycles, orphans };
+  // 5) Missing stage labels
+  for (const it of issues) {
+    const labels = it.labels ?? [];
+    const stages = extractStageTokens(labels as any);
+    if (!stages || stages.length === 0) {
+      missingStage.push({ id: it.id, title: it.title });
+    }
+  }
+
+  return { intake, dependency, cycles, orphans, missingStage };
 }
 
 export function analyzeIssues(issues: BeadIssue[]) {
