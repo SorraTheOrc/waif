@@ -17,12 +17,14 @@ function createTestProgram() {
 
 describe('wf show', () => {
   it('prints main issue, blockers, and children tables', async () => {
-    (showIssue as unknown as Mock).mockReturnValue({
-      id: 'wf-123',
-      title: 'Demo',
-      status: 'open',
-      priority: 2,
-      assignee: 'alice',
+     (showIssue as unknown as Mock).mockReturnValue({
+       id: 'wf-123',
+       title: 'Demo',
+       status: 'open',
+       priority: 2,
+       assignee: 'alice',
+       labels: ['stage:in_progress'],
+
       dependencies: [
         { depends_on_id: 'wf-1', dependency_type: 'blocks', status: 'open' },
         { depends_on_id: 'wf-2', dependency_type: 'parent-child' },
@@ -36,7 +38,10 @@ describe('wf show', () => {
     await program.parseAsync(['show', 'wf-123'], { from: 'user' });
 
     const output = stdoutSpy.mock.calls.map((c) => c[0]).join('');
-    expect(output).toContain('wf-123');
+     expect(output).toContain('wf-123');
+     expect(output).toContain('Stage');
+     expect(output).toContain('in_progress');
+
     expect(output).toContain('Blockers');
     expect(output).toContain('Children');
     expect(output).toContain('wf-1');
@@ -45,7 +50,48 @@ describe('wf show', () => {
     stdoutSpy.mockRestore();
   });
 
-  it('errors when issue not found', async () => {
+   it('adds computed stage to --json output', async () => {
+     (showIssue as unknown as Mock).mockReturnValue({
+       id: 'wf-123',
+       title: 'Demo',
+       status: 'open',
+       priority: 2,
+       labels: ['stage:prd'],
+     });
+
+     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as any);
+
+     const program = createTestProgram();
+     await program.parseAsync(['show', 'wf-123', '--json'], { from: 'user' });
+
+     const output = stdoutSpy.mock.calls.map((c) => c[0]).join('');
+     expect(JSON.parse(output)).toMatchObject({ id: 'wf-123', stage: 'prd' });
+
+     stdoutSpy.mockRestore();
+   });
+
+   it('prints warning when multiple stage labels present and selects most mature', async () => {
+     (showIssue as unknown as Mock).mockReturnValue({
+       id: 'wf-999',
+       title: 'Multiple stages',
+       status: 'open',
+       labels: ['stage:idea', 'stage:in_progress'],
+     });
+
+     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as any);
+
+     const program = createTestProgram();
+     await program.parseAsync(['show', 'wf-999'], { from: 'user' });
+
+     const output = stdoutSpy.mock.calls.map((c) => c[0]).join('');
+     expect(output).toContain("Warning: multiple stage:* labels present");
+     expect(output).toContain("selected 'in_progress'");
+
+     stdoutSpy.mockRestore();
+   });
+
+   it('errors when issue not found', async () => {
+
     (showIssue as unknown as Mock).mockImplementation(() => {
       const err: any = new Error('bd show failed');
       err.exitCode = 1;

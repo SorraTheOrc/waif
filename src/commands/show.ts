@@ -1,7 +1,8 @@
 import { Command } from 'commander';
 import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
-import { showIssue } from '../lib/bd.js';
+import { computeWorkflowStage } from '../lib/stage.js';
+import * as bd from '../lib/bd.js';
 import { renderIssuesTable } from '../lib/table.js';
 import {
   renderBlockersSection,
@@ -28,7 +29,7 @@ export function createShowCommand() {
 
       let issue: Issue;
       try {
-        const out = showIssue(id);
+        const out = bd.showIssue(id);
         issue = Array.isArray(out) ? (out[0] as Issue) : (out as Issue);
       } catch (e) {
         const err = e as any;
@@ -40,20 +41,36 @@ export function createShowCommand() {
         throw new CliError(`bd show failed for ${id}: ${rawMsg}`, exitCode);
       }
 
+      const labels = Array.isArray((issue as any).labels) ? ((issue as any).labels as string[]) : undefined;
+      const stageInfo = computeWorkflowStage(labels);
+
       if (jsonOutput) {
-        emitJson(issue);
+        emitJson({ ...issue, stage: stageInfo.stage });
         return;
       }
 
-      const main = renderIssuesTable([issue], { sort: 'none' });
+      const main = renderIssuesTable([{ ...issue, labels }], { sort: 'none' });
+
       logStdout(main);
+
+      // Emit a one-line warning if multiple stage:* labels are present
+      if (stageInfo.hasMultiple) {
+        logStdout(`Warning: multiple stage:* labels present — selected '${stageInfo.stage}' per maturity order.`);
+      }
 
       const blockersSection = renderBlockersSection(issue);
       if (blockersSection) {
         logStdout(blockersSection);
       }
 
-      const childrenSection = renderChildrenSection(issue);
+      const related = Array.isArray(issue.children) ? issue.children : Array.isArray(issue.dependents) ? issue.dependents : [];
+      let childrenSection: string | undefined = '';
+      if (related.length) {
+        // Compute children/dependents section using the relation objects as provided by bd.
+        // We assume the relation objects include labels (no runtime hydration).
+        childrenSection = renderChildrenSection(issue);
+      }
+
       if (childrenSection) {
         logStdout(childrenSection);
       }

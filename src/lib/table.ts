@@ -1,4 +1,5 @@
 import { displayWidth, padDisplay, truncateDisplay } from './displayWidth.js';
+import { computeWorkflowStage, stageCode } from './stage.js';
 
 export type ColumnConfig<Row> = {
   key: keyof Row | string;
@@ -22,6 +23,7 @@ export type IssueForTable = {
   issue_type?: string;
   priority?: number;
   assignee?: string;
+  labels?: string[];
   dependency_count?: number;
   dependent_count?: number;
   // We support both shapes:
@@ -149,8 +151,10 @@ export function renderIssuesTable(issues: IssueForTable[], options: RenderIssues
     .map((i) => {
       const blockers = computeBlockersCount(i);
       const blocks = computeBlocksCount(i);
+      const { stage } = computeWorkflowStage(i.labels);
       return {
         id: i.id,
+        stage,
         title: renderIssueTitle(i, 0),
         priority: typeof i.priority === 'number' ? String(i.priority) : '',
         blockers: String(blockers),
@@ -163,12 +167,23 @@ export function renderIssuesTable(issues: IssueForTable[], options: RenderIssues
 
   const columns: ColumnConfig<typeof rows[number]>[] = [
     { key: 'id', header: 'ID', minWidth: 2, maxWidth: 20, droppable: false },
+    { key: 'stage', header: 'Stage', minWidth: 3, maxWidth: 12, droppable: false },
     { key: 'title', header: 'Type / Status / Title', minWidth: 4, maxWidth: 60, droppable: false },
     { key: 'priority', header: 'Priority', minWidth: 3, maxWidth: 8, droppable: true },
     { key: 'blockers', header: 'Blockers', minWidth: 3, maxWidth: 8, droppable: true },
     { key: 'blocks', header: 'Blocks', minWidth: 3, maxWidth: 8, droppable: true },
     { key: 'assignee', header: 'Assignee', minWidth: 3, maxWidth: 20, droppable: true },
   ];
+
+  const stageCol = columns.find((c) => c.key === 'stage');
+  if (stageCol) {
+    const tw = options.termWidth ?? (typeof process !== 'undefined' && process.stdout ? process.stdout.columns : undefined);
+    const veryNarrow = typeof tw === 'number' ? tw <= 70 : false;
+    for (const r of rows as any[]) {
+      r.stage = veryNarrow ? stageCode(r.stage) : r.stage;
+    }
+    stageCol.maxWidth = veryNarrow ? 3 : 12;
+  }
 
   const table = renderGenericTable({ columns, rows, termWidth: options.termWidth, sep: '  ' });
   if (!options.color?.enabled) return table;
