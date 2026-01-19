@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
 import { computeWorkflowStage } from '../lib/stage.js';
-import { showIssue } from '../lib/bd.js';
+import * as bd from '../lib/bd.js';
 import { renderIssuesTable } from '../lib/table.js';
 import {
   renderBlockersSection,
@@ -29,7 +29,7 @@ export function createShowCommand() {
 
       let issue: Issue;
       try {
-        const out = showIssue(id);
+        const out = bd.showIssue(id);
         issue = Array.isArray(out) ? (out[0] as Issue) : (out as Issue);
       } catch (e) {
         const err = e as any;
@@ -88,10 +88,10 @@ export function createShowCommand() {
             }
 
             try {
-              // Would call showIssue here
-              const out = showIssue(cid);
-              const child = Array.isArray(out) ? out[0] : out;
-              hydrated.push(child ?? rel);
+               // Would call bd.showIssue here
+               const out = bd.showIssue(cid);
+               const child = Array.isArray(out) ? out[0] : out;
+               hydrated.push(child ?? rel);
             } catch (e) {
               hydrated.push(rel);
             }
