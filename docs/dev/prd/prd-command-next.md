@@ -45,7 +45,7 @@
 3. When `bd` is not available, `# Details` falls back to: `<id>: <title>` (no selection rationale line is printed in human output).
 3. `waif next --json` prints a JSON object with full issue details plus computed score and ranking metadata.
 4. Ranking uses existing bv prioritization scores as the primary signal; tie-break deterministically by computed numeric score and, if equal, by `id` (lexicographic).
-5. CLI flags: `--json`, `--verbose` (debug logs), `--no-clipboard`, `--assignee <name>` (alias `-a`) to filter eligible candidates by exact assignee name (string compare after trim).
+5. CLI flags: `--json`, `--verbose` (debug logs), `--assignee <name>` (alias `-a`) to filter eligible candidates by exact assignee name (string compare after trim).
 6. On success, `waif next` copies the recommended issue id to the OS clipboard (best-effort).
 7. Read-only operation: the command must not modify issue state.
 
