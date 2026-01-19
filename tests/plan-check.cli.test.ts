@@ -47,7 +47,7 @@ describe('wf doctor (integration)', () => {
 
     const issues = [
       { id: 'wf-no-stage', title: 'No stage', status: 'open', issue_type: 'chore' },
-      { id: 'wf-prd', title: 'Has stage', status: 'open', issue_type: 'feature', labels: ['stage:prd'] },
+      { id: 'wf-prd', title: 'Has stage', status: 'open', issue_type: 'feature', labels: ['stage:prd_complete'] },
     ];
 
     makeFakeBd(binDir, issues);

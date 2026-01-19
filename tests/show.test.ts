@@ -56,7 +56,7 @@ describe('wf show', () => {
        title: 'Demo',
        status: 'open',
        priority: 2,
-       labels: ['stage:prd'],
+       labels: ['stage:prd_complete'],
      });
 
      const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as any);
@@ -65,7 +65,7 @@ describe('wf show', () => {
      await program.parseAsync(['show', 'wf-123', '--json'], { from: 'user' });
 
      const output = stdoutSpy.mock.calls.map((c) => c[0]).join('');
-     expect(JSON.parse(output)).toMatchObject({ id: 'wf-123', stage: 'prd' });
+     expect(JSON.parse(output)).toMatchObject({ id: 'wf-123', stage: 'prd_complete' });
 
      stdoutSpy.mockRestore();
    });

@@ -35,12 +35,12 @@ Freeform notes are useful for history but fragile for automation and discovery. 
 
 ## Canonical stage tokens and mapping
 Tokens MUST be treated case-insensitively when parsed. The canonical tokens and their meanings (listed in order of maturity):
-- intake_complete — intake work completed (brief or intake artifact captured)
+- idea — intake/idea stage
 - prd_complete — PRD / Project Definition finalized
 - milestones_defined — master milestones defined (no milestone identifier)
-- plan_defined — feature decomposition / implementation plan defined
+- planned — feature decomposition / implementation plan defined
 - in_progress — implementation (vertical slices)
-- review — review / sign-off
+- in_review — review / sign-off
 - done — completed / released
 
 ### Selection rule when multiple stage:* labels exist
@@ -89,13 +89,13 @@ Notes:
 1) Publish PRD (this file) and announce change to the team.
 2) Implement read-only CLI: wf stage <bead-id> that reads stage:* labels and prints the canonical stage (no writes yet).
 3) Add stage column to wf in-progress table output (strip the "stage:" prefix). In space-constrained environments, reduce stage display to a 1-3 letter code using this mapping:
-   - intake_complete -> "in"
-   - prd_complete -> "prd"
-   - milestones_defined -> "mst"
-   - plan_defined -> "pln"
-   - in_progress -> "inp"
-   - review -> "rev"
-   - done -> "don"
+- idea -> "in"
+- prd_complete -> "prd"
+- milestones_defined -> "mst"
+- planned -> "pln"
+- in_progress -> "inp"
+- in_review -> "rev"
+- done -> "don"
 
 ## Open questions / decisions required
 1) Permissions: which agents are authorized to set stage:* labels automatically? (Recommendation: limit to named agents and trusted CI accounts.)
