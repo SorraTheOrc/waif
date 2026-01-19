@@ -16,8 +16,18 @@ function hasHeading(desc: string | undefined, heading: string) {
   return re.test(desc);
 }
 
-export function getFindings(issues: BeadIssue[]) {
-  const findings: string[] = [];
+export type StructuredFindings = {
+  intake: Array<{ id: string; title?: string; missing: string[] }>;
+  dependency: Array<{ id: string; ref: string }>;
+  cycles: string[][];
+  orphans: Array<{ id: string; title?: string }>; 
+};
+
+export function getFindings(issues: BeadIssue[]): StructuredFindings {
+  const intake: Array<{ id: string; title?: string; missing: string[] }> = [];
+  const dependency: Array<{ id: string; ref: string }> = [];
+  const cycles: string[][] = [];
+  const orphans: Array<{ id: string; title?: string }> = [];
 
   // Build adjacency for dependency checking
   const adj = new Map<string, string[]>();
@@ -43,7 +53,7 @@ export function getFindings(issues: BeadIssue[]) {
     if (!hasHeading(it.description, 'Success criteria')) missing.push('Success criteria');
     if (!hasHeading(it.description, 'Constraints')) missing.push('Constraints');
     if (missing.length) {
-      findings.push(`${it.id}::Intake::missing-headings::${missing.join(',')}`);
+      intake.push({ id: it.id, title: it.title, missing });
     }
   }
 
@@ -54,7 +64,7 @@ export function getFindings(issues: BeadIssue[]) {
     const matches = Array.from(desc.matchAll(idPattern)).map((m) => m[0]);
     for (const m of matches) {
       if (!ids.has(m)) {
-        findings.push(`${it.id}::Dependency::missing-ref::${m}`);
+        dependency.push({ id: it.id, ref: m });
       }
     }
   }
@@ -62,7 +72,6 @@ export function getFindings(issues: BeadIssue[]) {
   // 3) Cycles detection (simple DFS)
   const visited = new Set<string>();
   const rec = new Set<string>();
-  const cycles: string[][] = [];
 
   function dfs(node: string, path: string[]) {
     if (rec.has(node)) {
@@ -82,9 +91,6 @@ export function getFindings(issues: BeadIssue[]) {
   }
 
   for (const id of ids) dfs(id, [id]);
-  for (const c of cycles) {
-    findings.push(`cycle::${c.join('->')}`);
-  }
 
   // 4) Orphans: leaf tasks (non-epic) with no parent and no deps and no dependents
   const dependents = new Map<string, number>();
@@ -101,32 +107,56 @@ export function getFindings(issues: BeadIssue[]) {
     const hasDeps = (adj.get(it.id) ?? []).length > 0;
     const hasDependents = (dependents.get(it.id) ?? 0) > 0;
     if (!isEpic && !hasParent && !hasDeps && !hasDependents) {
-      findings.push(`${it.id}::Orphan::leaf::no-parent-or-deps`);
+      orphans.push({ id: it.id, title: it.title });
     }
   }
 
-  return findings;
+  return { intake, dependency, cycles, orphans };
 }
 
 export function analyzeIssues(issues: BeadIssue[]) {
   const findings = getFindings(issues);
-  if (findings.length === 0) {
+  const hasAny = (findings.intake.length > 0) || (findings.dependency.length > 0) || (findings.cycles.length > 0) || (findings.orphans.length > 0);
+  if (!hasAny) {
     return '# wf doctor — Plan Validator\n\nNo issues detected. All checks passed.';
   }
 
-  // Format human-readable Markdown
+  // Format human-readable Markdown with separators per category
   const header = '# wf doctor — Plan Validator\n\nThe validator found the following items. These are informational; no fixes were applied.\n\n';
-  const human = findings.map((f) => {
-    // convert compact tokens to readable lines
-    if (f.includes('::')) {
-      const parts = f.split('::');
-      if (parts[1] === 'Intake') return `- [Intake] ${parts[0]} missing headings: ${parts[3].split(',').join(', ')}`;
-      if (parts[1] === 'Dependency') return `- [Dependency] ${parts[0]} references missing issue ${parts[3]}`;
-      if (parts[1] === 'Orphan') return `- [Orphan] ${parts[0]} is a leaf task with no parent or deps`;
-    }
-    if (f.startsWith('cycle::')) return `- [Cycle] ${f.slice('cycle::'.length).split('->').join(' -> ')}`;
-    return `- ${f}`;
-  }).join('\n');
+  const parts: string[] = [];
 
-  return header + human + '\n';
+  if (findings.intake.length) {
+    parts.push('## Intake completeness\n\n');
+    for (const it of findings.intake) {
+      parts.push(`- ${it.id} ${it.title ? `(${it.title}) ` : ''}missing headings: ${it.missing.join(', ')}`);
+    }
+    parts.push('\n');
+  }
+
+  if (findings.dependency.length) {
+    parts.push('## Dependency issues\n\n');
+    for (const d of findings.dependency) {
+      parts.push(`- ${d.id} references missing issue ${d.ref}`);
+    }
+    parts.push('\n');
+  }
+
+  if (findings.cycles.length) {
+    parts.push('## Cycles\n\n');
+    for (const c of findings.cycles) {
+      parts.push(`- ${c.join(' -> ')}`);
+    }
+    parts.push('\n');
+  }
+
+  if (findings.orphans.length) {
+    parts.push('## Orphans (leaf tasks)\n\n');
+    for (const o of findings.orphans) {
+      parts.push(`- ${o.id} ${o.title ? `(${o.title}) ` : ''}is a leaf task with no parent or deps`);
+    }
+    parts.push('\n');
+  }
+
+  return header + parts.join('\n') + '\n';
 }
+

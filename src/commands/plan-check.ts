@@ -34,11 +34,11 @@ export function createPlanCheckCommand() {
       const md = analyzeIssues(issues);
       // default interactive human output
       logStdout(md);
-      // reserve --json for future automation; if the parent/global --json is set, emit a compact JSON findings list
+      // reserve --json for automation: emit structured JSON findings when requested
       const jsonMode = Boolean(options.json ?? command.parent?.getOptionValue('json'));
       if (jsonMode) {
         const findings = getFindings(issues);
-        emitJson({ findings });
+        emitJson({ intake: findings.intake, dependency: findings.dependency, cycles: findings.cycles, orphans: findings.orphans });
       }
     });
 
