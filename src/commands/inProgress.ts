@@ -66,33 +66,9 @@ function parseIssuesFromJsonl(path: string): Issue[] {
 }
 
 function enrichIssuesWithDependencies(issues: Issue[], verbose: boolean): Issue[] {
-  if (!issues.length) return issues;
-
-  try {
-    const ids = issues.map((i) => i.id).filter(Boolean);
-    if (!ids.length) return issues;
-
-    const chunkSize = 40;
-    const hydrated = new Map<string, Issue>();
-
-    for (let idx = 0; idx < ids.length; idx += chunkSize) {
-      const chunk = ids.slice(idx, idx + chunkSize);
-      const out = runBd(['show', ...chunk, '--json']);
-      const parsed = JSON.parse(out);
-      const list = Array.isArray(parsed) ? (parsed as Issue[]) : [parsed as Issue];
-      for (const issue of list) {
-        if (issue?.id) hydrated.set(issue.id, issue);
-      }
-    }
-
-    return issues.map((issue) => {
-      const full = hydrated.get(issue.id);
-      return full ? { ...issue, ...full } : issue;
-    });
-  } catch (e) {
-    if (verbose) process.stderr.write(`[debug] bd show enrichment failed: ${(e as Error).message}\n`);
-    return issues;
-  }
+  // No runtime enrichment: rely on bd list --json to include relation details and labels.
+  // Keep function to preserve external behavior but return input unchanged.
+  return issues;
 }
 
 function renderIssuesTableWithRelatedSections(issues: Issue[]): string {
