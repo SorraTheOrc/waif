@@ -24,13 +24,30 @@ const STAGE_MATURITY_ORDER: StageToken[] = [
 
 const MATURITY_RANK = new Map<StageToken, number>(STAGE_MATURITY_ORDER.map((s, idx) => [s, idx]));
 
-export function extractStageTokens(labels: string[] | undefined | null): StageToken[] {
-  const raw = Array.isArray(labels) ? labels : [];
+export function extractStageTokens(labels: unknown[] | string | undefined | null): StageToken[] {
   const tokens: StageToken[] = [];
+  if (labels == null) return tokens;
 
-  for (const label of raw) {
+  // Normalize to an array of candidate strings
+  let candidates: string[] = [];
+  if (Array.isArray(labels)) {
+    for (const l of labels) {
+      if (typeof l === 'string') {
+        candidates.push(l);
+      } else if (l && typeof l === 'object') {
+        // common shapes: { name: 'stage:prd' } or { label: 'stage:prd' }
+        const name = (l as any).name ?? (l as any).label ?? (l as any).title ?? undefined;
+        if (typeof name === 'string') candidates.push(name);
+      }
+    }
+  } else if (typeof labels === 'string') {
+    candidates = labels.split(/\s*,\s*/).filter(Boolean);
+  }
+
+  for (const label of candidates) {
     if (typeof label !== 'string') continue;
-    const lower = label.toLowerCase();
+    const lower = label.toLowerCase().trim();
+
     if (!lower.startsWith(STAGE_PREFIX)) continue;
 
     const token = lower.slice(STAGE_PREFIX.length).trim();
