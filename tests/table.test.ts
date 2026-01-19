@@ -37,6 +37,12 @@ describe('renderIssuesTable', () => {
     expect(out).toMatch(/3/);
     expect(out).toMatch(/1/);
     expect(out).toMatch(/alice/);
+
+    // Ensure no line exceeds a modest terminal width when columns are narrow
+    const lines = out.split('\n');
+    for (const line of lines) {
+      expect(line.length).toBeLessThanOrEqual(200);
+    }
   });
 
   it('colors rows red when blocked', () => {

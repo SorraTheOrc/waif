@@ -5,13 +5,13 @@ import { spawn } from 'node:child_process';
 import readline from 'node:readline';
 import path from 'node:path';
 import cronParser from 'cron-parser';
-import stringWidth from 'string-width';
 import { emitJson, logStdout } from '../lib/io.js';
 import { loadConfig, type Job } from '../lib/config.js';
 import { runJobCommand as runnerRunJobCommand } from '../lib/runner.js';
 import { redactSecrets } from '../lib/redact.js';
 import { computePrevNext } from '../lib/catchup.js';
 import { appendSnapshotFile } from '../lib/snapshots.js';
+import { renderOodaTable } from '../lib/table.js';
 
 
 interface PaneRow {
@@ -19,6 +19,10 @@ interface PaneRow {
   title: string;
   status: 'Busy' | 'Free' | 'Waiting';
   reason: string;
+}
+
+function toOodaRow(rows: PaneRow[]): { agent: string; status: string; title: string }[] {
+  return rows.map((r) => ({ agent: r.pane ?? '', status: r.status ?? '', title: r.title ?? '' }));
 }
 
 interface OpencodeAgentEvent {
@@ -49,88 +53,9 @@ export function classify(title: string, stat?: string, pcpu?: string): { status:
   return { status: 'Free', reason: 'fallback' };
 }
 
-function computeWidths(rows: PaneRow[]): { agent: number; status: number; title: number } {
-  const headerAgent = 'Agent';
-  const headerStatus = 'Status';
-  const headerTitle = 'Title';
-  let agent = headerAgent.length;
-  let status = headerStatus.length;
-  let title = headerTitle.length;
+import { displayWidth, padDisplay, truncateDisplay } from '../lib/displayWidth.js';
 
-  for (const r of rows) {
-    agent = Math.max(agent, r.pane.length);
-    status = Math.max(status, r.status.length);
-    title = Math.max(title, r.title.length);
-  }
-
-  const termCols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : Number(process.env.COLUMNS || 0) || 120;
-  const padding = 6; // " | " separators
-
-  // If agent + status already consume too much, cap them so we always leave room for a title column.
-  const maxContent = Math.max(1, termCols - padding);
-  if (agent + status >= maxContent) {
-    const agentShare = Math.max(1, Math.floor((maxContent - 1) / 2));
-    agent = agentShare;
-    status = Math.max(1, maxContent - agentShare);
-  }
-
-  const availableTitle = Math.max(1, termCols - agent - status - padding);
-  // Title should never exceed available space; prefer header/title length but cap to availableTitle
-  title = Math.min(Math.max(title, headerTitle.length), availableTitle);
-
-  return { agent, status, title };
-}
-
-function truncateField(text: string, maxLen: number): string {
-  if (maxLen <= 0) return '';
-  const w = stringWidth(text);
-  if (w <= maxLen) return text;
-  if (maxLen === 1) return text.slice(0, 1);
-  // truncate by slicing code units conservatively until display width fits
-  let out = '';
-  for (const ch of text) {
-    if (stringWidth(out + ch) >= maxLen - 1) break;
-    out += ch;
-  }
-  return `${out}…`;
-}
-
-function padToDisplayWidth(text: string, width: number): string {
-  const w = stringWidth(text);
-  if (w >= width) return text;
-  return text + ' '.repeat(width - w);
-}
-
-function renderTable(rows: PaneRow[]): string {
-  let widths = computeWidths(rows);
-
-  // render using display-aware truncation/padding, then validate. If any line exceeds
-  // terminal columns (due to emoji/wide-chars), iteratively shrink title width and retry.
-  const termCols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : Number(process.env.COLUMNS || 0) || 120;
-  const make = (w: { agent: number; status: number; title: number }) => {
-    const header = `${truncateField('Agent', w.agent)} | ${truncateField('Status', w.status)} | ${truncateField('Title', w.title)}`;
-    const sep = `${'-'.repeat(w.agent)}-+-${'-'.repeat(w.status)}-+-${'-'.repeat(w.title)}`;
-    const body = rows
-      .map((r) => `${truncateField(r.pane ?? '', w.agent)} | ${truncateField(r.status ?? '', w.status)} | ${truncateField(r.title ?? '', w.title)}`)
-      .map((line) => {
-        // pad to display widths
-        const parts = line.split(' | ');
-        if (parts.length !== 3) return line;
-        return `${padToDisplayWidth(parts[0], w.agent)} | ${padToDisplayWidth(parts[1], w.status)} | ${padToDisplayWidth(parts[2], w.title)}`;
-      })
-      .join('\n');
-    return `${header}\n${sep}\n${body}`;
-  };
-
-  let attempt = make(widths);
-  // safety: ensure no rendered line exceeds terminal columns
-  const linesExceed = (s: string) => s.split('\n').some((l) => stringWidth(l) > termCols);
-  while (stringWidth(attempt) > 0 && linesExceed(attempt) && widths.title > 10) {
-    widths.title -= 1;
-    attempt = make(widths);
-  }
-  return attempt;
-}
+// Removed bespoke renderer; OODA now reuses the shared table renderer via renderOodaTable.
 
 function sampleRows(): PaneRow[] {
   return [
@@ -510,7 +435,7 @@ const runJobCommandImpl = async (job: Job): Promise<RunJobResult> => {
   return legacy as RunJobResult;
 };
 
-export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, clearTerminalIfTTY, renderTable, computeWidths, truncateField, padToDisplayWidth };
+export const __test__ = { readOpencodeEvents, eventsToRows, latestEventsByAgent, runJobCommand, clearTerminalIfTTY, renderOodaTable };
 
 export function writeSnapshots(logPath: string, rows: PaneRow[]) {
   if (!logPath || !Array.isArray(rows)) return;
@@ -545,10 +470,19 @@ export async function runJobCommand(job: Job): Promise<{ code: number | null; st
   const stderrChunks: Buffer[] = [];
   let timedOut = false;
 
+  // Propagate terminal column width into the child so table renderers size consistently.
+  const resolvedColumns =
+    (job.env as any)?.COLUMNS ||
+    process.env.COLUMNS ||
+    (typeof process.stdout?.columns === 'number' ? String(process.stdout.columns) : undefined);
+
+  const childEnv = { ...process.env, ...(job.env ?? {}) } as Record<string, string>;
+  if (resolvedColumns) childEnv.COLUMNS = resolvedColumns;
+
   const child = spawn(job.command, {
     shell: true,
     cwd: job.cwd || process.cwd(),
-    env: { ...process.env, ...(job.env ?? {}) },
+    env: childEnv,
     stdio: ["ignore", captureStdout ? "pipe" : "ignore", captureStderr ? "pipe" : "ignore"],
   });
 
@@ -693,9 +627,15 @@ export function printJobHeader(job: Job) {
     const line = '-'.repeat(Math.max(0, cols - 1));
     const green = '\u001b[32m';
     const reset = '\u001b[0m';
+    
+    // Build header line with timestamp, name, and id; truncate to terminal width
+    const headerContent = `${ts} ${job.name} (${job.id})`;
+    const headerDWidth = displayWidth(headerContent);
+    const truncatedHeader = headerDWidth > cols ? truncateDisplay(headerContent, cols - 1) : headerContent;
+    
     // top separator, header line with green timestamp, bottom separator
     process.stdout.write(`${green}${line}${reset}\n`);
-    process.stdout.write(`${green}${ts}${reset} ${job.name} (${job.id})\n`);
+    process.stdout.write(`${green}${truncatedHeader}${reset}\n`);
     process.stdout.write(`${green}${line}${reset}\n`);
   } catch (e) {
     // Added debug logging to surface non-fatal errors for debugging; behavior remains best-effort (do not throw)
@@ -716,21 +656,24 @@ export function createOodaCommand() {
       const interval = Number(options.interval ?? 30) || 30;
       const cfg = await loadConfig(configPath);
 
-      // Print OODA loop start timestamp (non-json mode only)
-      if (!jsonOutput) {
-        try {
-          const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;
-          const line = '-'.repeat(Math.max(0, cols - 1));
-          const green = '\u001b[32m';
-          const reset = '\u001b[0m';
-          const ts = formatTime(new Date());
-          process.stdout.write(`${green}${line}${reset}\n`);
-          process.stdout.write(`${green}${ts}${reset} OODA Loop Started\n`);
-          process.stdout.write(`${green}${line}${reset}\n`);
-        } catch {
-          // best-effort
-        }
-      }
+       // Print OODA loop start timestamp (non-json mode only)
+       if (!jsonOutput) {
+         try {
+           const cols = process.stdout.isTTY && typeof process.stdout.columns === 'number' ? process.stdout.columns : 80;
+           const line = '-'.repeat(Math.max(0, cols - 1));
+           const green = '\u001b[32m';
+           const reset = '\u001b[0m';
+           const ts = formatTime(new Date());
+           const headerContent = `${ts} OODA Loop Started`;
+           const headerDWidth = displayWidth(headerContent);
+           const truncatedHeader = headerDWidth > cols ? truncateDisplay(headerContent, cols - 1) : headerContent;
+           process.stdout.write(`${green}${line}${reset}\n`);
+           process.stdout.write(`${green}${truncatedHeader}${reset}\n`);
+           process.stdout.write(`${green}${line}${reset}\n`);
+         } catch {
+           // best-effort
+         }
+       }
 
       const parseCron = (expr: string) => {
         const anyParser = cronParser as any;

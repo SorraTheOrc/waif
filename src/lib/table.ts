@@ -1,4 +1,19 @@
-import { renderIssueTitle } from './issueTitle.js';
+import { displayWidth, padDisplay, truncateDisplay } from './displayWidth.js';
+
+export type ColumnConfig<Row> = {
+  key: keyof Row | string;
+  header: string;
+  minWidth?: number;
+  maxWidth?: number;
+  droppable?: boolean;
+};
+
+export type TableOptions<Row> = {
+  columns: ColumnConfig<Row>[];
+  rows: Row[];
+  termWidth?: number;
+  sep?: string;
+};
 
 export type IssueForTable = {
   id: string;
@@ -42,16 +57,78 @@ function computeBlocksCount(issue: IssueForTable): number {
   return 0;
 }
 
-function padRight(value: string, width: number): string {
-  if (value.length >= width) return value;
-  return value + ' '.repeat(width - value.length);
+function renderGenericTable<Row extends Record<string, any>>(options: TableOptions<Row>): string {
+  const sep = options.sep ?? '  ';
+  const termWidth = typeof options.termWidth === 'number'
+    ? options.termWidth
+    : (typeof process !== 'undefined' && process.stdout && typeof process.stdout.columns === 'number')
+      ? process.stdout.columns
+      : (Number(process.env.COLUMNS || 0) || 120);
+
+  const cols = options.columns.map((c) => ({
+    key: c.key,
+    header: c.header,
+    minWidth: Math.max(1, c.minWidth ?? displayWidth(c.header)),
+    maxWidth: c.maxWidth ?? Infinity,
+    droppable: Boolean(c.droppable),
+  }));
+
+  const rows = options.rows ?? [];
+  if (!cols.length) return '';
+
+  // Base widths from header and content
+  const baseWidths = cols.map((c) => {
+    const headerW = displayWidth(c.header);
+    const contentW = Math.max(0, ...rows.map((r) => displayWidth(String((r as any)[c.key] ?? ''))));
+    const raw = Math.max(headerW, contentW, c.minWidth ?? 1);
+    return Math.min(raw, c.maxWidth ?? raw);
+  });
+
+  // Desired widths start at base widths
+  const desired = [...baseWidths];
+
+  const totalWidth = (widths: number[]) => widths.reduce((sum, w) => sum + w, 0) + sep.length * Math.max(0, widths.length - 1);
+
+  // Drop droppable columns from the right until fit, shrinking non-droppable title-like columns last.
+  const visible = cols.map((c, idx) => ({ ...c, width: desired[idx], idx }));
+
+  while (totalWidth(visible.map((v) => v.width)) > termWidth) {
+    // try to drop a droppable column from the right
+    const droppableIdx = [...visible].reverse().find((v) => v.droppable);
+    if (droppableIdx) {
+      const idx = visible.findIndex((v) => v.idx === droppableIdx.idx);
+      visible.splice(idx, 1);
+      continue;
+    }
+
+    // Otherwise shrink the widest column if possible
+    const widest = visible.reduce((best, v) => (v.width > best.width ? v : best), visible[0]);
+    if (widest.width > (widest.minWidth ?? 1)) {
+      widest.width = Math.max(widest.minWidth ?? 1, widest.width - 1);
+      continue;
+    }
+
+    break;
+  }
+
+  const headerLine = visible.map((v) => padDisplay(v.header, v.width)).join(sep);
+  const dashLine = visible.map((v) => '-'.repeat(Math.max(3, v.width))).join(sep);
+
+  const bodyLines = rows.map((r) => {
+    const parts = visible.map((v) => {
+      const raw = (r as any)[v.key];
+      const truncated = truncateDisplay(raw, v.width);
+      return padDisplay(truncated, v.width);
+    });
+    return parts.join(sep);
+  });
+
+  return [headerLine, dashLine, ...bodyLines].join('\n');
 }
 
-function truncate(value: string, max: number): string {
-  if (value.length <= max) return value;
-  if (max <= 1) return value.slice(0, max);
-  return value.slice(0, max - 1) + '…';
-}
+// ---------------------------------------------------------------------------
+// Issues table (in-progress/next/recent)
+// ---------------------------------------------------------------------------
 
 type RenderIssuesTableOptions = {
   color?: {
@@ -60,6 +137,7 @@ type RenderIssuesTableOptions = {
     reset: string;
   };
   sort?: 'id' | 'none';
+  termWidth?: number;
 };
 
 export function renderIssuesTable(issues: IssueForTable[], options: RenderIssuesTableOptions = {}): string {
@@ -74,136 +152,69 @@ export function renderIssuesTable(issues: IssueForTable[], options: RenderIssues
       return {
         id: i.id,
         title: renderIssueTitle(i, 0),
-            priority: typeof i.priority === 'number' ? String(i.priority) : '',
+        priority: typeof i.priority === 'number' ? String(i.priority) : '',
         blockers: String(blockers),
         blocks: String(blocks),
         assignee: typeof i.assignee === 'string' ? i.assignee : '',
       };
     });
 
-  if (sortMode === 'id') {
-    rows.sort((a, b) => a.id.localeCompare(b.id));
-  }
+  if (sortMode === 'id') rows.sort((a, b) => a.id.localeCompare(b.id));
 
-  const headers = {
-    id: 'ID',
-    title: 'Type / Status / Title',
-    priority: 'Priority',
-    blockers: 'Blockers',
-    blocks: 'Blocks',
-    assignee: 'Assignee',
-  };
+  const columns: ColumnConfig<typeof rows[number]>[] = [
+    { key: 'id', header: 'ID', minWidth: 2, maxWidth: 20, droppable: false },
+    { key: 'title', header: 'Type / Status / Title', minWidth: 4, maxWidth: 60, droppable: false },
+    { key: 'priority', header: 'Priority', minWidth: 3, maxWidth: 8, droppable: true },
+    { key: 'blockers', header: 'Blockers', minWidth: 3, maxWidth: 8, droppable: true },
+    { key: 'blocks', header: 'Blocks', minWidth: 3, maxWidth: 8, droppable: true },
+    { key: 'assignee', header: 'Assignee', minWidth: 3, maxWidth: 20, droppable: true },
+  ];
 
-  // Base column contents lengths (minimums derived from header or content)
-  const baseWidths = {
-    id: Math.max(headers.id.length, ...rows.map((r) => r.id.length)),
-    title: Math.max(headers.title.length, ...rows.map((r) => r.title.length)),
-    priority: Math.max(headers.priority.length, ...rows.map((r) => r.priority.length)),
-    blockers: Math.max(headers.blockers.length, ...rows.map((r) => r.blockers.length)),
-    blocks: Math.max(headers.blocks.length, ...rows.map((r) => r.blocks.length)),
-    assignee: Math.max(headers.assignee.length, ...rows.map((r) => r.assignee.length)),
-  };
+  const table = renderGenericTable({ columns, rows, termWidth: options.termWidth, sep: '  ' });
+  if (!options.color?.enabled) return table;
 
-  // Determine available terminal width. If unavailable, fall back to a sane default.
-  const termWidth = (typeof process !== 'undefined' && process.stdout && typeof process.stdout.columns === 'number')
-    ? process.stdout.columns
-    : 120;
-
-  // Columns in display order (left-to-right). Title is mandatory; others may be dropped from the right.
-  const colOrder: Array<keyof typeof baseWidths> = ['id', 'title', 'priority', 'blockers', 'blocks', 'assignee'];
-
-  // Minimum width constraints
-  const minTitleWidth = 4; // allow truncation like 'a…'
-  const sep = '  ';
-
-  // Start with desired widths equal to baseWidths but cap title with a reasonable max.
-  const maxTitleCap = 60;
-  const desiredWidths: Record<string, number> = {
-    id: baseWidths.id,
-    title: Math.min(maxTitleCap, baseWidths.title),
-    priority: baseWidths.priority,
-    blockers: baseWidths.blockers,
-    blocks: baseWidths.blocks,
-    assignee: baseWidths.assignee,
-  };
-
-  // Helper to compute total line width for a given set of visible columns
-  function totalWidthFor(visibleCols: string[]) {
-    const colsWidth = visibleCols.reduce((sum, c) => sum + desiredWidths[c], 0);
-    const gaps = Math.max(0, visibleCols.length - 1) * sep.length;
-    return colsWidth + gaps;
-  }
-
-  // Determine which columns to show. Always include 'id' and 'title'. Drop from the right until fits.
-  const visibleCols = [...colOrder];
-
-  // Ensure title has at least header length initially
-  if (desiredWidths.title < headers.title.length) desiredWidths.title = headers.title.length;
-
-  // Reduce title width to fit if necessary, but do not drop it.
-  while (totalWidthFor(visibleCols) > termWidth) {
-    // Try to drop the rightmost non-mandatory column (not 'id' or 'title')
-    const droppable = visibleCols.slice().reverse().find((c) => c !== 'title' && c !== 'id');
-    if (droppable) {
-      const idx = visibleCols.indexOf(droppable);
-      visibleCols.splice(idx, 1);
-      continue;
+  // Apply color to blocked rows
+  const lines = table.split('\n');
+  const headerLines = lines.slice(0, 2);
+  const bodyLines = lines.slice(2);
+  const colored = bodyLines.map((line, idx) => {
+    const blockersNumber = Number(rows[idx]?.blockers);
+    if (Number.isFinite(blockersNumber) && blockersNumber > 0) {
+      return `${options.color!.blockedRow}${line}${options.color!.reset}`;
     }
+    return line;
+  });
 
-    // If no droppable columns remain, attempt to shrink the title down to minTitleWidth
-    if (desiredWidths.title > minTitleWidth) {
-      desiredWidths.title = Math.max(minTitleWidth, desiredWidths.title - 1);
-      continue;
-    }
-
-    // As a last resort, if even minimal title + id don't fit, fall back to truncating aggressively (allow overflow)
-    break;
-  }
-
-  // Recompute widths for columns that remain. Ensure title does not exceed its desired width.
-  const widths: Record<string, number> = {} as any;
-  for (const c of visibleCols) {
-    widths[c] = desiredWidths[c];
-  }
-
-  const dash = (w: number) => '-'.repeat(Math.max(3, w));
-
-  const lines: string[] = [];
-  const headerCols: string[] = [];
-  for (const c of visibleCols) {
-    headerCols.push(padRight((headers as any)[c], widths[c]));
-  }
-  lines.push(headerCols.join(sep));
-
-  const dashCols: string[] = [];
-  for (const c of visibleCols) {
-    dashCols.push(dash(widths[c]));
-  }
-  lines.push(dashCols.join(sep));
-
-  for (const r of rows) {
-    const rowCols: string[] = [];
-    for (const c of visibleCols) {
-      let val = '';
-      if (c === 'title') val = truncate(r.title, widths.title);
-      else val = (r as any)[c] ?? '';
-      rowCols.push(padRight(val, widths[c]));
-    }
-
-    const rawLine = rowCols.join(sep);
-
-    const blockersNumber = Number((r as any).blockers);
-    const color = options.color;
-    if (color?.enabled && Number.isFinite(blockersNumber) && blockersNumber > 0) {
-      lines.push(`${color.blockedRow}${rawLine}${color.reset}`);
-    } else {
-      lines.push(rawLine);
-    }
-  }
-
-  return lines.join('\n');
+  return [...headerLines, ...colored].join('\n');
 }
 
 export function renderInProgressIssuesTable(issues: IssueForTable[]): string {
   return renderIssuesTable(issues);
+}
+
+// ---------------------------------------------------------------------------
+// OODA table (Agent / Status / Title)
+// ---------------------------------------------------------------------------
+
+export type OodaRow = { agent: string; status: string; title: string };
+
+export function renderOodaTable(rows: OodaRow[], termWidth?: number): string {
+  const columns: ColumnConfig<OodaRow>[] = [
+    { key: 'agent', header: 'Agent', minWidth: 3, maxWidth: 30, droppable: true },
+    { key: 'status', header: 'Status', minWidth: 4, maxWidth: 12, droppable: true },
+    { key: 'title', header: 'Title', minWidth: 8, maxWidth: 120, droppable: false },
+  ];
+
+  // Safety: if all columns present still overflow due to wide glyphs, renderGenericTable will shrink droppables first, then the widest column.
+  return renderGenericTable<OodaRow>({ columns, rows, termWidth, sep: ' | ' });
+}
+
+// ---------------------------------------------------------------------------
+// Existing issue title rendering helpers (unchanged)
+// ---------------------------------------------------------------------------
+
+import { renderIssueTitle } from './issueTitle.js';
+
+export function renderIssueRow(issue: IssueForTable): string {
+  return renderIssueTitle(issue, 0);
 }
