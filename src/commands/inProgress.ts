@@ -66,9 +66,46 @@ function parseIssuesFromJsonl(path: string): Issue[] {
 }
 
 function enrichIssuesWithDependencies(issues: Issue[], verbose: boolean): Issue[] {
-  // No runtime enrichment: rely on bd list --json to include relation details and labels.
-  // Keep function to preserve external behavior but return input unchanged.
-  return issues;
+  // Attempt to hydrate each issue with richer relation details from `bd show` when available.
+  // Fallback to WAIF_BD_SHOW_JSON (test fixture) when bd CLI is not present.
+  const envShow = process.env.WAIF_BD_SHOW_JSON;
+  const out: Issue[] = [];
+
+  for (const issue of issues) {
+    let hydrated: Issue = issue;
+
+    if (envShow) {
+      try {
+        const parsed = JSON.parse(envShow);
+        const list = Array.isArray(parsed) ? parsed : [parsed];
+        const match = list.find((i: any) => i?.id === issue.id);
+        if (match) {
+          hydrated = { ...issue, ...match } as Issue;
+          out.push(hydrated);
+          continue;
+        }
+      } catch (e) {
+        if (verbose) process.stderr.write(`[debug] failed to parse WAIF_BD_SHOW_JSON: ${(e as Error).message}\n`);
+      }
+    }
+
+    if (isCliAvailable('bd')) {
+      try {
+        const shown = runBd(['show', issue.id, '--json']);
+        const parsed = JSON.parse(shown);
+        const obj = Array.isArray(parsed) ? (parsed[0] as Issue) : (parsed as Issue);
+        hydrated = { ...issue, ...obj } as Issue;
+        out.push(hydrated);
+        continue;
+      } catch (e) {
+        if (verbose) process.stderr.write(`[debug] bd show failed for ${issue.id}: ${(e as Error).message}\n`);
+      }
+    }
+
+    out.push(hydrated);
+  }
+
+  return out;
 }
 
 function renderIssuesTableWithRelatedSections(issues: Issue[]): string {
@@ -119,13 +156,17 @@ function renderIssuesTableWithRelatedSections(issues: Issue[]): string {
 function loadInProgressIssues(verbose: boolean): LoadResult {
   const envJson = process.env.WAIF_IN_PROGRESS_JSON;
   if (envJson) {
-    try {
-      const parsed = JSON.parse(envJson);
-      if (Array.isArray(parsed)) return { issues: parsed as Issue[], source: 'env' };
-    } catch (e) {
-      if (verbose) process.stderr.write(`[debug] failed to parse WAIF_IN_PROGRESS_JSON: ${(e as Error).message}\n`);
-    }
-    return { issues: [], source: 'env' };
+      try {
+        const parsed = JSON.parse(envJson);
+        if (Array.isArray(parsed)) {
+          const issues = enrichIssuesWithDependencies(parsed as Issue[], verbose);
+          return { issues, source: 'env' };
+        }
+      } catch (e) {
+        if (verbose) process.stderr.write(`[debug] failed to parse WAIF_IN_PROGRESS_JSON: ${(e as Error).message}\n`);
+      }
+      return { issues: [], source: 'env' };
+
   }
 
   if (isCliAvailable('bd')) {
