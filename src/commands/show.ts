@@ -66,40 +66,9 @@ export function createShowCommand() {
       const related = Array.isArray(issue.children) ? issue.children : Array.isArray(issue.dependents) ? issue.dependents : [];
       let childrenSection: string | undefined = '';
       if (related.length) {
-        let hydrated = related as any[];
-        // Only try to call bd show to hydrate child objects when bd is available.
-        // The bd module may be mocked in tests and not expose isBdAvailable, so guard the call.
-        // The bd module is mocked in tests; simply assume bd is not available in test environment.
-        // In CI/local with bd installed, hydration would run via bd.showIssue calls.
-        const bdAvailable = false;
-        if (bdAvailable) {
-          hydrated = [] as any[];
-          for (const rel of related) {
-            const cid = (rel && (rel.id ?? (rel as any).depends_on_id)) as string | undefined;
-            if (!cid) {
-              hydrated.push(rel);
-              continue;
-            }
-
-            const hasLabels = Array.isArray((rel as any).labels) && (rel as any).labels.length > 0;
-            if (hasLabels) {
-              hydrated.push(rel);
-              continue;
-            }
-
-            try {
-               // Would call bd.showIssue here
-               const out = bd.showIssue(cid);
-               const child = Array.isArray(out) ? out[0] : out;
-               hydrated.push(child ?? rel);
-            } catch (e) {
-              hydrated.push(rel);
-            }
-          }
-        }
-
-        const hydratedIssue = { ...issue, children: hydrated, dependents: hydrated } as Issue;
-        childrenSection = renderChildrenSection(hydratedIssue);
+        // Compute children/dependents section using the relation objects as provided by bd.
+        // We assume the relation objects include labels (no runtime hydration).
+        childrenSection = renderChildrenSection(issue);
       }
 
       if (childrenSection) {
