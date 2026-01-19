@@ -49,9 +49,14 @@ export function createShowCommand() {
         return;
       }
 
-       const main = renderIssuesTable([{ ...issue, labels }], { sort: 'none' });
+      const main = renderIssuesTable([{ ...issue, labels }], { sort: 'none' });
 
       logStdout(main);
+
+      // Emit a one-line warning if multiple stage:* labels are present
+      if (stageInfo.hasMultiple) {
+        logStdout(`Warning: multiple stage:* labels present — selected '${stageInfo.stage}' per maturity order.`);
+      }
 
       const blockersSection = renderBlockersSection(issue);
       if (blockersSection) {
