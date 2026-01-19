@@ -152,7 +152,7 @@ export function analyzeIssues(issues: BeadIssue[]) {
   if (findings.orphans.length) {
     parts.push('## Orphans (leaf tasks)\n\n');
     for (const o of findings.orphans) {
-      parts.push(`- ${o.id} ${o.title ? `(${o.title}) ` : ''}is a leaf task with no parent or deps`);
+      parts.push(`- ${o.id}${o.title ? ` (${o.title})` : ''}`);
     }
     parts.push('\n');
   }

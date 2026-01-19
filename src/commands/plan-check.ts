@@ -84,7 +84,7 @@ export function createPlanCheckCommand() {
           if (findings.orphans.length === 0) {
             logStdout('No orphans found.');
           } else {
-            for (const o of findings.orphans) logStdout(`- ${o.id} ${o.title ? `(${o.title}) ` : ''}is a leaf task with no parent or deps`);
+            for (const o of findings.orphans) logStdout(`- ${o.id}${o.title ? ` (${o.title})` : ''}`);
           }
         }
       }
