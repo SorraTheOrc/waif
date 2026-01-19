@@ -76,6 +76,36 @@ export function computeWorkflowStage(labels: string[] | undefined | null): { sta
   return { stage: best, hasMultiple: tokens.length > 1 };
 }
 
+// Compute stage for an issue object; if the issue itself has no stage labels, derive from children labels.
+export function computeStageForIssue(issue: any): { stage: StageToken; hasMultiple: boolean; derivedFromChildren?: boolean } {
+  if (!issue) return { stage: 'unknown', hasMultiple: false };
+  const labels = (issue as any).labels ?? (issue as any).labels;
+  const primary = computeWorkflowStage(labels ?? undefined);
+  if (primary.stage !== 'unknown' || !Array.isArray(issue.children)) {
+    return { ...primary, derivedFromChildren: false };
+  }
+
+  // Derive from children: collect all child stage tokens
+  const childTokens: StageToken[] = [];
+  for (const child of issue.children) {
+    const cLabels = (child && (child.labels ?? child.label ?? child.name)) || undefined;
+    const toks = extractStageTokens(cLabels as any);
+    for (const t of toks) childTokens.push(t);
+  }
+
+  if (childTokens.length === 0) return { stage: 'unknown', hasMultiple: false, derivedFromChildren: false };
+
+  // Pick most mature among childTokens
+  let best: StageToken = childTokens[0]!;
+  for (const t of childTokens.slice(1)) {
+    const r1 = MATURITY_RANK.get(best) ?? 0;
+    const r2 = MATURITY_RANK.get(t) ?? 0;
+    if (r2 > r1) best = t;
+  }
+
+  return { stage: best, hasMultiple: childTokens.length > 1, derivedFromChildren: true };
+}
+
 export function stageCode(stage: StageToken): string {
   switch (stage) {
     case 'unknown':
