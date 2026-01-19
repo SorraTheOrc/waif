@@ -96,7 +96,10 @@ function enrichIssuesWithDependencies(issues: Issue[], verbose: boolean): Issue[
 }
 
 function renderIssuesTableWithRelatedSections(issues: Issue[]): string {
-  const baseTable = renderIssuesTable(issues);
+  const termWidth = (typeof process !== 'undefined' && process.stdout && typeof process.stdout.columns === 'number')
+    ? process.stdout.columns
+    : (Number(process.env.COLUMNS || 0) || 120);
+  const baseTable = renderIssuesTable(issues, { termWidth });
   if (!baseTable) return '';
 
   const lines = baseTable.split('\n');
@@ -106,14 +109,17 @@ function renderIssuesTableWithRelatedSections(issues: Issue[]): string {
   const rowLines = lines.slice(2);
   const sortedIssues = [...issues].sort((a, b) => a.id.localeCompare(b.id));
 
+  // reuse the same termWidth for related sections
+
   if (rowLines.length !== sortedIssues.length) {
+
     // Fallback to original behavior to avoid mismatched output.
     const fallbackSections = sortedIssues
       .map((issue) => {
         const sections = [issue.id];
-        const blockers = renderBlockersSection(issue);
+        const blockers = renderBlockersSection(issue, termWidth);
         if (blockers) sections.push(blockers);
-        const children = renderChildrenSection(issue);
+        const children = renderChildrenSection(issue, termWidth);
         if (children) sections.push(children);
         return sections.join('\n');
       })
@@ -124,9 +130,9 @@ function renderIssuesTableWithRelatedSections(issues: Issue[]): string {
   const combined: string[] = [...headerLines];
   for (let idx = 0; idx < sortedIssues.length; idx += 1) {
     combined.push(rowLines[idx]);
-    const blockers = renderBlockersSection(sortedIssues[idx]);
+    const blockers = renderBlockersSection(sortedIssues[idx], termWidth);
     if (blockers) combined.push(blockers);
-    const children = renderChildrenSection(sortedIssues[idx]);
+    const children = renderChildrenSection(sortedIssues[idx], termWidth);
     if (children) combined.push(children);
     combined.push('');
   }

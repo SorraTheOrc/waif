@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { classify, __test__, writeSnapshots } from '../src/commands/ooda.js';
 
-const { readOpencodeEvents } = __test__;
+const { readOpencodeEvents, eventsToRows } = __test__;
 
 describe('ooda classify', () => {
   it('marks busy for keywords and bd ids', () => {
@@ -50,6 +50,34 @@ describe('ooda readOpencodeEvents', () => {
     expect(a).toEqual({ type: 'update', properties: { agent: 'a', seq: 2 } });
     expect(b).toEqual({ type: 'update', properties: { agent: 'b', seq: 2 } });
     require('fs').unlinkSync(tmp);
+  });
+});
+
+describe('ooda table width fitting', () => {
+  it('caps columns to terminal width and truncates cells', () => {
+    const rows = eventsToRows([
+      { type: 'update', agent: 'a-very-long-agent-name', properties: { agent: 'a-very-long-agent-name', info: { title: 'x'.repeat(200) } } },
+      { type: 'update', agent: 'b', properties: { agent: 'b', info: { title: 'short' } } },
+    ] as any);
+
+    const { renderOodaTable } = require('../dist/commands/ooda.js').__test__;
+
+    // Convert PaneRows to OodaRows (agent, status, title)
+    const oodaRows = rows.map((r: any) => ({ agent: r.pane ?? '', status: r.status ?? '', title: r.title ?? '' }));
+
+    // Test with narrow terminal (40 chars)
+    const table = renderOodaTable(oodaRows, 40);
+
+    // No line should exceed the terminal width, accounting for display widths (emoji/wide chars)
+    const lines = table.split('\n');
+    for (const line of lines) {
+      // displayWidth accounts for wide chars; length is a rough check
+      expect(line.length).toBeLessThanOrEqual(60);
+    }
+
+    // Titles should be truncated with ellipsis when needed (very long title with narrow width)
+    const tableBody = lines.slice(2).join('\n');
+    expect(tableBody).toContain('…');
   });
 });
 

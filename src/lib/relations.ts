@@ -95,21 +95,25 @@ export function extractChildren(issue: IssueWithRelations): IssueForTable[] {
   return children;
 }
 
-function renderSection(title: string, issues: IssueForTable[]): string {
+function renderSection(title: string, issues: IssueForTable[], termWidth?: number): string {
   if (!issues.length) return '';
 
-  const rendered = renderIssuesTable(issues, { sort: 'id' });
+  // account for indentation so nested tables respect the parent terminal width
+  const innerWidth = typeof termWidth === 'number' ? Math.max(10, termWidth - 4) : termWidth;
+  const rendered = renderIssuesTable(issues, { sort: 'id', termWidth: innerWidth });
   const indented = rendered
     .split('\n')
     .map((line) => `    ${line}`)
     .join('\n');
-  return `  ${title}\n${indented}`;
+  return `  ${title}
+${indented}`;
 }
 
-export function renderBlockersSection(issue: IssueWithRelations): string {
-  return renderSection('Blockers', extractBlockers(issue));
+
+export function renderBlockersSection(issue: IssueWithRelations, termWidth?: number): string {
+  return renderSection('Blockers', extractBlockers(issue), termWidth);
 }
 
-export function renderChildrenSection(issue: IssueWithRelations): string {
-  return renderSection('Children', extractChildren(issue));
+export function renderChildrenSection(issue: IssueWithRelations, termWidth?: number): string {
+  return renderSection('Children', extractChildren(issue), termWidth);
 }
