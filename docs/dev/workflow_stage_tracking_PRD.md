@@ -1,120 +1,119 @@
-<!-- Seed Context (from wf-3ur.2) -->
-**Source issue: wf-3ur.2**
+<!-- Seed Context (rewritten from wf-3ur.2)
+Source issue: wf-3ur.2
+--> 
 
-- **Title:** Add workflow stage tracking to WAIF CLI
+# Product Requirements Document: Workflow Stage Tracking (labels-only)
 
----
+## One-line summary
+Record and expose a canonical, machine-friendly workflow stage for each bead using structured labels so PMs and agents can reliably query, filter, and automate around the current stage.
 
-# Product Requirements Document: Workflow Stage Tracking
-
-## Introduction
-
-(Short one-liner)
+## Introduction / Motivation
+As human and agent activity scales, PMs and orchestrators need a single, authoritative source to determine the workflow stage of work items (beads). Labels provide a reliable, machine-friendly surface for programmatic queries, dashboards, and agent automation. This PRD specifies a labels-only approach (no notes required) that is low-risk to roll out and compatible with existing repository practices.
 
 ## Problem
-
-It can be hard for humans to track what stage a feature is at across the named workflow steps (Project Definition, Define Milestones, Feature Decomposition, Vertical Slices) and the associated bead-stage tokens (idea, prd, milestone, planning, in_progress, review, done). This problem will worsen as agents operate in parallel. We need a way to persist the current stage of work and expose it succinctly to PMs.
+Freeform notes are useful for history but fragile for automation and discovery. Relying on notes makes it difficult to compute the current progress across many beads reliably. We require a single canonical stage label that tooling can read without parsing freeform text.
 
 ## Users
+- Primary: Product Managers (PMs)
+- Secondary: agent orchestrators, release managers, QA, engineers, dashboards
 
-Primary: Product Managers. Secondary: agent orchestrators, release managers, QA.
-
-## Success Criteria
-
-PMs can run a  command and be told, concisely and clearly, which stage of the workflow they are at and which stage of the command implementing that workflow is underway.
+## Success criteria
+- PMs or automation can query the canonical stage for a bead with a single label lookup and get a concise, authoritative answer.
+- Agents can idempotently update the current stage using bd CLI label operations.
+- No existing issue IDs or bead schema are changed; rollout is additive and reversible.
 
 ## Constraints
+- Use the existing Beads labels array on issues; do not edit .beads/issues.jsonl directly outside bd tooling.
+- Minimize permissions and rollout friction.
 
-Must be additive to Beads (.beads/issues.jsonl), not change existing issue IDs, and be low-risk for initial iteration.
+## Desired change (labels-only)
+1) Define a canonical stage label namespace: stage:<token>
+   - The bead's canonical current stage is represented by a stage:* label on the issue.
+   - Example labels (ordered by maturity): stage:intake_complete, stage:prd_complete, stage:milestones_defined, stage:plan_defined, stage:in_progress, stage:review, stage:done
 
-## Existing State
+2) Consumers (CLI, agents, dashboards) MUST read the stage:* labels and derive the canonical stage using the selection rule below.
 
-No dedicated PRD or implementation currently exists in  or  for stage tracking. Related issues:
-- wf-3ur (WAIF version 0.2)
-- wf-3ur.1 (Add --number/-n option)
-- wf-ba2.1.9 (Rule of Five)
+## Canonical stage tokens and mapping
+Tokens MUST be treated case-insensitively when parsed. The canonical tokens and their meanings (listed in order of maturity):
+- intake_complete — intake work completed (brief or intake artifact captured)
+- prd_complete — PRD / Project Definition finalized
+- milestones_defined — master milestones defined (no milestone identifier)
+- plan_defined — feature decomposition / implementation plan defined
+- in_progress — implementation (vertical slices)
+- review — review / sign-off
+- done — completed / released
 
-## Desired change
+### Selection rule when multiple stage:* labels exist
+Only one stage:* label SHOULD be present to indicate the canonical current stage. If multiple stage:* labels are present, the most mature label (the one that appears later in the canonical list above) MUST be treated as the canonical stage. Tooling MUST detect multiple stage:* labels and flag the issue for human review.
 
-Add a persistent  signal to issues (and optionally a small structured worklog). Provide a  command for concise output for PMs and an API for agents to update stage entries idempotently.
+## Label syntax and rules
+- Canonical form: stage:<token>
+- Labels are case-insensitive when interpreted (store them in a consistent lowercase form: stage:in_progress).
+- Examples:
+  - stage:intake_complete
+  - stage:prd_complete
+  - stage:milestones_defined
+  - stage:plan_defined
+  - stage:in_progress
+  - stage:review
+  - stage:done
 
-## Open Questions
+## Recommended update sequence
+When transitioning a bead from old_stage -> new_stage, agents/humans SHOULD follow this sequence:
 
-1) Which canonical stages to support initially?
-2) Single current stage vs historical worklog?
-3) Who can programmatically update stages?
+1) Discover existing stage labels:
+   - Example command (run locally):
+     bd label list <bead-id> | grep "stage:" | sed 's/^[[:space:]-]*//'
+     - Example: bd label list wf-3ur.2 | grep "stage:" | sed 's/^[[:space:]-]*//'
 
-## Per-bead workflow-stage recording (notes-only)
+2) Update labels (add new, remove old):
+   - Use bd to add and remove the stage labels in a single update invocation where bd supports it, for example:
+     bd update <bead-id> --add-label "stage:new_stage" --remove-label "stage:old_stage"
+   - Example: bd update wf-3ur.2 --add-label "stage:in_progress" --remove-label "stage:plan_defined"
 
-Decision: record only transitions between canonical workflow stages (not every minor status change). The canonical place to record those stage transitions is the bead "notes" field.
+Notes:
+- The selection rule above determines which label is canonical if multiple stage:* labels exist during transition.
+- Do not rely on label timestamps; label systems do not provide reliable label-added timestamps. Use the maturity order above to select canonical stage when needed.
 
-Canonical bead-stage tokens (machine-friendly):
-- idea
-- prd
-- milestone
-- planning
-- in_progress
-- review
-- done
+## Agent behavior & constraints
+- Agents MUST use bd CLI label operations (bd update --add-label / --remove-label) to set the canonical stage. Agents MUST NOT edit .beads/issues.jsonl directly.
+- Agents SHOULD check existing stage labels (see discovery command) and be idempotent: do not re-add the same stage label if already present.
+- Agents MUST avoid modifying unrelated labels.
 
-Named workflow steps taken from docs/Workflow.md: Project Definition; Define Milestones; Feature Decomposition; Vertical Slices.
+## Acceptance criteria (implementation)
+- CLI: implement wf stage <bead-id> (alias for waif stage) that reads stage:* labels and prints the canonical stage according to the maturity selection rule (strip the "stage:" prefix).
+- Tests: unit tests that validate selection behavior when multiple stage:* labels are present (choose most mature), and that bd update commands add/remove labels correctly without touching unrelated labels.
+- Tooling: add a bd task or CI lint that flags issues that contain more than one stage:* label.
 
-Mapping (token -> Workflow.md step / meaning):
-- idea -> early proposal (pre-PRD)
-- prd -> Project Definition (PRD created)
-- milestone -> Define Milestones
-- planning -> Feature Decomposition
-- in_progress -> Vertical Slices (implementation)
-- review -> Review and sign-off
-- done -> Completed / released
+## Rollout / Phased plan (minimal)
+1) Publish PRD (this file) and announce change to the team.
+2) Implement read-only CLI: wf stage <bead-id> that reads stage:* labels and prints the canonical stage (no writes yet).
+3) Add stage column to wf in-progress table output (strip the "stage:" prefix). In space-constrained environments, reduce stage display to a 1-3 letter code using this mapping:
+   - intake_complete -> "in"
+   - prd_complete -> "prd"
+   - milestones_defined -> "mst"
+   - plan_defined -> "pln"
+   - in_progress -> "inp"
+   - review -> "rev"
+   - done -> "don"
 
-Updates MUST be made using the bd CLI notes flag, e.g.:
+## Open questions / decisions required
+1) Permissions: which agents are authorized to set stage:* labels automatically? (Recommendation: limit to named agents and trusted CI accounts.)
+2) Enforcement: do we want CI/linters to reject pushes that introduce multiple stage:* labels? (Recommended to flag but not block initially.)
 
-  bd update <bead-id> --notes "prd -> in_progress"
+## Open Questions added from automated reviews
+- Should tool output prefer a short-code or full token when both are available and terminal width allows? (Requires product decision.)
+- Who has authority to set stage:* labels programmatically? (Specify trusted agent/CI identities or a human-only policy.)
 
-Guiding principles
-- Only record stage transitions. Do not record every small status update or transient activity.
-- The notes field is the canonical source of truth for current stage transitions that humans will read.
-- Do not overwrite other notes present in the bead. Agents and humans must append or add a stage-only note; they must not delete or replace unrelated notes.
-- Use short, idempotent entries that name the canonical stage and (optionally) a short actor or reference.
+## Risks and mitigations
+- Risk: Multiple stage:* labels may be added by mistake. Mitigation: tooling warns and provides a remediation chore; selection rule uses maturity order and issues are flagged for manual review.
+- Risk: Agents may change unrelated labels accidentally. Mitigation: helpers/tests enforce namespace scoping and agent guidance.
 
-Recommended entry format
-- Single-line, UTF-8, recommended max 200 characters.
-- Recommended form: <stage> [@actor] [#reference]
-  - Examples:
-    - prd @alice #bd-wf-rjh
-    - in_progress @alice #gh-pr-93
-    - review @bob #gh-pr-123
+- Security note: Restrict which agents and CI identities may set stage:* labels. Record label changes in operational logs where possible and limit credentials used by automation to trusted accounts. Consider adding a permission policy entry (e.g., "trusted-agents-only") to .opencode/permissions_matrix.md.
 
-Examples of recording stage transitions
-- Claim / start work:
-  bd update bd-wf-rjh --notes "in_progress @alice #bd-wf-rjh"
-- Move to review:
-  bd update bd-wf-rjh --notes "review @alice #gh-pr-93"
-- Close / done:
-  bd update bd-wf-rjh --notes "done @bob #gh-pr-93"
+## Next steps / Deliverables
+- Implement wf stage <bead-id> (read-only) — ticket + tests.
+- Add CI/linters to flag multiple stage:* labels.
+- Update docs and agent developer guidance to use the bd label discovery and update commands above.
 
-Agent behavior and constraints
-- Agents MUST use the bd CLI to append stage notes. They must not directly edit .beads/issues.jsonl to change the notes field outside of bd tooling.
-- When adding a stage note, ensure you do not overwrite existing notes. Use bd's notes update semantics (which appends or adds a note) rather than replacing freeform notes.
-- Agents may maintain local tooling caches or metadata for convenience, but these MUST be considered a non-authoritative cache. The bead notes are the human-facing record.
-- If an agent discovers new work, create the corresponding bd issue and add a discovered-from:<current-bead-id> dependency as usual.
-
-Usage checklist for agents
-1) Decide canonical target stage for this transition (from the agreed stage list).
-2) Run: bd update <bead-id> --notes "<stage> [@actor] [#reference]"
-3) Do not modify or remove other notes in the bead. If you need to add more context, create a separate non-stage note.
-4) If the transition spawns new work, create a bd and link it discovered-from:<bead-id>.
-5) When making code/docs changes, add a normal bead comment (separate from stage notes) with files edited or PR URL so reviewers can find artifacts.
-
-Rationale
-
-Keeping a single, minimal record of stage transitions in the bead notes keeps the human-facing trail concise and reduces noise. Requiring updates through the bd CLI standardizes how changes are recorded and avoids accidental overwrites of unrelated notes or metadata that other tools rely on.
-
-## Next steps
-
-- Gather canonical stage list and permissions.
-- Prototype with issue  field + linked chore for history.
-- Implement  CLI and tests.
-
-End of new content.
+End of PRD (labels-only)
