@@ -25,6 +25,7 @@ describe('renderIssuesTable', () => {
     ]);
 
     expect(out).toContain('ID');
+    expect(out).toContain('Stage');
     expect(out).toContain('Type / Status / Title');
     expect(out).toContain('Priority');
     expect(out).toContain('Blockers');
@@ -68,8 +69,8 @@ describe('renderIssuesTable', () => {
     const symbols = getDefaultSymbols();
     const out = renderIssuesTable(
       [
-        { id: 'wf-1', title: 'First', status: 'open', priority: 2 },
-        { id: 'wf-2', title: 'Second', status: 'in_progress', priority: 1 },
+        { id: 'wf-1', title: 'First', status: 'open', priority: 2, labels: ['stage:prd'] },
+        { id: 'wf-2', title: 'Second', status: 'in_progress', priority: 1, labels: ['stage:in_progress'] },
       ],
       { sort: 'none' },
     );
@@ -80,6 +81,7 @@ describe('renderIssuesTable', () => {
     const headerCols = headerLine.split(/\s{2,}/);
     expect(headerCols).toEqual([
       'ID',
+      'Stage',
       'Type / Status / Title',
       'Priority',
       'Blockers',
@@ -89,6 +91,8 @@ describe('renderIssuesTable', () => {
 
     expect(out).toContain(`${symbols.fallback?.issueType ?? '?'} ${symbols.status.open} First`);
     expect(out).toContain(`${symbols.fallback?.issueType ?? '?'} ${symbols.status.in_progress} Second`);
+    expect(out).toContain('prd');
+    expect(out).toContain('in_progress');
   });
 
   it('returns empty string for empty input', () => {
