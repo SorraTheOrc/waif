@@ -50,6 +50,8 @@ function mapToIssueForTable(rel?: RelatedIssue): IssueForTable | null {
     dependency_count: typeof rel.dependency_count === 'number' ? rel.dependency_count : undefined,
     dependent_count: typeof rel.dependent_count === 'number' ? rel.dependent_count : undefined,
     dependencies: Array.isArray(rel.dependencies) ? (rel.dependencies as IssueForTable['dependencies']) : undefined,
+    // Preserve labels when present so table can compute stage per-issue
+    labels: Array.isArray((rel as any).labels) ? ((rel as any).labels as string[]) : (typeof (rel as any).label === 'string' ? [ (rel as any).label ] : undefined),
   } as IssueForTable;
 }
 
