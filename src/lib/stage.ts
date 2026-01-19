@@ -1,11 +1,11 @@
 export type StageToken =
   | 'unknown'
   | 'idea'
-  | 'prd'
-  | 'milestone'
-  | 'planning'
+  | 'prd_complete'
+  | 'milestones_defined'
+  | 'planned'
   | 'in_progress'
-  | 'review'
+  | 'in_review'
   | 'done';
 
 const STAGE_PREFIX = 'stage:';
@@ -14,11 +14,11 @@ const STAGE_PREFIX = 'stage:';
 const STAGE_MATURITY_ORDER: StageToken[] = [
   'unknown',
   'idea',
-  'prd',
-  'milestone',
-  'planning',
+  'prd_complete',
+  'milestones_defined',
+  'planned',
   'in_progress',
-  'review',
+  'in_review',
   'done',
 ];
 
@@ -35,7 +35,7 @@ export function extractStageTokens(labels: unknown[] | string | undefined | null
       if (typeof l === 'string') {
         candidates.push(l);
       } else if (l && typeof l === 'object') {
-        // common shapes: { name: 'stage:prd' } or { label: 'stage:prd' }
+        // common shapes: { name: 'stage:prd_complete' } or { label: 'stage:prd_complete' }
         const name = (l as any).name ?? (l as any).label ?? (l as any).title ?? undefined;
         if (typeof name === 'string') candidates.push(name);
       }
@@ -112,15 +112,15 @@ export function stageCode(stage: StageToken): string {
       return 'unk';
     case 'idea':
       return 'ide';
-    case 'prd':
+    case 'prd_complete':
       return 'prd';
-    case 'milestone':
-      return 'mil';
-    case 'planning':
+    case 'milestones_defined':
+      return 'mst';
+    case 'planned':
       return 'pln';
     case 'in_progress':
       return 'inp';
-    case 'review':
+    case 'in_review':
       return 'rev';
     case 'done':
       return 'don';

@@ -12,15 +12,15 @@ describe('workflow stage derivation', () => {
   });
 
   it('is case-insensitive', () => {
-    expect(computeWorkflowStage(['STAGE:PRD']).stage).toBe('prd');
+    expect(computeWorkflowStage(['STAGE:PRD_COMPLETE']).stage).toBe('prd_complete');
   });
 
   it('selects most mature stage when multiple stage labels present', () => {
-    expect(computeWorkflowStage(['stage:idea', 'stage:planning']).stage).toBe('planning');
-    expect(computeWorkflowStage(['stage:review', 'stage:in_progress']).stage).toBe('review');
+    expect(computeWorkflowStage(['stage:idea', 'stage:planned']).stage).toBe('planned');
+    expect(computeWorkflowStage(['stage:in_review', 'stage:in_progress']).stage).toBe('in_review');
   });
 
   it('extracts only known stage tokens', () => {
-    expect(extractStageTokens(['stage:nope', 'stage:prd', 'other'])).toEqual(['prd']);
+    expect(extractStageTokens(['stage:nope', 'stage:prd_complete', 'other'])).toEqual(['prd_complete']);
   });
 });

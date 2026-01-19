@@ -4,18 +4,18 @@ This document describes the `stage:*` label namespace and how the WAIF CLI displ
 
 Canonical stage tokens (machine-friendly):
 - idea
-- prd
-- milestone
-- planning
+- prd_complete
+- milestones_defined
+- planned
 - in_progress
-- review
+- in_review
 - done
 
 Selection rule
 - WAIF reads `labels[]` from a bead and extracts labels prefixed with `stage:` (case-insensitive).
 - If no `stage:*` labels are present, the computed stage is `unknown`.
 - If one `stage:*` label is present, the computed stage is that token (lowercased, without the `stage:` prefix).
-- If multiple `stage:*` labels are present, WAIF selects the most "mature" token according to the PRD maturity order (idea < prd < milestone < planning < in_progress < review < done).
+- If multiple `stage:*` labels are present, WAIF selects the most "mature" token according to the PRD maturity order (idea < prd_complete < milestones_defined < planned < in_progress < in_review < done).
 
 WAIF behavior
 - `waif show <id> --json` includes a computed `stage` field.
@@ -28,7 +28,7 @@ Note on hydration
 Examples
 - Add a stage label:
 
-  bd update wf-123 --labels "stage:prd"
+  bd update wf-123 --labels "stage:prd_complete"
 
 - Multiple stage labels (WAIF will warn and select the most mature):
 
