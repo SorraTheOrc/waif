@@ -63,28 +63,28 @@ export function createPlanCheckCommand() {
           if (findings.intake.length === 0) {
             logStdout('No intake issues found.');
           } else {
-            for (const it of findings.intake) logStdout(`- ${it.id} ${it.title ? `(${it.title}) ` : ''}missing headings: ${it.missing.join(', ')}`);
+            findings.intake.forEach((it, idx) => logStdout(`${idx + 1}. ${it.id} ${it.title ? `(${it.title}) ` : ''}missing headings: ${it.missing.join(', ')}`));
           }
         } else if (reqType === 'dependency') {
           logStdout(header + '## Dependency issues\n');
           if (findings.dependency.length === 0) {
             logStdout('No dependency issues found.');
           } else {
-            for (const d of findings.dependency) logStdout(`- ${d.id} references missing issue ${d.ref}`);
+            findings.dependency.forEach((d, idx) => logStdout(`${idx + 1}. ${d.id} references missing issue ${d.ref}`));
           }
         } else if (reqType === 'cycles') {
           logStdout(header + '## Cycles\n');
           if (findings.cycles.length === 0) {
             logStdout('No cycles found.');
           } else {
-            for (const c of findings.cycles) logStdout(`- ${c.join(' -> ')}`);
+            findings.cycles.forEach((c, idx) => logStdout(`${idx + 1}. ${c.join(' -> ')}`));
           }
         } else if (reqType === 'orphans') {
           logStdout(header + '## Orphans (leaf tasks)\n');
           if (findings.orphans.length === 0) {
             logStdout('No orphans found.');
           } else {
-            for (const o of findings.orphans) logStdout(`- ${o.id}${o.title ? ` (${o.title})` : ''}`);
+            findings.orphans.forEach((o, idx) => logStdout(`${idx + 1}. ${o.id}${o.title ? ` (${o.title})` : ''}`));
           }
         }
       }

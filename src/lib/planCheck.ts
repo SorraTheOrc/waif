@@ -127,33 +127,33 @@ export function analyzeIssues(issues: BeadIssue[]) {
 
   if (findings.intake.length) {
     parts.push('## Intake completeness\n\n');
-    for (const it of findings.intake) {
-      parts.push(`- ${it.id} ${it.title ? `(${it.title}) ` : ''}missing headings: ${it.missing.join(', ')}`);
-    }
+    findings.intake.forEach((it, idx) => {
+      parts.push(`${idx + 1}. ${it.id} ${it.title ? `(${it.title}) ` : ''}missing headings: ${it.missing.join(', ')}`);
+    });
     parts.push('\n');
   }
 
   if (findings.dependency.length) {
     parts.push('## Dependency issues\n\n');
-    for (const d of findings.dependency) {
-      parts.push(`- ${d.id} references missing issue ${d.ref}`);
-    }
+    findings.dependency.forEach((d, idx) => {
+      parts.push(`${idx + 1}. ${d.id} references missing issue ${d.ref}`);
+    });
     parts.push('\n');
   }
 
   if (findings.cycles.length) {
     parts.push('## Cycles\n\n');
-    for (const c of findings.cycles) {
-      parts.push(`- ${c.join(' -> ')}`);
-    }
+    findings.cycles.forEach((c, idx) => {
+      parts.push(`${idx + 1}. ${c.join(' -> ')}`);
+    });
     parts.push('\n');
   }
 
   if (findings.orphans.length) {
     parts.push('## Orphans (leaf tasks)\n\n');
-    for (const o of findings.orphans) {
-      parts.push(`- ${o.id}${o.title ? ` (${o.title})` : ''}`);
-    }
+    findings.orphans.forEach((o, idx) => {
+      parts.push(`${idx + 1}. ${o.id}${o.title ? ` (${o.title})` : ''}`);
+    });
     parts.push('\n');
   }
 
