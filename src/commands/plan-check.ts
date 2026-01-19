@@ -1,0 +1,39 @@
+import { Command } from 'commander';
+import { logStdout } from '../lib/io.js';
+import * as bd from '../lib/bd.js';
+import { analyzeIssues } from '../lib/planCheck.js';
+
+export function createPlanCheckCommand() {
+  const cmd = new Command('doctor');
+  cmd
+    .description('Validate beads plan integrity (interactive-only)')
+    .option('--json', 'Emit JSON (reserved)')
+    .option('--verbose', 'Emit debug logs to stderr')
+    .action((options, command) => {
+      const verbose = Boolean(options.verbose ?? command.parent?.getOptionValue('verbose'));
+
+      let issues: any[] = [];
+      // Prefer bd CLI
+      try {
+        if (bd.isBdAvailable()) {
+          const out = (bd as any).runBdSync(['list', '--json']);
+          issues = JSON.parse(out);
+        } else {
+          // fallback: read .beads/issues.jsonl
+          const raw = require('fs').readFileSync('.beads/issues.jsonl', 'utf8') || '';
+          issues = raw
+            .split(/\r?\n/)
+            .filter(Boolean)
+            .map((l: string) => JSON.parse(l));
+        }
+      } catch (e) {
+        logStdout('Failed to load beads issues: ' + (e instanceof Error ? e.message : String(e)));
+        return;
+      }
+
+      const md = analyzeIssues(issues);
+      logStdout(md);
+    });
+
+  return cmd;
+}
