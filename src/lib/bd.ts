@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
-function runBdSync(args: string[], input?: string, timeout = 30000) {
+export function runBdSync(args: string[], input?: string, timeout = 30000) {
   const res = spawnSync('bd', args, { encoding: 'utf8', input, timeout });
   if (res.error) {
     const err: any = new Error(`bd spawn error: ${res.error.message}`);
