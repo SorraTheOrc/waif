@@ -98,4 +98,20 @@ describe('renderIssuesTable', () => {
   it('returns empty string for empty input', () => {
     expect(renderIssuesTable([])).toBe('');
   });
+
+  it('shrinks stage to 3-letter code when terminal is narrow', () => {
+    const outWide = renderIssuesTable([
+      { id: 'wf-1', title: 'First', status: 'open', priority: 2, labels: ['stage:in_progress'] },
+    ], { termWidth: 200 });
+
+    expect(outWide).toContain('in_progress');
+
+    const outNarrow = renderIssuesTable([
+      { id: 'wf-1', title: 'First', status: 'open', priority: 2, labels: ['stage:in_progress'] },
+    ], { termWidth: 60 });
+
+    // should use 3-letter code 'inp' when narrow
+    expect(outNarrow).toContain('inp');
+    expect(outNarrow).not.toContain('in_progress');
+  });
 });
