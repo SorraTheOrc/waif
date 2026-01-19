@@ -253,10 +253,8 @@ function computeScore(issue: Issue, bv: BvResult): { score: number; rationale: s
 type Selection = { issue: Issue; score: number; rationale: string; metadata: Record<string, unknown> };
 
 function hydrateEpicRelations(epic: Issue, verbose: boolean): Issue {
-  if ((epic.dependencies && epic.dependencies.length) || (epic.dependents && epic.dependents.length) || (epic.children && epic.children.length)) {
-    return epic;
-  }
-
+  // No runtime hydration: trust that relation objects include labels and other metadata.
+  // Keep support for WAIF_BD_SHOW_JSON env var for test fixtures that inject full issue objects.
   const envShow = process.env.WAIF_BD_SHOW_JSON;
   if (envShow) {
     try {
@@ -269,17 +267,6 @@ function hydrateEpicRelations(epic: Issue, verbose: boolean): Issue {
     }
   }
 
-  if (!isCliAvailable('bd')) return epic;
-
-  try {
-    const out = runBd(['show', epic.id, '--json']);
-    const parsed = JSON.parse(out);
-    if (parsed && typeof parsed === 'object') {
-      return { ...epic, ...(Array.isArray(parsed) ? parsed[0] : parsed) } as Issue;
-    }
-  } catch (e) {
-    if (verbose) process.stderr.write(`[debug] failed to hydrate epic relations: ${(e as Error).message}\n`);
-  }
   return epic;
 }
 

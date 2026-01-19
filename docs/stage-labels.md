@@ -22,6 +22,9 @@ WAIF behavior
 - `waif show <id>` prints a one-line warning when multiple `stage:*` labels are present and reports which stage was selected.
 - Issues tables (next/recent/in-progress/show) include a non-droppable `Stage` column. When the terminal width is constrained, WAIF shortens stages to a 3-letter code (e.g., `inp` for `in_progress`).
 
+Note on hydration
+- WAIF relies on `bd` to provide relation objects (children/dependents/blockers) with their `labels` field populated. WAIF does not perform runtime hydration (calling `bd show <id>`) to fetch missing labels; if your `bd` templates or integrations omit `labels` from embedded relation objects, update them to include `labels` so WAIF can compute stages without extra calls.
+
 Examples
 - Add a stage label:
 
