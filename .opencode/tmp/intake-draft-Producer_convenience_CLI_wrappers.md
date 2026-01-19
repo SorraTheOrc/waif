@@ -88,3 +88,17 @@ Draft authoring notes
 - File path: `.opencode/tmp/intake-draft-Producer_convenience_CLI_wrappers.md`
 
 -- End of draft
+
+Reviews (conservative five-stage)
+
+- Finished Completeness review: Draft covers problem, users, success criteria, constraints, and next actions; clarified draft location. Recommend adding explicit example CLI invocations and expected output in `docs/dev/CLI_PRD.md` during implementation.
+
+- Finished Capture fidelity review: Proposed behaviour maps cleanly to success criteria. Idempotence goals are explicit; `--push` and alias features remain out of initial scope (deferred).
+
+- Finished Related-work & traceability review: Related beads are listed and intentionally not subsumed. When creating the epic, include explicit links to `wf-70j.2.1` and any child tasks to preserve traceability.
+
+- Finished Risks & assumptions review: Reiterated that `bd` availability and permissions are required; idempotent commenting may require scanning existing bead comments (watch for pagination/rate limits). Suggest adding a small acceptance test that simulates re-run behaviour and claim-conflict scenarios.
+
+- Finished Polish & handoff review: Minor wording cleanups applied; branch-name rule and `--dry-run` are explicit. Next actions: create the beads epic, update `docs/dev/CLI_PRD.md`, implement the command in `src/commands` with tests under `tests/`, and provide example CLI output in docs.
+
+-- End of draft
