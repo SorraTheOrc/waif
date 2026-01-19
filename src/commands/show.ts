@@ -2,7 +2,7 @@ import { Command } from 'commander';
 import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
 import { computeWorkflowStage } from '../lib/stage.js';
-import { showIssue } from '../lib/bd.js';
+import { showIssue, isBdAvailable } from '../lib/bd.js';
 import { renderIssuesTable } from '../lib/table.js';
 import {
   renderBlockersSection,
@@ -63,7 +63,40 @@ export function createShowCommand() {
         logStdout(blockersSection);
       }
 
-      const childrenSection = renderChildrenSection(issue);
+      const related = Array.isArray(issue.children) ? issue.children : Array.isArray(issue.dependents) ? issue.dependents : [];
+      let childrenSection: string | undefined = '';
+      if (related.length) {
+        let hydrated = related as any[];
+        // Only try to call bd show to hydrate child objects when bd is available (avoids surprising behavior in tests/mocks)
+        if (isBdAvailable()) {
+          hydrated = [] as any[];
+          for (const rel of related) {
+            const cid = (rel && (rel.id ?? (rel as any).depends_on_id)) as string | undefined;
+            if (!cid) {
+              hydrated.push(rel);
+              continue;
+            }
+
+            const hasLabels = Array.isArray((rel as any).labels) && (rel as any).labels.length > 0;
+            if (hasLabels) {
+              hydrated.push(rel);
+              continue;
+            }
+
+            try {
+              const out = showIssue(cid);
+              const child = Array.isArray(out) ? out[0] : out;
+              hydrated.push(child ?? rel);
+            } catch (e) {
+              hydrated.push(rel);
+            }
+          }
+        }
+
+        const hydratedIssue = { ...issue, children: hydrated, dependents: hydrated } as Issue;
+        childrenSection = renderChildrenSection(hydratedIssue);
+      }
+
       if (childrenSection) {
         logStdout(childrenSection);
       }
