@@ -63,7 +63,41 @@ export function createShowCommand() {
         logStdout(blockersSection);
       }
 
-      const childrenSection = renderChildrenSection(issue);
+      // Hydrate children if their objects lack labels so their stage displays correctly
+      let childrenSection: string | undefined = '';
+      const related = Array.isArray(issue.children) ? issue.children : Array.isArray(issue.dependents) ? issue.dependents : [];
+      if (related.length) {
+        const hydrated = [] as any[];
+        for (const rel of related) {
+          const cid = (rel && (rel.id ?? (rel as any).depends_on_id)) as string | undefined;
+          // keep object if no id
+          if (!cid) {
+            hydrated.push(rel);
+            continue;
+          }
+
+          const hasLabels = Array.isArray((rel as any).labels) && (rel as any).labels.length > 0;
+          if (hasLabels) {
+            hydrated.push(rel);
+            continue;
+          }
+
+          try {
+            const out = showIssue(cid);
+            const child = Array.isArray(out) ? out[0] : out;
+            hydrated.push(child ?? rel);
+          } catch (e) {
+            // if bd show failed for child, fall back to original rel
+            hydrated.push(rel);
+          }
+        }
+
+        const hydratedIssue = { ...issue, children: hydrated, dependents: hydrated } as Issue;
+        childrenSection = renderChildrenSection(hydratedIssue);
+      } else {
+        childrenSection = renderChildrenSection(issue);
+      }
+
       if (childrenSection) {
         logStdout(childrenSection);
       }
