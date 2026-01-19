@@ -56,7 +56,7 @@ When interacting with agents, the `waif` CLI tool is designed to integrate with 
 
 - `waif in-progress`: lists issues currently marked `in_progress` (use this to see what you or agents are actively working on).
 - `waif recent [-n 3]`: lists the most recently updated issues (use this to regain context).
-- `waif next`: recommends the single best open, unblocked issue to work on now, copies the issue id to your clipboard (best-effort), and supports `--json` output for automation. It prints a one-row recommendation table followed by `# Details` (full `bd show <id>` output when available). For a table-formatted view with blockers/children, use `waif show <id>`. Use `--assignee <name>` (alias `-a`) to restrict candidates to a specific assignee; optional positional search still acts as a fuzzy bias, not a structured filter.
+- `waif next`: recommends the single best open, unblocked issue to work on now and supports `--json` output for automation. It prints a one-row recommendation table followed by `# Details` (full `bd show <id>` output when available). For a table-formatted view with blockers/children, use `waif show <id>`. Use `--assignee <name>` (alias `-a`) to restrict candidates to a specific assignee; optional positional search still acts as a fuzzy bias, not a structured filter.
 - `waif show <id>`: drill into a specific issue (e.g., after you get an id from `waif in-progress`, `waif recent`, or `waif next`).
 
   Usage:

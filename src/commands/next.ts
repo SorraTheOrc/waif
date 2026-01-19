@@ -6,7 +6,7 @@ import { CliError } from '../types.js';
 import { emitJson, logStdout } from '../lib/io.js';
 import { renderIssueTitle } from '../lib/issueTitle.js';
 import { renderIssuesTable } from '../lib/table.js';
-import { copyToClipboard } from '../lib/clipboard.js';
+
 import { extractBlockers, extractChildren, type IssueWithRelations } from '../lib/relations.js';
 import Fuse from 'fuse.js';
 
@@ -368,11 +368,11 @@ function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean):
 export function createNextCommand() {
   const cmd = new Command('next');
   cmd
-    .description('Return the single best open, unblocked issue to work on now (copies issue id to clipboard)')
+    .description('Return the single best open, unblocked issue to work on now')
     .argument('[search]', 'Optional search string to bias selection')
     .option('--json', 'Emit JSON output')
     .option('--verbose', 'Emit debug logs to stderr')
-    .option('--no-clipboard', 'Disable copying the recommended issue id to clipboard')
+    
     .option('-n, --number <n>', 'Number of suggestions to return (default 1)')
     .option('-a, --assignee <name>', 'Only consider issues assigned to <name>')
     .action((search: string | undefined, options, command) => {
@@ -486,13 +486,9 @@ export function createNextCommand() {
       }
 
       // Copy only the first recommended id to clipboard when enabled
-      const clipboardEnabled = Boolean(options.clipboard ?? true) && !jsonOutput;
-      if (clipboardEnabled && finalSelection.length > 0) {
-        const clipboardResult = copyToClipboard(finalSelection[0].issue.id);
-        if (!clipboardResult.ok && verbose) {
-          process.stderr.write(`[debug] clipboard copy failed: ${clipboardResult.error}\n`);
-        }
-      }
+      // clipboard disabled by default; only enable when --clipboard present and not in --json mode
+const clipboardEnabled = false; // clipboard support removed — disabled permanently
+      // Clipboard support removed: do not copy anything to the OS clipboard.
 
       if (jsonOutput) {
         const payload = finalSelection.map((s: { issue: Issue; score?: number; rationale?: string; metadata?: Record<string, unknown> }, idx: number) => ({
