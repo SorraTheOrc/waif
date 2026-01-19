@@ -70,6 +70,26 @@ describe('wf show', () => {
      stdoutSpy.mockRestore();
    });
 
+   it('prints warning when multiple stage labels present and selects most mature', async () => {
+     (showIssue as unknown as Mock).mockReturnValue({
+       id: 'wf-999',
+       title: 'Multiple stages',
+       status: 'open',
+       labels: ['stage:idea', 'stage:in_progress'],
+     });
+
+     const stdoutSpy = vi.spyOn(process.stdout, 'write').mockImplementation(() => true as any);
+
+     const program = createTestProgram();
+     await program.parseAsync(['show', 'wf-999'], { from: 'user' });
+
+     const output = stdoutSpy.mock.calls.map((c) => c[0]).join('');
+     expect(output).toContain("Warning: multiple stage:* labels present");
+     expect(output).toContain("selected 'in_progress'");
+
+     stdoutSpy.mockRestore();
+   });
+
    it('errors when issue not found', async () => {
 
     (showIssue as unknown as Mock).mockImplementation(() => {
