@@ -35,29 +35,8 @@ export function createActionCommand() {
   cmd.description('Action-based producer workflow wrappers');
 
   const start = new Command('start');
-  // Try to use the repository action description for help if present so the
-  // CLI help reflects the YAML-defined action. Prefer reading the .waif
-  // action file directly (synchronous) to avoid module-init ordering and
-  // schema-loading interactions in the actions loader. Fall back to the
-  // original hardcoded description when not available.
-  let startDesc = 'Claim a bead and create/check out a local topic branch';
-  try {
-    const candidates = ['.waif/actions/start.yml', '.waif/actions/start.yaml'];
-    for (const c of candidates) {
-      if (existsSync(c)) {
-        const raw = readFileSync(c, { encoding: 'utf8' });
-        const parsed = YAML.load(raw) as any;
-        if (parsed && parsed.description) {
-          startDesc = String(parsed.description).trim();
-        }
-        break;
-      }
-    }
-  } catch (e) {
-    // ignore and use fallback
-  }
   start
-    .description(startDesc)
+    .description('Claim a bead and create/check out a local topic branch')
     .argument('<bead-id>', 'Beads issue id (e.g., wf-123)')
     .argument('[params...]', 'Positional parameters and key=val inputs passed to the action')
     .option('--dry-run', 'Print intended actions without making changes')
@@ -269,6 +248,24 @@ export function createActionCommand() {
       }
     });
   cmd.addCommand(lint);
+
+  // Override subcommand descriptions with repo-discovered action descriptions
+  // when an action file with a matching name exists. This keeps help text in
+  // sync with the repository action definitions without requiring special
+  // casing for each subcommand.
+  try {
+    const repoActions = discoverRepoActions('.waif/actions');
+    for (const a of repoActions) {
+      const name = a.action?.name;
+      if (!name) continue;
+      const cmdObj = cmd.commands.find((c) => c.name() === name);
+      if (cmdObj && a.action.description) {
+        cmdObj.description(String(a.action.description));
+      }
+    }
+  } catch (e) {
+    // ignore discovery errors for help rendering
+  }
 
   // Default behavior: run a discovered action by name.
   // This is invoked when the user runs `wf action <name> [params...]` and no explicit subcommand matches.
