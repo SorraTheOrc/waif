@@ -1,5 +1,5 @@
 name: start
-description: Claim a bead and create/check out a local topic branch (action bundle)
+description: Start work on the bead.
 requires:
   - git
   - bd
