@@ -3,7 +3,7 @@
     "provider": {},
     "model": "github-copilot/gpt-5.2",
     "small_model": "github-copilot/gpt-5-mini",
-    "default_agent": "map",
+    "default_agent": "build",
     "tui": {
         "scroll_speed": 3,
         "scroll_acceleration": {
