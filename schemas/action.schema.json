@@ -16,18 +16,18 @@
         "dry_run_support": { "type": "boolean" }
       }
     },
-    "inputs": {
-      "type": "object",
-      "additionalProperties": {
+      "inputs": {
         "type": "object",
-        "properties": {
-          "required": { "type": "boolean" },
-          "description": { "type": "string" },
-          "default": {}
-        },
-        "additionalProperties": false
-      }
-    },
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "required": { "type": "boolean" },
+            "description": { "type": "string" },
+            "default": { "type": ["string", "number", "boolean", "null"] }
+          },
+          "additionalProperties": false
+        }
+      },
     "runs": {
       "type": "array",
       "items": {
@@ -35,8 +35,23 @@
         "additionalProperties": false,
         "required": ["type"],
         "properties": {
-          "type": { "type": "string", "enum": ["shell", "bd", "noop"] },
-          "cmd": { "type": "string" }
+          "type": {
+            "type": "string",
+            "enum": [
+              "shell",
+              "bd",
+              "noop",
+              "git_ensure_branch",
+              "bd_update_external_ref_if_empty",
+              "bd_comments_ensure",
+              "bd_update_status_if_not"
+            ]
+          },
+          "cmd": { "type": "string" },
+          "branch": { "type": "string" },
+          "value": { "type": "string" },
+          "text": { "type": "string" },
+          "status": { "type": "string" }
         },
         "allOf": [
           {
@@ -46,6 +61,22 @@
           {
             "if": { "properties": { "type": { "const": "bd" } } },
             "then": { "required": ["cmd"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "git_ensure_branch" } } },
+            "then": { "required": ["branch"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "bd_update_external_ref_if_empty" } } },
+            "then": { "required": ["value"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "bd_comments_ensure" } } },
+            "then": { "required": ["text"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "bd_update_status_if_not" } } },
+            "then": { "required": ["status"] }
           }
         ]
       }

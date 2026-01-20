@@ -10,20 +10,18 @@ inputs:
   bead_id:
     required: true
     description: Beads issue id (e.g., wf-123)
+  branch:
+    description: Branch name to checkout/create
+  branch_ref:
+    description: Value to write to bd external_ref when empty
+  status_target:
+    description: Desired status before starting work
 runs:
-  - type: bd
-    cmd: 'show ${positional[0]} --json'
-  - type: shell
-    cmd: |
-      # derive slug and branch
-      title=$(node -e "const i=JSON.parse(process.stdin.read()); process.stdout.write((i[0].title||'work').toLowerCase().replace(/[^a-z0-9\s]/g,' ').trim().split(/\s+/).slice(0,6).join('-'))" <<< "$(cat)")
-      branch=bd-${positional[0]}/${title}
-      echo BRANCH:${branch}
-  - type: bd
-    cmd: 'update ${positional[0]} --status in_progress'
-  - type: shell
-    cmd: 'git rev-parse --verify refs/heads/${positional[1]} || git checkout -b ${positional[1]}'
-  - type: bd
-    cmd: 'update ${positional[0]} --external-ref branch:${positional[1]}'
-  - type: bd
-    cmd: 'comments add ${positional[0]} "Branch created: ${positional[1]} (local)"'
+  - type: bd_update_status_if_not
+    status: '${inputs.status_target}'
+  - type: git_ensure_branch
+    branch: '${inputs.branch}'
+  - type: bd_update_external_ref_if_empty
+    value: '${inputs.branch_ref}'
+  - type: bd_comments_ensure
+    text: 'Branch created: ${inputs.branch} (local)'

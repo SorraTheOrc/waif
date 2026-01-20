@@ -1,17 +1,10 @@
 import { Command } from 'commander';
 
 import { CliError } from '../types.js';
-import { logStdout } from '../lib/io.js';
-import { runBdSync, showIssue } from '../lib/bd.js';
-import {
-  ensureCliAvailable,
-  execFileOrThrow,
-  gitCheckoutBranch,
-  gitLocalBranchExists,
-  requireCleanWorkingTree,
-  sanitizeBranchSlugFromTitle,
-} from '../lib/wrappers.js';
-import { findActionByName, loadActionFromFile, runAction, discoverRepoActions } from '../lib/actions.js';
+import { emitJson, logStdout, logStderr } from '../lib/io.js';
+import { ensureCliAvailable, execFileOrThrow, requireCleanWorkingTree, sanitizeBranchSlugFromTitle } from '../lib/wrappers.js';
+import { showIssue } from '../lib/bd.js';
+import { findActionByName, loadActionFromFile, runAction, discoverRepoActions, DryRunRenderedStep } from '../lib/actions.js';
 import YAML from 'js-yaml';
 import { writeFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
@@ -25,11 +18,6 @@ function normalizeBdShowResult(value: any): any {
   return value;
 }
 
-function shouldUpdateStatus(issue: any): boolean {
-  const status = String(issue?.status ?? '').toLowerCase();
-  return status !== 'in_progress';
-}
-
 export function createActionCommand() {
   const cmd = new Command('action');
   cmd.description('Action-based producer workflow wrappers');
@@ -40,15 +28,20 @@ export function createActionCommand() {
     .argument('<bead-id>', 'Beads issue id (e.g., wf-123)')
     .argument('[params...]', 'Positional parameters and key=val inputs passed to the action')
     .option('--dry-run', 'Print intended actions without making changes')
-    .action((beadId: string, params: string[] | undefined, options: StartOptions) => {
-      // Commander may place flags after variadic args; support consuming --dry-run from params too.
+    .option('--json', 'Emit JSON dry-run output (dry-run only)')
+    .action((beadId: string, params: string[] | undefined, options: StartOptions & { json?: boolean }) => {
+      // Commander may place flags after variadic args; support consuming flags from params too.
       params = params ?? [];
-      const paramFlags = new Set(params.filter((p) => p.startsWith('--')));
-      // Detect --dry-run from options, from params (when flags placed after variadic args),
-      // or from the raw argv (defensive for tests and different commander versions).
-      const dryRun = Boolean(options?.dryRun) || paramFlags.has('--dry-run') || process.argv.includes('--dry-run');
+      const flagParams = new Set(params.filter((p) => p.startsWith('--')));
+      // Detect flags whether commander parsed them or they were left in params.
+      const rawArgv = Array.isArray(process.argv) ? process.argv : [];
+      const dryRun = Boolean(options?.dryRun) || flagParams.has('--dry-run') || rawArgv.includes('--dry-run');
+      const jsonMode = Boolean(options?.json) || flagParams.has('--json') || rawArgv.includes('--json');
+      if (jsonMode && !dryRun) {
+        throw new CliError('--json is only supported with --dry-run for now', 1);
+      }
       // Remove recognized flags from params before parsing positional/key=val inputs
-      params = params.filter((p) => p !== '--dry-run');
+      params = params.filter((p) => p !== '--dry-run' && p !== '--json');
 
       // Parse positional params into ordered params and key=value inputs
       const positional: string[] = [];
@@ -74,10 +67,11 @@ export function createActionCommand() {
         execFileOrThrow('git', ['status', '--porcelain=v1']);
       }
 
-      // Provide the action with discovered inputs via environment-like map.
-      // For now we keep the same behavior but surface `positional` and `inputs`.
-      // Future runner will accept these and dispatch into action steps.
-      logStdout(`Action inputs positional=${JSON.stringify(positional)} inputs=${JSON.stringify(inputs)}`);
+      // Ensure bead id is present in positional[0] so templates can read it directly.
+      const actionPositional = [beadId, ...positional];
+      if (!inputs.bead_id) {
+        inputs.bead_id = beadId;
+      }
 
       const issueRaw = showIssue(beadId);
       const issue = normalizeBdShowResult(issueRaw);
@@ -86,63 +80,73 @@ export function createActionCommand() {
       }
 
       const slug = sanitizeBranchSlugFromTitle(String(issue.title ?? beadId));
-      const branch = `bd-${beadId}/${slug}`;
+      if (!inputs.branch) {
+        inputs.branch = `bd-${beadId}/${slug}`;
+      }
+      if (!inputs.branch_ref) {
+        inputs.branch_ref = `branch:${inputs.branch}`;
+      }
+      if (!inputs.issue_title) {
+        inputs.issue_title = String(issue.title ?? '');
+      }
+      if (!inputs.issue_status && issue.status) {
+        inputs.issue_status = String(issue.status);
+      }
+      if (!inputs.status_target) {
+        inputs.status_target = 'in_progress';
+      }
 
-      const actions: string[] = [];
+      const found = findActionByName('start');
+      if (!found) {
+        throw new CliError('Action not found: start', 1);
+      }
 
-      if (shouldUpdateStatus(issue)) {
-        actions.push(`bd update ${beadId} --status in_progress`);
+      const runMsg = `Running action ${found.action.name} (source=${found.source})`;
+      if (jsonMode) {
+        logStderr(runMsg);
       } else {
-        actions.push(`# already in_progress: ${beadId}`);
+        logStdout(runMsg);
       }
 
-      if (gitLocalBranchExists(branch)) {
-        actions.push(`git checkout ${branch}`);
-      } else {
-        actions.push(`git checkout -b ${branch}`);
+      if (dryRun && !jsonMode) {
+        logStdout('Dry run plan:');
       }
 
-      actions.push(`bd update ${beadId} --external-ref "branch:${branch}" (if empty)`);
-      actions.push(`bd comments add ${beadId} "Branch created: ${branch} (local)" (idempotent)`);
+      const dryRunSteps: DryRunRenderedStep[] = [];
+      runAction(found.action, actionPositional, inputs, {
+        dryRun,
+        onDryRunStep: (_step, rendered) => {
+          if (jsonMode) {
+            dryRunSteps.push(rendered);
+          } else {
+            logStdout(formatDryRunSummary(rendered));
+          }
+        },
+      });
 
-      if (dryRun) {
-        logStdout(`Dry run: would start work on ${beadId}`);
-        actions.forEach((a) => logStdout(a));
-        return;
+      if (jsonMode && dryRun) {
+        emitJson({ action: found.action.name, dry_run: dryRunSteps });
       }
-
-      if (shouldUpdateStatus(issue)) {
-        runBdSync(['update', beadId, '--status', 'in_progress']);
-      }
-
-      const exists = gitLocalBranchExists(branch);
-      gitCheckoutBranch(branch, !exists);
-
-      // Record external ref without clobbering an existing external_ref.
-      const refreshed = normalizeBdShowResult(showIssue(beadId));
-      const currentRef = String(refreshed?.external_ref ?? '').trim();
-      const desiredRef = `branch:${branch}`;
-      if (!currentRef) {
-        runBdSync(['update', beadId, '--external-ref', desiredRef]);
-      }
-
-      // Add a single comment; skip if already present.
-      try {
-        const commentsJson = runBdSync(['comments', beadId, '--json']);
-        const comments = JSON.parse(commentsJson);
-        const msg = `Branch created: ${branch} (local)`;
-        const already = Array.isArray(comments) && comments.some((c: any) => String(c?.text ?? '') === msg);
-        if (!already) {
-          runBdSync(['comments', 'add', beadId, msg]);
-        }
-      } catch {
-        // If listing comments fails, still attempt to add; bd will dedupe poorly but we tried.
-        runBdSync(['comments', 'add', beadId, `Branch created: ${branch} (local)`]);
-      }
-
-      logStdout(`Branch ready: ${branch} (local)`);
-      logStdout(`Next: git push -u origin ${branch}`);
     });
+
+function formatDryRunSummary(step: DryRunRenderedStep) {
+  switch (step.type) {
+    case 'bd_update_status_if_not':
+      return `- Ensure status is ${step.status}`;
+    case 'git_ensure_branch':
+      return `- Checkout or create branch ${step.branch}`;
+    case 'bd_update_external_ref_if_empty':
+      return `- Record external ref ${step.value}`;
+    case 'bd_comments_ensure':
+      return `- Ensure comment "${step.text}" exists`;
+    case 'shell':
+      return `- Run shell: ${step.cmd}`;
+    case 'bd':
+      return `- Run bd: ${step.cmd}`;
+    default:
+      return `- Step: ${JSON.stringify(step)}`;
+  }
+}
 
   cmd.addCommand(start);
 
@@ -274,6 +278,8 @@ export function createActionCommand() {
     .argument('[params...]', 'Positional parameters and key=val inputs passed to the action')
     .option('--file <path>', 'Load action from explicit file')
     .option('--dry-run', 'Print intended actions without making changes')
+    .option('--json', 'Emit JSON dry-run output (dry-run only)')
+    .option('--pretty', 'Force human-readable dry-run output (default)')
     .action((actionId: string | undefined, params: string[] | undefined, options: any) => {
       if (!actionId) {
         // no-op: just show help
@@ -281,7 +287,15 @@ export function createActionCommand() {
         return;
       }
 
-      const dryRun = Boolean(options.dryRun);
+      params = params ?? [];
+      const flagParams = new Set(params.filter((p) => p.startsWith('--')));
+
+      const rawArgv = Array.isArray(process.argv) ? process.argv : [];
+      const dryRun = Boolean(options.dryRun) || flagParams.has('--dry-run') || rawArgv.includes('--dry-run');
+      const jsonMode = Boolean(options.json) || flagParams.has('--json') || rawArgv.includes('--json');
+      if (jsonMode && !dryRun) {
+        throw new CliError('--json is only supported with --dry-run for now', 1);
+      }
 
       // Parse params into positional and inputs
       const positional: string[] = [];
@@ -306,8 +320,30 @@ export function createActionCommand() {
         source = found.source;
       }
 
-      logStdout(`Running action ${actionDef.name} (source=${source})`);
-      runAction(actionDef, positional, inputs, dryRun);
+      const runMsg = `Running action ${actionDef.name} (source=${source})`;
+      if (jsonMode) {
+        logStderr(runMsg);
+      } else {
+        logStdout(runMsg);
+      }
+      if (dryRun && !jsonMode) {
+        logStdout('Dry run plan:');
+      }
+      const dryRunSteps: DryRunRenderedStep[] = [];
+      runAction(actionDef, positional, inputs, {
+        dryRun,
+        onDryRunStep: (_step, rendered) => {
+          if (jsonMode) {
+            dryRunSteps.push(rendered);
+          } else {
+            logStdout(formatDryRunSummary(rendered));
+          }
+        },
+      });
+
+      if (jsonMode && dryRun) {
+        emitJson({ action: actionDef.name, dry_run: dryRunSteps });
+      }
     });
   return cmd;
 }

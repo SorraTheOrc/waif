@@ -5,11 +5,28 @@ import YAML from 'js-yaml';
 import { execFileOrThrow, ensureCliAvailable, requireCleanWorkingTree } from './wrappers.js';
 import { runBdSync } from './bd.js';
 import { CliError } from '../types.js';
+import {
+  bdCommentsEnsure,
+  bdUpdateExternalRefIfEmpty,
+  bdUpdateStatusIfNot,
+  gitEnsureBranch,
+} from './actions/runtimePrimitives.js';
 
 export type ActionStep =
   | { type: 'shell'; cmd: string }
   | { type: 'bd'; cmd: string }
-  | { type: 'noop' };
+  | { type: 'noop' }
+  | { type: 'git_ensure_branch'; branch: string }
+  | { type: 'bd_update_external_ref_if_empty'; value: string }
+  | { type: 'bd_comments_ensure'; text: string }
+  | { type: 'bd_update_status_if_not'; status: string };
+
+export type DryRunRenderedStep = { type: string } & Record<string, string>;
+
+export type RunActionOptions = {
+  dryRun?: boolean;
+  onDryRunStep?: (step: ActionStep, rendered: DryRunRenderedStep) => void;
+};
 
 export type Action = {
   name: string;
@@ -22,7 +39,7 @@ export type Action = {
 
 import AjvPkg from 'ajv';
 const Ajv = (AjvPkg as any).default ?? AjvPkg;
-const ajv = new (Ajv as any)({ allErrors: true });
+const ajv = new (Ajv as any)({ allErrors: true, allowUnionTypes: true, strict: false });
 // Load schema from file if present
 let validate: any;
 try {
@@ -110,7 +127,38 @@ function renderTemplate(s: string, ctx: { inputs: Record<string, string>; positi
   return s.replace(/\$\{inputs\.([a-zA-Z0-9_\-]+)\}/g, (_m, key) => String(ctx.inputs[key] ?? '')).replace(/\$\{positional\[([0-9]+)\]\}/g, (_m, idx) => ctx.positional[Number(idx)] ?? '');
 }
 
-export function runAction(action: Action, positional: string[], inputs: Record<string, string>, dryRun = false) {
+function renderDryRunStep(step: ActionStep, ctx: { inputs: Record<string, string>; positional: string[] }): DryRunRenderedStep {
+  switch (step.type) {
+    case 'shell':
+      return { type: step.type, cmd: renderTemplate(step.cmd, ctx) };
+    case 'bd':
+      return { type: step.type, cmd: renderTemplate(step.cmd, ctx) };
+    case 'git_ensure_branch':
+      return { type: step.type, branch: renderTemplate(step.branch, ctx) };
+    case 'bd_update_external_ref_if_empty':
+      return { type: step.type, value: renderTemplate(step.value, ctx) };
+    case 'bd_comments_ensure':
+      return { type: step.type, text: renderTemplate(step.text, ctx) };
+    case 'bd_update_status_if_not':
+      return { type: step.type, status: renderTemplate(step.status, ctx) };
+    case 'noop':
+      return { type: 'noop' };
+    default:
+      return { type: (step as any)?.type ?? 'unknown' };
+  }
+}
+
+export function runAction(
+  action: Action,
+  positional: string[],
+  inputs: Record<string, string>,
+  optionsOrDryRun?: boolean | RunActionOptions,
+) {
+  const options: RunActionOptions =
+    typeof optionsOrDryRun === 'object'
+      ? (optionsOrDryRun ?? {})
+      : { dryRun: Boolean(optionsOrDryRun) };
+  const dryRun = Boolean(options?.dryRun);
   // requires checks
   for (const r of action.requires ?? []) {
     ensureCliAvailable(r, `Install ${r} and ensure it is on PATH.`);
@@ -129,11 +177,13 @@ export function runAction(action: Action, positional: string[], inputs: Record<s
 
   for (const step of action.runs) {
     if (dryRun) {
-      // print what would run
-      // Use logStdout for test-friendly capture instead of console.log
-      // to keep output consistent with other commands.
-      // eslint-disable-next-line no-console
-      console.log('[dry-run] step:', JSON.stringify(step));
+      const rendered = renderDryRunStep(step, ctx);
+      if (typeof options?.onDryRunStep === 'function') {
+        options.onDryRunStep(step, rendered);
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('[dry-run] step:', JSON.stringify(rendered));
+      }
       continue;
     }
 
@@ -151,6 +201,37 @@ export function runAction(action: Action, positional: string[], inputs: Record<s
       continue;
     }
 
-    // noop or unknown
+    if (step.type === 'git_ensure_branch') {
+      const branch = renderTemplate(step.branch, ctx);
+      gitEnsureBranch(branch);
+      continue;
+    }
+
+    if (step.type === 'bd_update_external_ref_if_empty') {
+      const value = renderTemplate(step.value, ctx);
+      const issueId = ctx.inputs.bead_id ?? ctx.positional[0];
+      bdUpdateExternalRefIfEmpty(issueId, value);
+      continue;
+    }
+
+    if (step.type === 'bd_comments_ensure') {
+      const text = renderTemplate(step.text, ctx);
+      const issueId = ctx.inputs.bead_id ?? ctx.positional[0];
+      bdCommentsEnsure(issueId, text);
+      continue;
+    }
+
+    if (step.type === 'bd_update_status_if_not') {
+      const status = renderTemplate(step.status, ctx);
+      const issueId = ctx.inputs.bead_id ?? ctx.positional[0];
+      bdUpdateStatusIfNot(issueId, status);
+      continue;
+    }
+
+    if (step.type === 'noop') {
+      continue;
+    }
+
+    throw new CliError(`Unsupported action step type: ${String((step as any)?.type)}`, 1);
   }
 }

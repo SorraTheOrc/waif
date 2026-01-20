@@ -69,6 +69,11 @@ function makeFakeGit(
     '  writeState(s);',
     '  process.exit(0);',
     '}',
+    "if (args.join(' ') === 'rev-parse --abbrev-ref HEAD') {",
+    '  const s = readState();',
+    '  process.stdout.write(`${s.currentBranch}\n`);',
+    '  process.exit(0);',
+    '}',
     "process.stderr.write('Unsupported git args: ' + args.join(' ') + '\\n');",
     'process.exit(2);',
     '',
@@ -150,9 +155,9 @@ function readJson<T>(filePath: string): T {
 }
 
 describe('wf action start (integration)', () => {
-  it('dry-run prints intended actions', async () => {
+  it('dry-run prints action plan', async () => {
     const binDir = mkdtempSync(join(tmpdir(), 'wf-id-'));
-    makeFakeGit(binDir, { dirty: true });
+    makeFakeGit(binDir, { dirty: false });
     makeFakeBd(binDir, { id: 'wf-1', title: 'Add intake wrapper', status: 'open' });
 
     const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'action', 'start', 'wf-1', '--dry-run'], {
@@ -160,8 +165,30 @@ describe('wf action start (integration)', () => {
     });
 
     expect(exitCode).toBe(0);
-    expect(stdout).toContain('Dry run: would start work on wf-1');
-    expect(stdout).toContain('bd update wf-1 --status in_progress');
+    expect(stdout).toContain('Dry run plan:');
+    expect(stdout).toContain('- Ensure status is in_progress');
+    expect(stdout).toContain('- Checkout or create branch bd-wf-1/add-intake-wrapper');
+  });
+
+  it('supports --json dry-run output', async () => {
+    const binDir = mkdtempSync(join(tmpdir(), 'wf-id-'));
+    makeFakeGit(binDir, { dirty: false });
+    makeFakeBd(binDir, { id: 'wf-1', title: 'Add intake wrapper', status: 'open' });
+
+    const { exitCode, stdout, stderr } = await execa(
+      CLI[0],
+      [...CLI.slice(1), 'action', 'start', 'wf-1', '--dry-run', '--json'],
+      {
+        env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
+      },
+    );
+
+    expect(exitCode).toBe(0);
+    const payload = JSON.parse(stdout);
+    expect(payload.action).toBe('start');
+    expect(Array.isArray(payload.dry_run)).toBe(true);
+    expect(payload.dry_run[0]).toEqual({ type: 'bd_update_status_if_not', status: 'in_progress' });
+    expect(stderr).toContain('Running action start');
   });
 
   it('fails fast when working tree is dirty (non-dry-run)', async () => {
