@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from 'fs';
+import { mkdtempSync, writeFileSync, mkdirSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { execa } from 'execa';
@@ -10,6 +10,7 @@ describe('wf action lint (cli)', () => {
   it('validates actions in a directory', async () => {
     const temp = mkdtempSync(join(tmpdir(), 'wf-actions-'));
     const dir = `${temp}/.waif/actions`;
+    mkdirSync(dir, { recursive: true });
     // create dir and two files: valid and invalid
     const valid = `name: ok-action\ndescription: ok\nruns:\n  - type: noop\n`;
     const invalid = `name: bad-action\n# missing runs -> invalid\n`;
