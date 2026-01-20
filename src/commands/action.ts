@@ -30,6 +30,7 @@ function shouldUpdateStatus(issue: any): boolean {
 export function createActionCommand() {
   const cmd = new Command('action');
   cmd.description('Action-based producer workflow wrappers');
+  cmd.alias('id');
 
   const start = new Command('start');
   start
