@@ -99,6 +99,13 @@ export function findActionByName(name: string): { action: Action; source: string
   return null;
 }
 
+// Export a validator helper so callers (and CLI lint) can validate without
+// relying on loadActionFromFile which throws on validation failures.
+export function validateAction(obj: any) {
+  const ok = Boolean(validate(obj));
+  return { valid: ok, errors: validate.errors };
+}
+
 function renderTemplate(s: string, ctx: { inputs: Record<string, string>; positional: string[] }) {
   return s.replace(/\$\{inputs\.([a-zA-Z0-9_\-]+)\}/g, (_m, key) => String(ctx.inputs[key] ?? '')).replace(/\$\{positional\[([0-9]+)\]\}/g, (_m, idx) => ctx.positional[Number(idx)] ?? '');
 }

@@ -201,6 +201,40 @@ export function createActionCommand() {
     });
   cmd.addCommand(init);
 
+  const lint = new Command('lint');
+  lint.description('Validate action YAML files against schema')
+    .option('--dir <path>', 'Directory to search for actions (default: .waif/actions)')
+    .option('--file <path>', 'Validate a single action file')
+    .action((options: any) => {
+      const dir = options.dir ?? '.waif/actions';
+      if (options.file) {
+        const a = loadActionFromFile(options.file);
+        // loadActionFromFile throws on validation failure, so success means OK
+        logStdout(`OK: ${options.file}`);
+        return;
+      }
+
+      const found = discoverRepoActions(dir);
+      if (!found || found.length === 0) {
+        logStdout(`No actions discovered in ${dir}`);
+        return;
+      }
+
+      let failed = false;
+      for (const f of found) {
+        try {
+          loadActionFromFile(f.path);
+          logStdout(`OK: ${f.path}`);
+        } catch (e: any) {
+          failed = true;
+          logStdout(`ERR: ${f.path} -> ${String(e?.message ?? e)}`);
+        }
+      }
+
+      if (failed) throw new CliError('One or more actions failed validation', 1);
+    });
+  cmd.addCommand(lint);
+
   // Default behavior: run a discovered action by name.
   // This is invoked when the user runs `wf action <name> [params...]` and no explicit subcommand matches.
   cmd
