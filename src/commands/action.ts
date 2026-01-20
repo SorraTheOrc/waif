@@ -11,6 +11,7 @@ import {
   requireCleanWorkingTree,
   sanitizeBranchSlugFromTitle,
 } from '../lib/wrappers.js';
+import { findActionByName, loadActionFromFile, runAction } from '../lib/actions.js';
 
 type StartOptions = {
   dryRun?: boolean;
@@ -134,5 +135,48 @@ export function createActionCommand() {
     });
 
   cmd.addCommand(start);
+
+  // Default behavior: run a discovered action by name.
+  // This is invoked when the user runs `wf action <name> [params...]` and no explicit subcommand matches.
+  cmd
+    .argument('[action-id]', 'Action id to run (discovered from .waif/actions or bundled actions)')
+    .argument('[params...]', 'Positional parameters and key=val inputs passed to the action')
+    .option('--file <path>', 'Load action from explicit file')
+    .option('--dry-run', 'Print intended actions without making changes')
+    .action((actionId: string | undefined, params: string[] | undefined, options: any) => {
+      if (!actionId) {
+        // no-op: just show help
+        cmd.help();
+        return;
+      }
+
+      const dryRun = Boolean(options.dryRun);
+
+      // Parse params into positional and inputs
+      const positional: string[] = [];
+      const inputs: Record<string, string> = {};
+      (params ?? []).forEach((p) => {
+        const idx = p.indexOf('=');
+        if (idx > 0) {
+          inputs[p.slice(0, idx)] = p.slice(idx + 1);
+        } else {
+          positional.push(p);
+        }
+      });
+
+      let actionDef;
+      let source = options.file;
+      if (options.file) {
+        actionDef = loadActionFromFile(source);
+      } else {
+        const found = findActionByName(actionId);
+        if (!found) throw new CliError(`Action not found: ${actionId}`, 1);
+        actionDef = found.action;
+        source = found.source;
+      }
+
+      logStdout(`Running action ${actionDef.name} (source=${source})`);
+      runAction(actionDef, positional, inputs, dryRun);
+    });
   return cmd;
 }
