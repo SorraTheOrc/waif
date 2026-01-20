@@ -149,13 +149,13 @@ function readJson<T>(filePath: string): T {
   return JSON.parse(readFileSync(filePath, { encoding: 'utf8' }));
 }
 
-describe('wf id start (integration)', () => {
+describe('wf action start (integration)', () => {
   it('dry-run prints intended actions', async () => {
     const binDir = mkdtempSync(join(tmpdir(), 'wf-id-'));
     makeFakeGit(binDir, { dirty: true });
     makeFakeBd(binDir, { id: 'wf-1', title: 'Add intake wrapper', status: 'open' });
 
-    const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'id', 'start', 'wf-1', '--dry-run'], {
+    const { exitCode, stdout } = await execa(CLI[0], [...CLI.slice(1), 'action', 'start', 'wf-1', '--dry-run'], {
       env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
     });
 
@@ -169,7 +169,7 @@ describe('wf id start (integration)', () => {
     makeFakeGit(binDir, { dirty: true });
     makeFakeBd(binDir, { id: 'wf-1', title: 'Add intake wrapper', status: 'open' });
 
-    const { exitCode, stderr } = await execa(CLI[0], [...CLI.slice(1), 'id', 'start', 'wf-1'], {
+    const { exitCode, stderr } = await execa(CLI[0], [...CLI.slice(1), 'action', 'start', 'wf-1'], {
       env: { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` },
       reject: false,
     });
@@ -185,10 +185,10 @@ describe('wf id start (integration)', () => {
 
     const env = { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` };
 
-    const first = await execa(CLI[0], [...CLI.slice(1), 'id', 'start', 'wf-1'], { env });
+    const first = await execa(CLI[0], [...CLI.slice(1), 'action', 'start', 'wf-1'], { env });
     expect(first.exitCode).toBe(0);
 
-    const second = await execa(CLI[0], [...CLI.slice(1), 'id', 'start', 'wf-1'], { env });
+    const second = await execa(CLI[0], [...CLI.slice(1), 'action', 'start', 'wf-1'], { env });
     expect(second.exitCode).toBe(0);
 
     const gitState = readJson<FakeGitState>(gitStatePath);
@@ -213,7 +213,7 @@ describe('wf id start (integration)', () => {
     });
 
     const env = { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` };
-    const res = await execa(CLI[0], [...CLI.slice(1), 'id', 'start', 'wf-1'], { env });
+    const res = await execa(CLI[0], [...CLI.slice(1), 'action', 'start', 'wf-1'], { env });
     expect(res.exitCode).toBe(0);
 
     const bdState = readJson<{ issue: any; externalRef: string; comments: { text: string }[] }>(bdStatePath);
@@ -227,7 +227,7 @@ describe('wf id start (integration)', () => {
     makeFakeBd(binDir, { id: 'wf-1', title: 'Add intake wrapper', status: 'open' });
 
     const env = { ...process.env, PATH: `${binDir}:${process.env.PATH ?? ''}` };
-    const res = await execa(CLI[0], [...CLI.slice(1), 'id', 'start', 'wf-1'], { env });
+    const res = await execa(CLI[0], [...CLI.slice(1), 'action', 'start', 'wf-1'], { env });
     expect(res.exitCode).toBe(0);
 
     const gitState = readJson<FakeGitState>(gitStatePath);

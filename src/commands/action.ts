@@ -30,7 +30,6 @@ function shouldUpdateStatus(issue: any): boolean {
 export function createActionCommand() {
   const cmd = new Command('action');
   cmd.description('Action-based producer workflow wrappers');
-  cmd.alias('id');
 
   const start = new Command('start');
   start
@@ -39,12 +38,17 @@ export function createActionCommand() {
     .argument('[params...]', 'Positional parameters and key=val inputs passed to the action')
     .option('--dry-run', 'Print intended actions without making changes')
     .action((beadId: string, params: string[] | undefined, options: StartOptions) => {
-      const dryRun = Boolean(options.dryRun);
+      // Commander may place flags after variadic args; support consuming --dry-run from params too.
+      params = params ?? [];
+      const paramFlags = new Set(params.filter((p) => p.startsWith('--')));
+      const dryRun = Boolean(options.dryRun) || paramFlags.has('--dry-run');
+      // Remove recognized flags from params before parsing positional/key=val inputs
+      params = params.filter((p) => p !== '--dry-run');
 
       // Parse positional params into ordered params and key=value inputs
       const positional: string[] = [];
       const inputs: Record<string, string> = {};
-      (params ?? []).forEach((p) => {
+      params.forEach((p) => {
         const idx = p.indexOf('=');
         if (idx > 0) {
           const k = p.slice(0, idx);
