@@ -12,7 +12,7 @@ inputs:
     description: Beads issue id (e.g., wf-123)
 runs:
   - type: bd
-    cmd: show ${positional[0]} --json
+    cmd: 'show ${positional[0]} --json'
   - type: shell
     cmd: |
       # derive slug and branch
@@ -20,10 +20,10 @@ runs:
       branch=bd-${positional[0]}/${title}
       echo BRANCH:${branch}
   - type: bd
-    cmd: update ${positional[0]} --status in_progress
+    cmd: 'update ${positional[0]} --status in_progress'
   - type: shell
-    cmd: git rev-parse --verify refs/heads/${positional[1]} || git checkout -b ${positional[1]}
+    cmd: 'git rev-parse --verify refs/heads/${positional[1]} || git checkout -b ${positional[1]}'
   - type: bd
-    cmd: update ${positional[0]} --external-ref branch:${positional[1]}
+    cmd: 'update ${positional[0]} --external-ref branch:${positional[1]}'
   - type: bd
-    cmd: comments add ${positional[0]} "Branch created: ${positional[1]} (local)"
+    cmd: 'comments add ${positional[0]} "Branch created: ${positional[1]} (local)"'
