@@ -1,0 +1,237 @@
+import { readdirSync, readFileSync, statSync } from 'fs';
+import { join, resolve } from 'path';
+import YAML from 'js-yaml';
+
+import { execFileOrThrow, ensureCliAvailable, requireCleanWorkingTree } from './wrappers.js';
+import { runBdSync } from './bd.js';
+import { CliError } from '../types.js';
+import {
+  bdCommentsEnsure,
+  bdUpdateExternalRefIfEmpty,
+  bdUpdateStatusIfNot,
+  gitEnsureBranch,
+} from './actions/runtimePrimitives.js';
+
+export type ActionStep =
+  | { type: 'shell'; cmd: string }
+  | { type: 'bd'; cmd: string }
+  | { type: 'noop' }
+  | { type: 'git_ensure_branch'; branch: string }
+  | { type: 'bd_update_external_ref_if_empty'; value: string }
+  | { type: 'bd_comments_ensure'; text: string }
+  | { type: 'bd_update_status_if_not'; status: string };
+
+export type DryRunRenderedStep = { type: string } & Record<string, string>;
+
+export type RunActionOptions = {
+  dryRun?: boolean;
+  onDryRunStep?: (step: ActionStep, rendered: DryRunRenderedStep) => void;
+};
+
+export type Action = {
+  name: string;
+  description?: string;
+  requires?: string[];
+  safety?: { require_clean_worktree?: boolean; dry_run_support?: boolean };
+  inputs?: Record<string, { required?: boolean; description?: string; default?: any }>;
+  runs: ActionStep[];
+};
+
+import AjvPkg from 'ajv';
+const Ajv = (AjvPkg as any).default ?? AjvPkg;
+const ajv = new (Ajv as any)({ allErrors: true, allowUnionTypes: true, strict: false });
+// Load schema from file if present
+let validate: any;
+try {
+  // Try synchronous load using commonjs-style imports (works in node test runner)
+  // Use require-style fallback via dynamic import and then readFileSync from fs
+  // to keep code compatible in both ESM and CJS test environments.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = await import('fs');
+  const path = await import('path');
+  const schemaRaw = fs.readFileSync(path.join(process.cwd(), 'schemas', 'action.schema.json'), { encoding: 'utf8' });
+  const schema = JSON.parse(schemaRaw);
+  validate = ajv.compile(schema as any);
+} catch (e) {
+  // fallback to minimal inline schema
+  const schema = {
+    type: 'object',
+    properties: { name: { type: 'string' }, runs: { type: 'array' } },
+    required: ['name', 'runs'],
+    additionalProperties: false,
+  };
+  validate = ajv.compile(schema as any);
+}
+
+export function loadActionFromFile(filePath: string): Action {
+  const raw = readFileSync(filePath, { encoding: 'utf8' });
+  const parsed = YAML.load(raw) as any;
+  if (!validate(parsed)) {
+    throw new CliError(`Action file ${filePath} failed validation: ${JSON.stringify(validate.errors)}`, 1);
+  }
+  return parsed as Action;
+}
+
+export function discoverRepoActions(dir = '.waif/actions') {
+  const root = resolve(dir);
+  try {
+    const files = readdirSync(root);
+    return files
+      .map((f) => join(root, f))
+      .filter((p) => {
+        try {
+          return statSync(p).isFile() && (p.endsWith('.yml') || p.endsWith('.yaml'));
+        } catch (e) {
+          return false;
+        }
+      })
+      .map((p) => ({ path: p, action: loadActionFromFile(p) }));
+  } catch (e) {
+    return [];
+  }
+}
+
+export function findActionByName(name: string): { action: Action; source: string } | null {
+  // 1) bundledActions - none for prototype
+  // 2) repo-local
+  const repo = discoverRepoActions();
+  for (const r of repo) {
+    if (r.action.name === name) return { action: r.action, source: r.path };
+  }
+  // 3) user-global
+  const homeDir = process.env.HOME ? join(process.env.HOME, '.waif', 'actions') : null;
+  if (homeDir) {
+    try {
+      const files = readdirSync(homeDir);
+      for (const f of files) {
+        const p = join(homeDir, f);
+        if (f.endsWith('.yml') || f.endsWith('.yaml')) {
+          const a = loadActionFromFile(p);
+          if (a.name === name) return { action: a, source: p };
+        }
+      }
+    } catch {}
+  }
+
+  return null;
+}
+
+// Export a validator helper so callers (and CLI lint) can validate without
+// relying on loadActionFromFile which throws on validation failures.
+export function validateAction(obj: any) {
+  const ok = Boolean(validate(obj));
+  return { valid: ok, errors: validate.errors };
+}
+
+function renderTemplate(s: string, ctx: { inputs: Record<string, string>; positional: string[] }) {
+  return s.replace(/\$\{inputs\.([a-zA-Z0-9_\-]+)\}/g, (_m, key) => String(ctx.inputs[key] ?? '')).replace(/\$\{positional\[([0-9]+)\]\}/g, (_m, idx) => ctx.positional[Number(idx)] ?? '');
+}
+
+function renderDryRunStep(step: ActionStep, ctx: { inputs: Record<string, string>; positional: string[] }): DryRunRenderedStep {
+  switch (step.type) {
+    case 'shell':
+      return { type: step.type, cmd: renderTemplate(step.cmd, ctx) };
+    case 'bd':
+      return { type: step.type, cmd: renderTemplate(step.cmd, ctx) };
+    case 'git_ensure_branch':
+      return { type: step.type, branch: renderTemplate(step.branch, ctx) };
+    case 'bd_update_external_ref_if_empty':
+      return { type: step.type, value: renderTemplate(step.value, ctx) };
+    case 'bd_comments_ensure':
+      return { type: step.type, text: renderTemplate(step.text, ctx) };
+    case 'bd_update_status_if_not':
+      return { type: step.type, status: renderTemplate(step.status, ctx) };
+    case 'noop':
+      return { type: 'noop' };
+    default:
+      return { type: (step as any)?.type ?? 'unknown' };
+  }
+}
+
+export function runAction(
+  action: Action,
+  positional: string[],
+  inputs: Record<string, string>,
+  optionsOrDryRun?: boolean | RunActionOptions,
+) {
+  const options: RunActionOptions =
+    typeof optionsOrDryRun === 'object'
+      ? (optionsOrDryRun ?? {})
+      : { dryRun: Boolean(optionsOrDryRun) };
+  const dryRun = Boolean(options?.dryRun);
+  // requires checks
+  for (const r of action.requires ?? []) {
+    ensureCliAvailable(r, `Install ${r} and ensure it is on PATH.`);
+  }
+
+  // safety checks
+  if (action.safety?.require_clean_worktree) {
+    if (!dryRun) requireCleanWorkingTree();
+  }
+
+  if (dryRun && action.safety?.dry_run_support === false) {
+    throw new CliError('Action does not support --dry-run', 1);
+  }
+
+  const ctx = { inputs, positional };
+
+  for (const step of action.runs) {
+    if (dryRun) {
+      const rendered = renderDryRunStep(step, ctx);
+      if (typeof options?.onDryRunStep === 'function') {
+        options.onDryRunStep(step, rendered);
+      } else {
+        // eslint-disable-next-line no-console
+        console.log('[dry-run] step:', JSON.stringify(rendered));
+      }
+      continue;
+    }
+
+    if (step.type === 'shell') {
+      const cmd = renderTemplate(step.cmd, ctx);
+      execFileOrThrow('sh', ['-c', cmd]);
+      continue;
+    }
+
+    if (step.type === 'bd') {
+      const cmd = renderTemplate(step.cmd, ctx);
+      // naive split
+      const args = cmd.split(/\s+/).filter(Boolean);
+      runBdSync(args);
+      continue;
+    }
+
+    if (step.type === 'git_ensure_branch') {
+      const branch = renderTemplate(step.branch, ctx);
+      gitEnsureBranch(branch);
+      continue;
+    }
+
+    if (step.type === 'bd_update_external_ref_if_empty') {
+      const value = renderTemplate(step.value, ctx);
+      const issueId = ctx.inputs.bead_id ?? ctx.positional[0];
+      bdUpdateExternalRefIfEmpty(issueId, value);
+      continue;
+    }
+
+    if (step.type === 'bd_comments_ensure') {
+      const text = renderTemplate(step.text, ctx);
+      const issueId = ctx.inputs.bead_id ?? ctx.positional[0];
+      bdCommentsEnsure(issueId, text);
+      continue;
+    }
+
+    if (step.type === 'bd_update_status_if_not') {
+      const status = renderTemplate(step.status, ctx);
+      const issueId = ctx.inputs.bead_id ?? ctx.positional[0];
+      bdUpdateStatusIfNot(issueId, status);
+      continue;
+    }
+
+    if (step.type === 'noop') {
+      continue;
+    }
+
+    throw new CliError(`Unsupported action step type: ${String((step as any)?.type)}`, 1);
+  }
+}

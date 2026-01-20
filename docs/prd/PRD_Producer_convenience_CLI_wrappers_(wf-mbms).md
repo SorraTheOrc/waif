@@ -73,6 +73,25 @@ Security note: Run wrapper actions with least privilege where possible and avoid
 The framework intentionally stays implementation-agnostic (language/runtime unspecified). A follow-up decision is required: choose preferred implementation language/runtime for the core helpers and scaffold (Open Question 3).
 
 
+## Action-based wrappers (discovery & UX)
+
+Introduce an "action" model for wrappers: small, declarative action bundles (YAML + optional script) that the CLI can discover and run. Key points:
+
+- Invocation: `wf action <name> [positional-params...] [key=value inputs...] [--flags]` — `run` is optional; running without a verb defaults to execute the action.
+- Parameter parsing: any non-flag arguments after `<name>` are passed to the action; positional values preserve order and values of `key=value` pairs are parsed into a map of named inputs. Example:
+  - `wf action start wf-1 "a string arg" retry=3 --dry-run`
+  - action receives positional = [`wf-1`, `a string arg`] and inputs = `{ retry: '3' }`.
+- Discovery: actions are discovered from multiple sources in priority order:
+  1. Bundled actions built into the WAIF binary (trusted by default).
+  2. Repo-local actions at `.waif/actions/*.yml` or `.waif/actions/<name>/action.yml` (repo-scoped).
+  3. User-global actions in `$HOME/.waif/actions/` (per-user).
+  4. Explicit file via `--file <path>`.
+- Execution model: validate `requires` (tools), enforce `safety` flags (`require_clean_worktree`, `dry_run_support`), then execute ordered steps. Runner exposes `positional` and `inputs` to steps.
+- Security: treat bundled actions and repo-local actions as trusted for that repo; external/shared actions require explicit opt-in or signing. Runner limits arbitrary code unless action is explicitly declared to include local code (e.g., `index.js`) and the author is trusted.
+
+This approach separates action definition from runner implementation, makes wrappers discoverable and auditable, and enables a smooth migration of the existing `wf id start` behavior into a declarative `start` action while keeping the runner small and reviewable.
+
+
 ## Release & Operations
 
 ### Rollout plan
@@ -81,7 +100,7 @@ The framework intentionally stays implementation-agnostic (language/runtime unsp
 
 ### Quality gates / definition of done
 
-- Core framework library implemented and documented in `docs/dev/CLI_PRD.md` or `docs/dev/wrappers.md`.
+- Core framework library implemented and documented in `docs/dev/prd/CLI_PRD.md` or `docs/dev/wrappers.md`.
 - At least two child feature beads implemented with tests and example usage in docs.
 
 ### Risks & mitigations

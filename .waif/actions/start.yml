@@ -1,0 +1,27 @@
+name: start
+description: Start work on the bead.
+requires:
+  - git
+  - bd
+safety:
+  require_clean_worktree: true
+  dry_run_support: true
+inputs:
+  bead_id:
+    required: true
+    description: Beads issue id (e.g., wf-123)
+  branch:
+    description: Branch name to checkout/create
+  branch_ref:
+    description: Value to write to bd external_ref when empty
+  status_target:
+    description: Desired status before starting work
+runs:
+  - type: bd_update_status_if_not
+    status: '${inputs.status_target}'
+  - type: git_ensure_branch
+    branch: '${inputs.branch}'
+  - type: bd_update_external_ref_if_empty
+    value: '${inputs.branch_ref}'
+  - type: bd_comments_ensure
+    text: 'Branch created: ${inputs.branch} (local)'
