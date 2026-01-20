@@ -57,7 +57,7 @@ Repo maintainers, automation engineers, and CI integrators who will reuse consis
 
 - Existing CLIs: `bd`, `git`, `waif`/`wf` — wrappers may invoke these but tests should not require them (provide mocks).
 - Testing: integrate with the repo's existing test runner and linters.
- - Shell environments: explicit support for BASH-compatible execution contexts (helpers for escaping, piping, and running multi-command scripts) so wrappers can safely compose shell workflows.
+ - Shell environments: explicit support for BASH-compatible execution contexts (helpers for escaping, piping, and running multi-command scripts); tests should stub or mock shell execution to remain hermetic.
 
 ### Security & privacy
 
@@ -66,6 +66,12 @@ Security note: Framework must provide safe-execution helpers that avoid unescape
 Privacy note: Bead comments and external refs must not contain secrets or large diffs.
 
 Security note: Because wrappers may execute BASH-style sequences, the framework must include guidance and helpers to avoid command injection, ensure proper quoting/escaping, and clearly mark when a wrapper will execute user-supplied commands. Do not execute untrusted input without explicit user consent and strong validation.
+Security note: Run wrapper actions with least privilege where possible and avoid operations that require elevated rights by default; document any elevated steps clearly in the wrapper's README.
+
+## Technical consistency note
+
+The framework intentionally stays implementation-agnostic (language/runtime unspecified). A follow-up decision is required: choose preferred implementation language/runtime for the core helpers and scaffold (Open Question 3).
+
 
 ## Release & Operations
 
