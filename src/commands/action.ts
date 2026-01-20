@@ -35,8 +35,14 @@ export function createActionCommand() {
   cmd.description('Action-based producer workflow wrappers');
 
   const start = new Command('start');
+  // Try to use the repository action description for help if present so the
+  // CLI help reflects the YAML-defined action. Fall back to the original
+  // hardcoded description when not available.
+  const foundStart = findActionByName('start');
+  const startDesc = (foundStart && foundStart.action && String(foundStart.action.description ?? '').trim()) ||
+    'Claim a bead and create/check out a local topic branch';
   start
-    .description('Claim a bead and create/check out a local topic branch')
+    .description(startDesc)
     .argument('<bead-id>', 'Beads issue id (e.g., wf-123)')
     .argument('[params...]', 'Positional parameters and key=val inputs passed to the action')
     .option('--dry-run', 'Print intended actions without making changes')
