@@ -238,8 +238,13 @@ export function createActionCommand() {
 
         if (failed) throw new CliError('One or more actions failed validation', 1);
       } catch (e: any) {
-        // Directory missing or unreadable
-        logStdout(`No actions discovered in ${dir}`);
+        // Directory missing or unreadable -> only swallow "not found" errors.
+        if (e && e.code === 'ENOENT') {
+          logStdout(`No actions discovered in ${dir}`);
+          return;
+        }
+        // Propagate other errors (including validation CliError) so caller sees non-zero exit.
+        throw e;
       }
     });
   cmd.addCommand(lint);
