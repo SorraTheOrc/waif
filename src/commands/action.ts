@@ -13,7 +13,7 @@ import {
 } from '../lib/wrappers.js';
 import { findActionByName, loadActionFromFile, runAction, discoverRepoActions } from '../lib/actions.js';
 import YAML from 'js-yaml';
-import { writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 type StartOptions = {
@@ -36,11 +36,26 @@ export function createActionCommand() {
 
   const start = new Command('start');
   // Try to use the repository action description for help if present so the
-  // CLI help reflects the YAML-defined action. Fall back to the original
-  // hardcoded description when not available.
-  const foundStart = findActionByName('start');
-  const startDesc = (foundStart && foundStart.action && String(foundStart.action.description ?? '').trim()) ||
-    'Claim a bead and create/check out a local topic branch';
+  // CLI help reflects the YAML-defined action. Prefer reading the .waif
+  // action file directly (synchronous) to avoid module-init ordering and
+  // schema-loading interactions in the actions loader. Fall back to the
+  // original hardcoded description when not available.
+  let startDesc = 'Claim a bead and create/check out a local topic branch';
+  try {
+    const candidates = ['.waif/actions/start.yml', '.waif/actions/start.yaml'];
+    for (const c of candidates) {
+      if (existsSync(c)) {
+        const raw = readFileSync(c, { encoding: 'utf8' });
+        const parsed = YAML.load(raw) as any;
+        if (parsed && parsed.description) {
+          startDesc = String(parsed.description).trim();
+        }
+        break;
+      }
+    }
+  } catch (e) {
+    // ignore and use fallback
+  }
   start
     .description(startDesc)
     .argument('<bead-id>', 'Beads issue id (e.g., wf-123)')
