@@ -9,7 +9,7 @@ import { createStartWorkCommand } from './commands/startWork.js';
 import { createOodaCommand } from './commands/ooda.js';
 import { createShowCommand } from './commands/show.js';
 import { createPlanCheckCommand } from './commands/plan-check.js';
-import { createActionCommand } from './commands/id.js';
+import { createActionCommand } from './commands/action.js';
 import { handleError, logStdout } from './lib/io.js';
 import { getCliVersion } from './lib/version.js';
 
