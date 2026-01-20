@@ -13,7 +13,7 @@ import {
 } from '../lib/wrappers.js';
 import { findActionByName, loadActionFromFile, runAction, discoverRepoActions } from '../lib/actions.js';
 import YAML from 'js-yaml';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readdirSync } from 'fs';
 import { join } from 'path';
 
 type StartOptions = {
@@ -214,24 +214,33 @@ export function createActionCommand() {
         return;
       }
 
-      const found = discoverRepoActions(dir);
-      if (!found || found.length === 0) {
-        logStdout(`No actions discovered in ${dir}`);
-        return;
-      }
-
-      let failed = false;
-      for (const f of found) {
-        try {
-          loadActionFromFile(f.path);
-          logStdout(`OK: ${f.path}`);
-        } catch (e: any) {
-          failed = true;
-          logStdout(`ERR: ${f.path} -> ${String(e?.message ?? e)}`);
+      // Read directory entries without attempting to pre-load/validate them so
+      // we can report per-file errors instead of failing fast.
+      try {
+        const files = readdirSync(dir);
+        const yamlFiles = files.filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'));
+        if (yamlFiles.length === 0) {
+          logStdout(`No actions discovered in ${dir}`);
+          return;
         }
-      }
 
-      if (failed) throw new CliError('One or more actions failed validation', 1);
+        let failed = false;
+        for (const fn of yamlFiles) {
+          const p = join(dir, fn);
+          try {
+            loadActionFromFile(p);
+            logStdout(`OK: ${p}`);
+          } catch (e: any) {
+            failed = true;
+            logStdout(`ERR: ${p} -> ${String(e?.message ?? e)}`);
+          }
+        }
+
+        if (failed) throw new CliError('One or more actions failed validation', 1);
+      } catch (e: any) {
+        // Directory missing or unreadable
+        logStdout(`No actions discovered in ${dir}`);
+      }
     });
   cmd.addCommand(lint);
 
