@@ -81,7 +81,7 @@ The framework intentionally stays implementation-agnostic (language/runtime unsp
 
 ### Quality gates / definition of done
 
-- Core framework library implemented and documented in `docs/dev/CLI_PRD.md` or `docs/dev/wrappers.md`.
+- Core framework library implemented and documented in `docs/dev/prd/CLI_PRD.md` or `docs/dev/wrappers.md`.
 - At least two child feature beads implemented with tests and example usage in docs.
 
 ### Risks & mitigations

@@ -17,6 +17,7 @@ test('wf --help shows core commands (next/recent/in-progress/show)', async () =>
   expect(stdout).toContain('recent');
   expect(stdout).toContain('in-progress');
   expect(stdout).toContain('show');
+  expect(stdout).toContain('id');
 });
 
 test('wf --version prints release semver in release mode', async () => {
@@ -44,4 +45,3 @@ test('wf --version can emit dev stamp', async () => {
   expect(exitCode).toBe(0);
   expect(stdout.trim()).toMatch(/^v0\.0\.0-dev\+\d{8}T\d{6}(\.[0-9a-f]+)?$/);
 });
-
