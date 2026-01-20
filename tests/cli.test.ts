@@ -17,7 +17,7 @@ test('wf --help shows core commands (next/recent/in-progress/show)', async () =>
   expect(stdout).toContain('recent');
   expect(stdout).toContain('in-progress');
   expect(stdout).toContain('show');
-  expect(stdout).toContain('id');
+  expect(stdout).toContain('action');
 });
 
 test('wf --version prints release semver in release mode', async () => {

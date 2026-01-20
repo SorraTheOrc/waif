@@ -26,9 +26,9 @@ function shouldUpdateStatus(issue: any): boolean {
   return status !== 'in_progress';
 }
 
-export function createIdCommand() {
-  const cmd = new Command('id');
-  cmd.description('Beads/id based workflow helpers');
+export function createActionCommand() {
+  const cmd = new Command('action');
+  cmd.description('Action-based producer workflow wrappers');
 
   const start = new Command('start');
   start
