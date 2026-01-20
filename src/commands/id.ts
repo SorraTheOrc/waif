@@ -34,9 +34,24 @@ export function createActionCommand() {
   start
     .description('Claim a bead and create/check out a local topic branch')
     .argument('<bead-id>', 'Beads issue id (e.g., wf-123)')
+    .argument('[params...]', 'Positional parameters and key=val inputs passed to the action')
     .option('--dry-run', 'Print intended actions without making changes')
-    .action((beadId: string, options: StartOptions) => {
+    .action((beadId: string, params: string[] | undefined, options: StartOptions) => {
       const dryRun = Boolean(options.dryRun);
+
+      // Parse positional params into ordered params and key=value inputs
+      const positional: string[] = [];
+      const inputs: Record<string, string> = {};
+      (params ?? []).forEach((p) => {
+        const idx = p.indexOf('=');
+        if (idx > 0) {
+          const k = p.slice(0, idx);
+          const v = p.slice(idx + 1);
+          inputs[k] = v;
+        } else {
+          positional.push(p);
+        }
+      });
 
       ensureCliAvailable('git', 'Install git and ensure it is on PATH.');
       ensureCliAvailable('bd', 'Install beads (bd) and ensure it is on PATH.');
@@ -47,6 +62,11 @@ export function createActionCommand() {
         // Still run status for more helpful output, but don't block.
         execFileOrThrow('git', ['status', '--porcelain=v1']);
       }
+
+      // Provide the action with discovered inputs via environment-like map.
+      // For now we keep the same behavior but surface `positional` and `inputs`.
+      // Future runner will accept these and dispatch into action steps.
+      logStdout(`Action inputs positional=${JSON.stringify(positional)} inputs=${JSON.stringify(inputs)}`);
 
       const issueRaw = showIssue(beadId);
       const issue = normalizeBdShowResult(issueRaw);
