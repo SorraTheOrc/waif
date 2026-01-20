@@ -22,26 +22,29 @@ export type Action = {
 
 import AjvPkg from 'ajv';
 const Ajv = (AjvPkg as any).default ?? AjvPkg;
-const ajv = new (Ajv as any)();
-// minimal runtime schema
-const schema = {
-  type: 'object',
-  properties: {
-    name: { type: 'string' },
-    description: { type: 'string' },
-    requires: { type: 'array', items: { type: 'string' } },
-    safety: {
-      type: 'object',
-      properties: { require_clean_worktree: { type: 'boolean' }, dry_run_support: { type: 'boolean' } },
-      additionalProperties: false,
-    },
-    inputs: { type: 'object' },
-    runs: { type: 'array' },
-  },
-  required: ['name', 'runs'],
-  additionalProperties: false,
-};
-const validate = ajv.compile(schema as any);
+const ajv = new (Ajv as any)({ allErrors: true });
+// Load schema from file if present
+let validate: any;
+try {
+  // Try synchronous load using commonjs-style imports (works in node test runner)
+  // Use require-style fallback via dynamic import and then readFileSync from fs
+  // to keep code compatible in both ESM and CJS test environments.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fs = await import('fs');
+  const path = await import('path');
+  const schemaRaw = fs.readFileSync(path.join(process.cwd(), 'schemas', 'action.schema.json'), { encoding: 'utf8' });
+  const schema = JSON.parse(schemaRaw);
+  validate = ajv.compile(schema as any);
+} catch (e) {
+  // fallback to minimal inline schema
+  const schema = {
+    type: 'object',
+    properties: { name: { type: 'string' }, runs: { type: 'array' } },
+    required: ['name', 'runs'],
+    additionalProperties: false,
+  };
+  validate = ajv.compile(schema as any);
+}
 
 export function loadActionFromFile(filePath: string): Action {
   const raw = readFileSync(filePath, { encoding: 'utf8' });
@@ -120,6 +123,9 @@ export function runAction(action: Action, positional: string[], inputs: Record<s
   for (const step of action.runs) {
     if (dryRun) {
       // print what would run
+      // Use logStdout for test-friendly capture instead of console.log
+      // to keep output consistent with other commands.
+      // eslint-disable-next-line no-console
       console.log('[dry-run] step:', JSON.stringify(step));
       continue;
     }

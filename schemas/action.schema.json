@@ -1,0 +1,54 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "WAIF Action",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "runs"],
+  "properties": {
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "requires": { "type": "array", "items": { "type": "string" } },
+    "safety": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "require_clean_worktree": { "type": "boolean" },
+        "dry_run_support": { "type": "boolean" }
+      }
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "required": { "type": "boolean" },
+          "description": { "type": "string" },
+          "default": {}
+        },
+        "additionalProperties": false
+      }
+    },
+    "runs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type"],
+        "properties": {
+          "type": { "type": "string", "enum": ["shell", "bd", "noop"] },
+          "cmd": { "type": "string" }
+        },
+        "allOf": [
+          {
+            "if": { "properties": { "type": { "const": "shell" } } },
+            "then": { "required": ["cmd"] }
+          },
+          {
+            "if": { "properties": { "type": { "const": "bd" } } },
+            "then": { "required": ["cmd"] }
+          }
+        ]
+      }
+    }
+  }
+}

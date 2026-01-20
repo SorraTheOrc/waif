@@ -11,7 +11,10 @@ import {
   requireCleanWorkingTree,
   sanitizeBranchSlugFromTitle,
 } from '../lib/wrappers.js';
-import { findActionByName, loadActionFromFile, runAction } from '../lib/actions.js';
+import { findActionByName, loadActionFromFile, runAction, discoverRepoActions } from '../lib/actions.js';
+import YAML from 'js-yaml';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 
 type StartOptions = {
   dryRun?: boolean;
@@ -41,7 +44,9 @@ export function createActionCommand() {
       // Commander may place flags after variadic args; support consuming --dry-run from params too.
       params = params ?? [];
       const paramFlags = new Set(params.filter((p) => p.startsWith('--')));
-      const dryRun = Boolean(options.dryRun) || paramFlags.has('--dry-run');
+      // Detect --dry-run from options, from params (when flags placed after variadic args),
+      // or from the raw argv (defensive for tests and different commander versions).
+      const dryRun = Boolean(options?.dryRun) || paramFlags.has('--dry-run') || process.argv.includes('--dry-run');
       // Remove recognized flags from params before parsing positional/key=val inputs
       params = params.filter((p) => p !== '--dry-run');
 
@@ -140,6 +145,61 @@ export function createActionCommand() {
     });
 
   cmd.addCommand(start);
+
+  const list = new Command('list');
+  list.description('List discovered actions (repo .waif/actions)');
+  list.option('--dir <path>', 'Directory to search for actions (default: .waif/actions)');
+  list.action((options: any) => {
+    const dir = options.dir ?? '.waif/actions';
+    const found = discoverRepoActions(dir);
+    if (!found || found.length === 0) {
+      logStdout(`No actions discovered in ${dir}`);
+      return;
+    }
+    for (const f of found) {
+      logStdout(`${f.action.name}\t${f.path}`);
+    }
+  });
+  cmd.addCommand(list);
+
+  const info = new Command('info');
+  info.description('Show action definition details')
+    .argument('<action-name>', 'Action name to show')
+    .option('--dir <path>', 'Directory to search for action (default: .waif/actions)')
+    .action((name: string, options: any) => {
+      if (options?.dir) {
+        const p = join(options.dir, `${name}.yml`);
+        const a = loadActionFromFile(p);
+        const dump = YAML.dump(a as any);
+        logStdout(dump);
+        return;
+      }
+
+      const found = findActionByName(name);
+      if (!found) throw new CliError(`Action not found: ${name}`, 1);
+      const dump = YAML.dump(found.action as any);
+      logStdout(dump);
+    });
+  cmd.addCommand(info);
+
+  const init = new Command('init');
+  init.description('Scaffold a new action in .waif/actions')
+    .argument('<action-name>', 'Action name to create (also used as filename)')
+    .option('--dir <path>', 'Directory to create actions in (default: .waif/actions)')
+    .action((name: string, options: any) => {
+      const dir = options.dir ?? '.waif/actions';
+      if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+      const file = join(dir, `${name}.yml`);
+      if (existsSync(file)) throw new CliError(`Action file already exists: ${file}`, 1);
+      const template = {
+        name,
+        description: `Action ${name} - describe what this does`,
+        runs: [{ type: 'noop' }],
+      } as any;
+      writeFileSync(file, YAML.dump(template), { encoding: 'utf8' });
+      logStdout(`Created action: ${file}`);
+    });
+  cmd.addCommand(init);
 
   // Default behavior: run a discovered action by name.
   // This is invoked when the user runs `wf action <name> [params...]` and no explicit subcommand matches.
