@@ -157,7 +157,7 @@ Acceptance criteria
 1. Epic detection: when the top-ranked candidate (by existing selection/ranking logic) is an issue of type `epic` and status `in_progress`, `waif next` enters Epic-aware selection mode.
 2. Candidate scope: Epic-aware selection considers the Epic's direct children and any immediate blockers (i.e., issues that have a `blocks` relationship to the Epic or vice-versa where applicable). Only direct relations are considered to keep latency low.
 3. Selection rule (v1):
-   - If any child is `in_progress`, recommend that child (prioritize finishing work already started).
+   - If any child or blocker is `in_progress`, recursively descend that in-progress chain until reaching leaf nodes (no further in-progress related items). Among leaf candidates, pick the highest bv priority score.
    - Otherwise, among the set of children and blockers, pick the issue with the highest bv priority score. If bv is unavailable or ties occur, fall back to numeric priority (lower number higher priority), then recency (earlier created_at wins), then id deterministic tie-break.
 4. Assignee filtering: the existing `--assignee <name>` flag applies a hard filter before Epic-aware selection; if not provided, selection considers all assignees.
 5. Human output: in human mode, `waif next` must clearly display:
@@ -165,7 +165,7 @@ Acceptance criteria
    - An explicit `Epic context:` line after the table, e.g. `Epic context: wf-1234 (in_progress)`
    - The recommended child/blocker id and title and a short rationale (e.g. `recommended: wf-2345 (child, in_progress) — finish in-progress child`).
    - If a child/blocker is already in_progress, highlight this as the most important work to complete.
-6. JSON output: `waif next --json` will include an additional `waif.epic_context` object when Epic-aware selection is used. The object MUST include at minimum: `{ "epic_id": "<id>", "epic_status": "in_progress", "selection_reason": "in_progress_child|bv_priority|priority_fallback", "recommended_id": "<id>" }` so automation consumers can detect Epic-scoped recommendations.
+6. JSON output: `waif next --json` will include an additional `waif.epic_context` object when Epic-aware selection is used. The object MUST include at minimum: `{ "epic_id": "<id>", "epic_status": "in_progress", "selection_reason": "in_progress_chain|bv_priority|priority_fallback", "recommended_id": "<id>" }` so automation consumers can detect Epic-scoped recommendations.
 7. Tests: add unit tests covering the selection branch (in_progress child preferred; bv-selection fallback; assignee filter interaction) and an integration test that simulates bd outputs and validates both human and JSON output formats.
 8. Idempotence & safety: the command must be read-only by default and MUST NOT modify bead state (no auto assignment). Any annotations or comments created by follow-up tooling must be idempotent and opt-in.
 9. Idempotence (repeat runs): Running the command repeatedly must not mutate bead state; any proposed annotations or comments remain proposal-only and should be deduplicated by downstream tooling if emitted. Default behavior is proposal-only.
