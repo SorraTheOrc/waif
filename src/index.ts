@@ -50,7 +50,9 @@ export async function run(argv = process.argv.slice(2)): Promise<number> {
 
   program.addCommand(createNextCommand());
   program.addCommand(createRecentCommand());
-  program.addCommand(createInProgressCommand());
+  const inProgress = createInProgressCommand();
+  inProgress.alias('in_progress');
+  program.addCommand(inProgress);
   program.addCommand(createStartWorkCommand());
   program.addCommand(createOodaCommand());
   program.addCommand(createShowCommand());
