@@ -252,22 +252,63 @@ function computeScore(issue: Issue, bv: BvResult): { score: number; rationale: s
 
 type Selection = { issue: Issue; score: number; rationale: string; metadata: Record<string, unknown> };
 
-function hydrateEpicRelations(epic: Issue, verbose: boolean): Issue {
-  // No runtime hydration: trust that relation objects include labels and other metadata.
-  // Keep support for WAIF_BD_SHOW_JSON env var for test fixtures that inject full issue objects.
+function loadShowIssues(verbose: boolean): Issue[] {
   const envShow = process.env.WAIF_BD_SHOW_JSON;
-  if (envShow) {
-    try {
-      const parsed = JSON.parse(envShow);
-      const list = Array.isArray(parsed) ? parsed : [parsed];
-      const match = list.find((i: any) => i?.id === epic.id);
-      if (match) return { ...epic, ...match } as Issue;
-    } catch (e) {
-      if (verbose) process.stderr.write(`[debug] failed to parse WAIF_BD_SHOW_JSON: ${(e as Error).message}\n`);
-    }
+  if (!envShow) return [];
+  try {
+    const parsed = JSON.parse(envShow);
+    return Array.isArray(parsed) ? (parsed as Issue[]) : ([parsed] as Issue[]);
+  } catch (e) {
+    if (verbose) process.stderr.write(`[debug] failed to parse WAIF_BD_SHOW_JSON: ${(e as Error).message}\n`);
+    return [];
   }
+}
 
-  return epic;
+function buildIssueIndex(issues: Issue[], verbose: boolean): Map<string, Issue> {
+  const index = new Map<string, Issue>();
+  for (const issue of issues) {
+    if (issue.id) index.set(issue.id, issue);
+  }
+  for (const issue of loadShowIssues(verbose)) {
+    if (issue?.id) index.set(issue.id, issue);
+  }
+  return index;
+}
+
+function needsRelationHydration(issue: Issue): boolean {
+  const hasDependents = Array.isArray(issue.dependents) && issue.dependents.length > 0;
+  const hasChildren = Array.isArray(issue.children) && issue.children.length > 0;
+  const hasDependencies = Array.isArray(issue.dependencies) && issue.dependencies.length > 0;
+  return !(hasDependents || hasChildren || hasDependencies);
+}
+
+function maybeFetchIssueDetails(issueId: string, issueIndex: Map<string, Issue>, verbose: boolean): Issue | null {
+  if (!isCliAvailable('bd')) return null;
+  try {
+    const raw = runBd(['show', issueId, '--json']);
+    const parsed = JSON.parse(raw) as Issue | Issue[];
+    const match = Array.isArray(parsed)
+      ? (parsed.find((entry) => entry?.id === issueId) ?? parsed[0])
+      : parsed;
+    if (match?.id) {
+      issueIndex.set(match.id, match);
+      return match;
+    }
+  } catch (e) {
+    if (verbose) process.stderr.write(`[debug] bd show --json failed for ${issueId}: ${(e as Error).message}\n`);
+  }
+  return null;
+}
+
+function hydrateIssueRelations(issue: Issue, issueIndex: Map<string, Issue>, verbose: boolean): Issue {
+  if (!issue?.id) return issue;
+  let match = issueIndex.get(issue.id);
+  if (!match || needsRelationHydration(match)) {
+    const fetched = maybeFetchIssueDetails(issue.id, issueIndex, verbose);
+    if (fetched) match = fetched;
+  }
+  if (!match) return issue;
+  return { ...issue, ...match } as Issue;
 }
 
 type RelatedCandidate = Selection & { relation: 'child' | 'blocker' };
@@ -277,8 +318,8 @@ function mapRelatedIssueToSelection(issue: Issue, relation: 'child' | 'blocker',
   return { issue, score, rationale, metadata: { ...metadata, relation } as Record<string, unknown>, relation };
 }
 
-function collectEpicRelated(epic: Issue, assignee: string | undefined, bv: BvResult, verbose: boolean): RelatedCandidate[] {
-  const hydrated = hydrateEpicRelations(epic, verbose);
+function collectEpicRelated(epic: Issue, assignee: string | undefined, bv: BvResult, issueIndex: Map<string, Issue>, verbose: boolean): RelatedCandidate[] {
+  const hydrated = hydrateIssueRelations(epic, issueIndex, verbose);
   const children = extractChildren(hydrated).map((c) => ({ issue: c, relation: 'child' as const }));
   const blockers = extractBlockers(hydrated).map((b) => ({ issue: b, relation: 'blocker' as const }));
   const combined = [...children, ...blockers];
@@ -295,47 +336,105 @@ function collectEpicRelated(epic: Issue, assignee: string | undefined, bv: BvRes
 
   const filtered: RelatedCandidate[] = [];
   for (const { issue, relation } of dedup.values()) {
-    if (!eligible(issue as Issue)) continue;
-    filtered.push(mapRelatedIssueToSelection(issue as Issue, relation, bv));
+    const hydrated = hydrateIssueRelations(issue as Issue, issueIndex, verbose);
+    if (!eligible(hydrated as Issue)) continue;
+    filtered.push(mapRelatedIssueToSelection(hydrated as Issue, relation, bv));
   }
 
   return filtered;
 }
 
-function pickEpicRecommendation(epic: Issue, assignee: string | undefined, bv: BvResult, verbose: boolean): { recommendation: RelatedCandidate | null; reason?: 'in_progress_child' | 'bv_priority' | 'priority_fallback'; related: RelatedCandidate[] } {
-  const related = collectEpicRelated(epic, assignee, bv, verbose);
-  if (!related.length) return { recommendation: null, related: [] };
+function compareSelections(a: Selection, b: Selection): number {
+  if (b.score !== a.score) return b.score - a.score;
+  const priorityA = typeof a.issue.priority === 'number' ? a.issue.priority : 99;
+  const priorityB = typeof b.issue.priority === 'number' ? b.issue.priority : 99;
+  if (priorityA !== priorityB) return priorityA - priorityB;
+  const createdA = a.issue.created_at ? Date.parse(a.issue.created_at) : Number.MAX_SAFE_INTEGER;
+  const createdB = b.issue.created_at ? Date.parse(b.issue.created_at) : Number.MAX_SAFE_INTEGER;
+  if (createdA !== createdB) return createdA - createdB;
+  return a.issue.id.localeCompare(b.issue.id);
+}
 
-  const inProgressChildren = related.filter((r) => r.relation === 'child' && String(r.issue.status ?? '').toLowerCase() === 'in_progress');
-  if (inProgressChildren.length) {
-    const sorted = [...inProgressChildren].sort((a, b) => {
-      if (b.score !== a.score) return b.score - a.score;
-      const prA = typeof a.issue.priority === 'number' ? a.issue.priority : 99;
-      const prB = typeof b.issue.priority === 'number' ? b.issue.priority : 99;
-      if (prA !== prB) return prA - prB;
-      const ca = a.issue.created_at ? Date.parse(a.issue.created_at) : Number.MAX_SAFE_INTEGER;
-      const cb = b.issue.created_at ? Date.parse(b.issue.created_at) : Number.MAX_SAFE_INTEGER;
-      if (ca !== cb) return ca - cb;
-      return a.issue.id.localeCompare(b.issue.id);
-    });
-    return { recommendation: sorted[0], reason: 'in_progress_child', related };
+function pickLeafCandidates(
+  issue: Issue,
+  rootRelation: 'child' | 'blocker',
+  assignee: string | undefined,
+  bv: BvResult,
+  issueIndex: Map<string, Issue>,
+  visited: Set<string>,
+  verbose: boolean,
+): RelatedCandidate[] {
+  if (!issue?.id) return [];
+  if (visited.has(issue.id)) return [];
+  visited.add(issue.id);
+  const hydrated = hydrateIssueRelations(issue, issueIndex, verbose);
+  const related = collectEpicRelated(hydrated, assignee, bv, issueIndex, verbose);
+  const inProgressRelated = related.filter((rel) => String(rel.issue.status ?? '').toLowerCase() === 'in_progress');
+  const unvisitedInProgress = inProgressRelated.filter((rel) => rel.issue.id && !visited.has(rel.issue.id));
+  if (unvisitedInProgress.length) {
+    const leaves: RelatedCandidate[] = [];
+    for (const rel of unvisitedInProgress) {
+      leaves.push(...pickLeafCandidates(rel.issue, rootRelation, assignee, bv, issueIndex, visited, verbose));
+    }
+    return leaves.length ? leaves : [mapRelatedIssueToSelection(hydrated, rootRelation, bv)];
   }
 
-  const sorted = [...related].sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    const prA = typeof a.issue.priority === 'number' ? a.issue.priority : 99;
-    const prB = typeof b.issue.priority === 'number' ? b.issue.priority : 99;
-    if (prA !== prB) return prA - prB;
-    const ca = a.issue.created_at ? Date.parse(a.issue.created_at) : Number.MAX_SAFE_INTEGER;
-    const cb = b.issue.created_at ? Date.parse(b.issue.created_at) : Number.MAX_SAFE_INTEGER;
-    if (ca !== cb) return ca - cb;
-    return a.issue.id.localeCompare(b.issue.id);
+  const openRelated = related.filter((rel) => {
+    const status = String(rel.issue.status ?? '').toLowerCase();
+    return status === 'open';
   });
+  const openUnvisited = openRelated.filter((rel) => rel.issue.id && !visited.has(rel.issue.id));
+  if (openUnvisited.length) {
+    return openUnvisited.map((rel) => mapRelatedIssueToSelection(rel.issue, rootRelation, bv));
+  }
+
+  return [mapRelatedIssueToSelection(hydrated, rootRelation, bv)];
+}
+
+function pickEpicRecommendation(epic: Issue, assignee: string | undefined, bv: BvResult, issueIndex: Map<string, Issue>, verbose: boolean): { recommendation: RelatedCandidate | null; reason?: 'in_progress_chain' | 'bv_priority' | 'priority_fallback'; related: RelatedCandidate[] } {
+  const related = collectEpicRelated(epic, assignee, bv, issueIndex, verbose);
+  if (!related.length) return { recommendation: null, related: [] };
+
+  const inProgressRelated = related.filter((r) => String(r.issue.status ?? '').toLowerCase() === 'in_progress');
+  if (inProgressRelated.length) {
+    const leaves = inProgressRelated.flatMap((candidate) =>
+      pickLeafCandidates(candidate.issue, candidate.relation, assignee, bv, issueIndex, new Set<string>(), verbose),
+    );
+    const sortedLeaves = [...(leaves.length ? leaves : inProgressRelated)].sort(compareSelections);
+    return { recommendation: sortedLeaves[0], reason: 'in_progress_chain', related };
+  }
+
+  const sorted = [...related].sort(compareSelections);
 
   const top = sorted[0];
   const hasBv = (top.metadata?.source ?? top.metadata?.bvSource ?? '') !== undefined && (top.metadata as any).selection === 'bv_priority';
   const reason: 'bv_priority' | 'priority_fallback' = hasBv ? 'bv_priority' : 'priority_fallback';
   return { recommendation: top, reason, related };
+}
+
+type EpicSelection = { epic: Issue; recommendation: RelatedCandidate; reason: 'in_progress_chain' | 'bv_priority' | 'priority_fallback'; related: RelatedCandidate[] };
+
+function pickBestEpicRecommendation(epics: Issue[], assignee: string | undefined, bv: BvResult, issueIndex: Map<string, Issue>, verbose: boolean): EpicSelection | null {
+  let best: EpicSelection | null = null;
+  for (const epic of epics) {
+    const { recommendation, reason, related } = pickEpicRecommendation(epic, assignee, bv, issueIndex, verbose);
+    if (!recommendation || !reason) continue;
+    const candidate: EpicSelection = { epic, recommendation, reason, related };
+    if (!best) {
+      best = candidate;
+      continue;
+    }
+    const cmp = compareSelections(candidate.recommendation, best.recommendation);
+    if (cmp < 0) {
+      best = candidate;
+      continue;
+    }
+    if (cmp > 0) continue;
+    if (candidate.epic.id.localeCompare(best.epic.id) > 0) {
+      best = candidate;
+    }
+  }
+  return best;
 }
 
 function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean): Selection[] {
@@ -347,16 +446,7 @@ function selectTopN(issues: Issue[], bv: BvResult, n: number, verbose: boolean):
     const { score, rationale, metadata } = computeScore(issue, bv);
     return { issue, score, rationale, metadata };
   });
-  scored.sort((a, b) => {
-    if (b.score !== a.score) return b.score - a.score;
-    const priorityA = typeof a.issue.priority === 'number' ? a.issue.priority : 99;
-    const priorityB = typeof b.issue.priority === 'number' ? b.issue.priority : 99;
-    if (priorityA !== priorityB) return priorityA - priorityB; // lower is higher priority
-    const createdA = a.issue.created_at ? Date.parse(a.issue.created_at) : Number.MAX_SAFE_INTEGER;
-    const createdB = b.issue.created_at ? Date.parse(b.issue.created_at) : Number.MAX_SAFE_INTEGER;
-    if (createdA !== createdB) return createdA - createdB;
-    return a.issue.id.localeCompare(b.issue.id);
-  });
+  scored.sort(compareSelections);
   if (verbose) {
     scored.slice(0, Math.min(5, n)).forEach((s: { issue: Issue; score: number; rationale: string }, idx: number) => {
       process.stderr.write(`[debug] rank ${idx + 1}: ${s.issue.id} score=${s.score} (${s.rationale})\n`);
@@ -386,6 +476,7 @@ export function createNextCommand() {
       maybeSyncBeads(verbose);
 
       const { issues, source } = loadIssues(verbose);
+      const issueIndex = buildIssueIndex(issues, verbose);
       const candidateIssues = assignee
         ? issues.filter((issue) => ((issue.assignee ?? '').trim() === assignee) || isEpicInProgress(issue))
         : issues;
@@ -412,24 +503,29 @@ export function createNextCommand() {
       let finalSelection: Selection[] = selected;
 
       const epicCandidates = candidateIssues.filter(isEpicInProgress);
-      let epicFocus: Issue | undefined;
       const topSelected = selected[0]?.issue;
-      if (topSelected && isEpicInProgress(topSelected)) {
-        epicFocus = topSelected;
+      if (topSelected && isEpicInProgress(topSelected) && epicCandidates.length) {
+        const bestEpic = pickBestEpicRecommendation(epicCandidates, assignee, bv, issueIndex, verbose);
+        if (bestEpic) {
+          epicContext.epic = bestEpic.epic;
+          epicContext.recommendation = bestEpic.recommendation;
+          epicContext.reason = bestEpic.reason;
+          epicContext.relation = bestEpic.recommendation.relation;
+          epicContext.related = bestEpic.related;
+          finalSelection = [bestEpic.recommendation];
+        }
       } else if (epicCandidates.length) {
-        const topEpic = selectTopN(epicCandidates, bv, 1, verbose)[0];
-        epicFocus = topEpic?.issue;
-      }
-
-      if (epicFocus) {
-        const { recommendation, reason, related } = pickEpicRecommendation(epicFocus, assignee, bv, verbose);
-        if (recommendation) {
-          epicContext.epic = epicFocus;
-          epicContext.recommendation = recommendation;
-          epicContext.reason = reason;
-          epicContext.relation = recommendation.relation;
-          epicContext.related = related;
-          finalSelection = [recommendation];
+        const topEpic = selectTopN(epicCandidates, bv, 1, verbose)[0]?.issue;
+        if (topEpic) {
+          const { recommendation, reason, related } = pickEpicRecommendation(topEpic, assignee, bv, issueIndex, verbose);
+          if (recommendation) {
+            epicContext.epic = topEpic;
+            epicContext.recommendation = recommendation;
+            epicContext.reason = reason;
+            epicContext.relation = recommendation.relation;
+            epicContext.related = related;
+            finalSelection = [recommendation];
+          }
         }
       }
 

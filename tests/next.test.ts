@@ -199,7 +199,7 @@ describe('wf next', () => {
     expect(payload.id).toBe('wf-child1');
     expect(payload.waif.epic_context.epic_id).toBe('wf-epic');
     expect(payload.waif.epic_context.recommended_id).toBe('wf-child1');
-    expect(payload.waif.epic_context.selection_reason).toBe('in_progress_child');
+    expect(payload.waif.epic_context.selection_reason).toBe('in_progress_chain');
   });
 
   it('selects highest bv child/blocker when no in-progress child and applies assignee filter first', async () => {
