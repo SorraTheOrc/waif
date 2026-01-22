@@ -42,7 +42,7 @@ Producers need a repeatable, auditable way to hand off well-defined Beads work t
 ### Functional requirements (MVP)
 
 - Validate bead eligibility: command must verify bead status is `open` and that bead labels include `stage:plan_defined` (case-insensitive). Abort safely otherwise.
-- Gather the full subtree for a bead id: parent plus all descendants (children, grandchildren, etc.) and optionally blockers required to implement the work (see Open Questions for blocker policy).
+- Gather the full subtree for a bead id: parent plus all descendants (children, grandchildren, etc.) and include any blocking dependencies (type `blocks`) required to implement the work — blockers are mandatory and must be included in the delegated scope.
 - Create exactly one GitHub Issue in the repository given by `git remote get-url origin` (prefer `gh` for creation when available). The issue body must be self-contained and actionable: include parent summary, roll-up of all descendant work (ids, titles, acceptance criteria where present), any referenced repo files, and a Beads references section listing all included bead ids. The issue should be assignable to `copilot`.
 - On successful issue creation, update every bead in the collected subtree with:
   - `bd update <id> --status in_progress`
@@ -62,7 +62,8 @@ Producers need a repeatable, auditable way to hand off well-defined Beads work t
 
 - Beads CLI (`bd`) — all bead operations must use `bd` (no direct edits to `.beads/issues.jsonl`).
 - Git/Git remote `origin` — used to derive the target GitHub repository.
-- GitHub CLI (`gh`) or GitHub API — preferred for creating/searching issues; fallback to direct API calls if `gh` is not available.
+-- GitHub CLI (`gh`) or GitHub API — preferred for creating/searching issues; fallback to direct API calls if `gh` is not available.
+-- OpenCode — used to synthesize and format the GitHub Issue body from bead content so the resulting issue is self-contained and actionable for Copilot.
 
 ### Security & privacy
 
@@ -90,8 +91,8 @@ Privacy note: Bead comments and external-refs must not contain secrets or large 
 
 ## Open Questions
 
-1. Blocker inclusion policy: Should the subtree automatically include blocking dependencies (type `blocks`) or should the command only include parent + descendants and leave blockers out unless explicitly requested? (Default: leave blockers out; recommend opt-in flag `--include-blockers`.)
-2. Exact issue body template: The user requires the issue to be self-contained and include everything Copilot needs to complete the work (parent + children + blockers where requested). Should the issue also include a unique searchable marker (recommended) and suggested labels? (Recommended: include marker `beads-delegation:<bead-id>` and suggested labels.)
+1. Blocker inclusion policy: Blockers are mandatory and included by default (answered). Confirm any edge-cases where certain blockers should be excluded.
+2. Exact issue body template: The user requires the issue to be self-contained and include everything Copilot needs to complete the work (parent + children + blockers). The issue should include a unique searchable marker and suggested labels (Recommended: include marker `beads-delegation:<bead-id>` and suggested labels).
 3. External-ref format: Use the full GitHub Issue URL in `external_ref` for traceability (answered: yes). Confirm preferred bead comment phrasing (suggested: `Delegated to GitHub: <issueUrl>`).
 4. Actor identity: Which BD_ACTOR should be used for bead updates/comments when automation runs? (Default: use current environment/Bd actor; make `--actor` override available.)
 
