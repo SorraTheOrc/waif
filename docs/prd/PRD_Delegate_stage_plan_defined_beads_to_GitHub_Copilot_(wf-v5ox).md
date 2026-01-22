@@ -12,7 +12,7 @@ Producers need a repeatable, auditable way to hand off well-defined Beads work t
 
 ### Goals
 
-- Provide a safe, idempotent `waif delegate <bead-id>` command that: validates eligibility, creates exactly one GitHub Issue containing all required work, assigns the issue to `copilot`, and updates the entire Beads subtree with a shared external reference and in-progress status.
+- Provide a safe, idempotent `waif delegate <bead-id>` command that validates eligibility and creates exactly one GitHub Issue containing all required work. The command assigns the issue to `copilot` and updates the entire Beads subtree with a shared external reference and in-progress status.
 - Preserve traceability: all beads in the delegated subtree must record the same external-ref (the GitHub Issue URL) and a concise bead comment noting delegation.
 - Fail fast and with no side effects for ineligible beads (not open or missing `stage:plan_defined`).
 
@@ -70,6 +70,8 @@ Producers need a repeatable, auditable way to hand off well-defined Beads work t
 Security note: The command must avoid leaking secrets into issue bodies, bead comments, or CLI logs. Do not include sensitive environment variables or large diffs in the generated GitHub Issue body.
 
 Privacy note: Bead comments and external-refs must not contain secrets or large code dumps. If repository files are referenced, link to paths rather than pasting full file contents.
+
+Security note: When using OpenCode to synthesize the GitHub Issue body, validate and sanitize the generated text to ensure it does not embed secrets, sensitive data, or unintended large code snippets. Prefer referencing file paths and snippets only when safe and necessary.
 
 ## Release & Operations
 
