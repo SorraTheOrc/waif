@@ -20,3 +20,10 @@ history/*.jsonl
 
 # bv (beads viewer) local config and caches
 .bv/
+
+# Ignore temporary test artifacts and CI run artifacts
+tmp/
+tmp-*
+tmp_*
+tmp-artifacts*
+.opencode/tmp-artifacts

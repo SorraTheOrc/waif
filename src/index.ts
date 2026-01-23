@@ -8,6 +8,8 @@ import { createInProgressCommand } from './commands/inProgress.js';
 import { createStartWorkCommand } from './commands/startWork.js';
 import { createOodaCommand } from './commands/ooda.js';
 import { createShowCommand } from './commands/show.js';
+import { createPlanCheckCommand } from './commands/plan-check.js';
+import { createActionCommand } from './commands/action.js';
 import { handleError, logStdout } from './lib/io.js';
 import { getCliVersion } from './lib/version.js';
 
@@ -48,10 +50,14 @@ export async function run(argv = process.argv.slice(2)): Promise<number> {
 
   program.addCommand(createNextCommand());
   program.addCommand(createRecentCommand());
-  program.addCommand(createInProgressCommand());
+  const inProgress = createInProgressCommand();
+  inProgress.alias('in_progress');
+  program.addCommand(inProgress);
   program.addCommand(createStartWorkCommand());
   program.addCommand(createOodaCommand());
   program.addCommand(createShowCommand());
+  program.addCommand(createPlanCheckCommand());
+  program.addCommand(createActionCommand());
 
   try {
     await program.parseAsync(normalizedArgv, { from: 'user' });

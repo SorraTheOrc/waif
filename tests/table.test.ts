@@ -69,7 +69,7 @@ describe('renderIssuesTable', () => {
     const symbols = getDefaultSymbols();
     const out = renderIssuesTable(
       [
-        { id: 'wf-1', title: 'First', status: 'open', priority: 2, labels: ['stage:prd'] },
+        { id: 'wf-1', title: 'First', status: 'open', priority: 2, labels: ['stage:prd_complete'] },
         { id: 'wf-2', title: 'Second', status: 'in_progress', priority: 1, labels: ['stage:in_progress'] },
       ],
       { sort: 'none' },

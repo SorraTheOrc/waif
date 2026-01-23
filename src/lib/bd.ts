@@ -2,7 +2,7 @@ import { spawnSync } from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
-function runBdSync(args: string[], input?: string, timeout = 30000) {
+export function runBdSync(args: string[], input?: string, timeout = 30000) {
   const res = spawnSync('bd', args, { encoding: 'utf8', input, timeout });
   if (res.error) {
     const err: any = new Error(`bd spawn error: ${res.error.message}`);
@@ -80,6 +80,57 @@ export function updateIssueAddPrdLink(issueId: string, prdPath: string): { updat
         const linkLine = `Linked PRD: ${prdPath}`;
         if (!cur.includes(linkLine)) {
           obj.description = (String(cur).trim().length > 0 ? `${String(cur).trim()}\n\n${linkLine}` : linkLine);
+          changed = true;
+        }
+        return JSON.stringify(obj);
+      }
+      return l;
+    } catch (e) {
+      return l;
+    }
+  });
+
+  if (changed) {
+    writeFileSync(jsonlPath, outLines.join('\n') + '\n', { encoding: 'utf8' });
+    return { updated: true, method: 'jsonl' };
+  }
+
+  return { updated: false, method: 'jsonl' };
+}
+
+/*
+ Note: updateIssueAddLabel helper existed to support an earlier design where
+ `wf doctor` could apply stage labels. Per request this behavior has been
+ removed from the `doctor` command; the helper remains exported for other
+ callers that may need to update labels programmatically.
+*/
+
+export function updateIssueAddLabel(issueId: string, label: string): { updated: boolean; method: 'bd' | 'jsonl'; stdout?: string; stderr?: string; error?: string } {
+  // Prefer bd CLI
+  if (isBdAvailable()) {
+    try {
+      // bd update <id> --add-label "label"
+      const out = runBdSync(['update', issueId, '--add-label', label]);
+      return { updated: true, method: 'bd', stdout: out };
+    } catch (e: any) {
+      // bubble up so caller can fallback
+      throw e;
+    }
+  }
+
+  // Fallback: edit .beads/issues.jsonl
+  const jsonlPath = resolve('.beads', 'issues.jsonl');
+  const raw = readFileSync(jsonlPath, { encoding: 'utf8' });
+  const lines = raw.split(/\r?\n/).filter(Boolean);
+  let changed = false;
+  const outLines = lines.map((l) => {
+    try {
+      const obj = JSON.parse(l);
+      if (obj.id === issueId) {
+        const labels = Array.isArray(obj.labels) ? obj.labels.slice() : [];
+        if (!labels.includes(label)) {
+          labels.push(label);
+          obj.labels = labels;
           changed = true;
         }
         return JSON.stringify(obj);

@@ -115,6 +115,30 @@ Rule of Five policy: use the 5-pass prompt set when authoring/reviewing artifact
 
 These utilities are part of the CLI surface and should be callable from CI and from the TUI.
 
+## 14) Producer convenience CLI wrappers
+
+This repo includes wrapper-style commands for common producer workflows.
+
+Goals:
+- Make mechanical multi-step flows quick and consistent.
+- Fail fast when prerequisites are missing (e.g., `git`, `bd`).
+- Prefer safe defaults (do not push branches or create PRs automatically).
+
+### Example: start work on a bead
+
+```bash
+wf id start <bead-id>
+wf id start <bead-id> --dry-run
+```
+
+Expected behavior (v1):
+- Abort if git working tree is dirty (unless `--dry-run`).
+- Claim/update bead to `in_progress` (idempotent when already in_progress).
+- Create or reuse a local topic branch derived from the bead title.
+- Record `branch:<branch-name>` in `bd update --external-ref` (do not overwrite if already set).
+
+Docs: `docs/dev/wrappers.md`
+
 ## 5) Release Process Requirements (see wf-ca1)
 
 ### 5.1 Manual cadence with code freeze mechanisms (see wf-ca1)
